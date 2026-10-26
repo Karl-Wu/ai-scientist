@@ -980,7 +980,7 @@ function BioTableViewer({ content, ext }: { content: string; ext: string }) {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       {/* Header bar */}
       <div className="flex shrink-0 items-center gap-3 border-b bg-background/95 px-4 py-2 text-xs">
         <TableIcon className="size-3.5 text-indigo-500 shrink-0" />
@@ -1731,6 +1731,8 @@ export interface FilePreviewPanelProps {
   onSelectCompute: () => void;
   showAutomation?: boolean;
   onSelectAutomation?: () => void;
+  fileTreeVisible?: boolean;
+  onShowFileTree?: () => void;
   computeSessionId: string | null;
   computeScope: ModalComputeScope;
   onComputeScopeChange: (scope: ModalComputeScope) => void;
@@ -1769,6 +1771,8 @@ export function FilePreviewPanel({
   onSelectCompute,
   showAutomation = false,
   onSelectAutomation,
+  fileTreeVisible = true,
+  onShowFileTree,
   computeSessionId,
   computeScope,
   onComputeScopeChange,
@@ -1976,8 +1980,25 @@ export function FilePreviewPanel({
             <FilesIcon className="size-6 text-muted-foreground/30" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">No file selected</p>
-            <p className="text-xs text-muted-foreground/60">Click a file in the sidebar to open it</p>
+            <p className="text-sm font-medium text-muted-foreground">
+              {fileTreeVisible ? "No file selected" : "File list is hidden"}
+            </p>
+            {fileTreeVisible ? (
+              <p className="text-xs text-muted-foreground/60">Select a file from the file list to preview it</p>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-muted-foreground/60">Show the file list to browse project files</p>
+                {onShowFileTree && (
+                  <button
+                    type="button"
+                    onClick={onShowFileTree}
+                    className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                  >
+                    Show file list
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

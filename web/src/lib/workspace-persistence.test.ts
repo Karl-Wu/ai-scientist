@@ -61,6 +61,7 @@ const projectState: ProjectWorkspaceState = {
   showCompute: false,
   showAutomation: false,
   computeScope: "session",
+  rightPanelOpen: true,
   sandboxOpen: false,
   chatOpen: true,
   treeWidth: 280,
@@ -175,7 +176,7 @@ describe("workspace persistence schema", () => {
       showAutomation: false,
       computeScope: "project",
       treeWidth: 150,
-      chatWidth: 720,
+      chatWidth: 1200,
       sandbox: { openPaths: ["a.md"], activePath: "a.md" },
       tabs: [
         { id: "tab-1", sessionId: "same" },

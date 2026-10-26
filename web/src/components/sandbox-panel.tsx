@@ -12,7 +12,7 @@ import {
   virtualTreeRange,
   type VisibleTreeRow,
 } from "@/lib/file-tree-virtualization";
-import { cn } from "@/lib/utils";
+import { cn, isHiddenManagedSandboxFilePath } from "@/lib/utils";
 import { hasDirectoryEntries, traverseDroppedEntries } from "@/lib/directory-upload";
 import { type TreeNode } from "@/lib/use-sandbox";
 import {
@@ -397,6 +397,16 @@ function countFiles(node: TreeNode): number {
   return (node.children ?? []).reduce((sum, c) => sum + countFiles(c), 0);
 }
 
+function hideManagedProjectConfig(node: TreeNode): TreeNode {
+  if (node.type !== "directory" || !node.children) return node;
+  const children = node.children
+    .filter((child) => !isHiddenManagedSandboxFilePath(child.path))
+    .map(hideManagedProjectConfig);
+  return children.length === node.children.length && children.every((child, i) => child === node.children?.[i])
+    ? node
+    : { ...node, children };
+}
+
 // ---------------------------------------------------------------------------
 // FileTreePanel — left sidebar
 // ---------------------------------------------------------------------------
@@ -438,7 +448,8 @@ export const FileTreePanel = memo(function FileTreePanel({
   onRename,
   onCreateDir,
 }: FileTreePanelProps) {
-  const totalFiles = useMemo(() => (tree ? countFiles(tree) : 0), [tree]);
+  const displayTree = useMemo(() => (tree ? hideManagedProjectConfig(tree) : null), [tree]);
+  const totalFiles = useMemo(() => (displayTree ? countFiles(displayTree) : 0), [displayTree]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
 
@@ -497,9 +508,9 @@ export const FileTreePanel = memo(function FileTreePanel({
         for (const child of node.children ?? []) collect(child);
       }
     }
-    if (tree) collect(tree);
+    if (displayTree) collect(displayTree);
     return dirs;
-  }, [tree]);
+  }, [displayTree]);
 
   // Directories start collapsed. On restoration, reveal only the ancestors of
   // the persisted selected file instead of eagerly opening the entire tree.
@@ -562,11 +573,11 @@ export const FileTreePanel = memo(function FileTreePanel({
   const visibleRows = useMemo(
     () =>
       flattenVisibleTree(
-        tree?.children ?? [],
+        displayTree?.children ?? [],
         visibleExpandedPaths,
         creatingDirIn,
       ),
-    [creatingDirIn, tree, visibleExpandedPaths],
+    [creatingDirIn, displayTree, visibleExpandedPaths],
   );
   const treeViewportRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -730,7 +741,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         aria-label="Project files"
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
-        {!tree || ((tree.children ?? []).length === 0 && creatingDirIn === null) ? (
+        {!displayTree || ((displayTree.children ?? []).length === 0 && creatingDirIn === null) ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
             <div className="flex size-10 items-center justify-center rounded-xl bg-muted/60">
               <FolderOpenIcon className="size-5 text-muted-foreground/50" />

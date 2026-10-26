@@ -4,12 +4,12 @@ import {
   DownloadIcon,
   FileTextIcon,
   LoaderCircleIcon,
-  MessageSquareTextIcon,
+  MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
   TerminalIcon,
+  Trash2Icon,
   WorkflowIcon,
-  XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { commandPreview } from "@/lib/command-blocks";
@@ -88,6 +89,7 @@ function RecentChatsList({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onNewTab,
   onRenameTab,
   onOpenSession,
 }: {
@@ -96,6 +98,7 @@ function RecentChatsList({
   activeTabId: string;
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onNewTab: () => void;
   onRenameTab: (id: string, title: string) => void;
   onOpenSession: (sessionId: string, title: string) => void;
 }) {
@@ -103,6 +106,7 @@ function RecentChatsList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const { confirm, dialog } = useConfirm();
   const openSessionIds = tabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []);
   const openSessionKey = openSessionIds.join("\u0000");
 
@@ -165,9 +169,21 @@ function RecentChatsList({
     setEditingId(null);
     setDraftTitle("");
   };
+  const deleteTab = async (tab: ChatTabDescriptor) => {
+    const ok = await confirm({
+      title: `Delete “${tab.title}”?`,
+      description: "This removes the chat from the open chats list.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
+    if (tabs.length === 1) onNewTab();
+    onCloseTab(tab.id);
+  };
 
   return (
     <section className="mt-3 min-w-0" aria-label="Recent chats">
+      {dialog}
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         Recent
       </h2>
@@ -181,7 +197,6 @@ function RecentChatsList({
         <div className="flex flex-col gap-0.5">
           {unpersistedTabs.map((tab) => {
             const isEditing = editingId === tab.id;
-            const canClose = tabs.length > 1;
             const isActive = tab.id === activeTabId;
             return (
               <div
@@ -198,9 +213,8 @@ function RecentChatsList({
                   onClick={() => onSelectTab(tab.id)}
                   onDoubleClick={() => startRename(tab)}
                   title={`${tab.title} — double-click to rename`}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-1 text-left"
                 >
-                  <MessageSquareTextIcon className="size-3.5 shrink-0" />
                   {tab.isStreaming && <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-primary" />}
                   {isEditing ? (
                     <input
@@ -226,26 +240,32 @@ function RecentChatsList({
                 </button>
                 {!isEditing && (
                   <>
-                    <button
-                      type="button"
-                      aria-label={`Rename ${tab.title}`}
-                      onClick={() => startRename(tab)}
-                      className="rounded p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-muted-foreground/10 hover:text-foreground group-hover:opacity-70"
-                      title="Rename chat"
-                    >
-                      <PencilIcon className="size-3" />
-                    </button>
-                    {canClose && (
-                      <button
-                        type="button"
-                        aria-label={`Close ${tab.title}`}
-                        onClick={() => onCloseTab(tab.id)}
-                        className="rounded p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-70"
-                        title={tab.isStreaming ? "Close chat (this will cancel the running turn)" : "Close chat"}
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Chat actions for ${tab.title}`}
+                          title="Chat actions"
+                          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
+                        >
+                          <MoreHorizontalIcon className="size-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="right" className="min-w-36">
+                        <DropdownMenuItem onSelect={() => startRename(tab)}>
+                          <PencilIcon className="size-3.5" />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => void deleteTab(tab)}
+                        >
+                          <Trash2Icon className="size-3.5" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </>
                 )}
               </div>
@@ -261,13 +281,12 @@ function RecentChatsList({
                 title={`${rowTitle} · ${relativeTime(session.modified)}`}
                 onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                 className={cn(
-                  "flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  "flex w-full min-w-0 items-start gap-1 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                   tab?.id === activeTabId
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 )}
               >
-                <MessageSquareTextIcon className="mt-0.5 size-3.5 shrink-0" />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate">{rowTitle}</span>
                   <span className="text-[10px] text-muted-foreground/75">
@@ -431,6 +450,7 @@ export function ChatTabsBar({
           activeTabId={activeTabId}
           onSelectTab={onSelect}
           onCloseTab={onClose}
+          onNewTab={onNew}
           onRenameTab={onRename}
           onOpenSession={onOpenSession}
         />

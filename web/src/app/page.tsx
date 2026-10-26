@@ -29,7 +29,7 @@ import {
   OPEN_MODAL_JOB_EVENT,
   type ModalComputeScope,
 } from "@/lib/modal-jobs";
-import { isJunkFilePath } from "@/lib/utils";
+import { isHiddenManagedSandboxFilePath, isJunkFilePath } from "@/lib/utils";
 import {
   AlarmClockIcon,
   BookOpenIcon,
@@ -69,15 +69,26 @@ import {
 } from "react";
 
 const MAX_CHAT_TABS = 10;
+const MIN_CHAT_WIDTH = 280;
+const MAX_CHAT_WIDTH = 1200;
+const MIN_PROJECT_PANEL_WIDTH = 320;
 type ProjectDestination = "files" | "notebook" | "compute" | "automation";
+
+function maxChatWidthForViewport(): number {
+  return Math.min(MAX_CHAT_WIDTH, Math.max(MIN_CHAT_WIDTH, window.innerWidth - MIN_PROJECT_PANEL_WIDTH));
+}
 
 function ProjectNavigation({
   active,
   onSelect,
+  fileTreeVisible,
+  onToggleFileTree,
   orientation = "vertical",
 }: {
   active: ProjectDestination;
   onSelect: (destination: ProjectDestination) => void;
+  fileTreeVisible: boolean;
+  onToggleFileTree: () => void;
   orientation?: "vertical" | "horizontal";
 }) {
   const horizontal = orientation === "horizontal";
@@ -120,6 +131,33 @@ function ProjectNavigation({
           <span className="whitespace-nowrap">{label}</span>
         </button>
       ))}
+      {horizontal && active === "files" && (
+        <InfoTooltip
+          content={
+            <>
+              <b>{fileTreeVisible ? "Hide" : "Show"} file tree</b>
+              <br />
+              Show or hide the project file list.
+            </>
+          }
+        >
+          <button
+            type="button"
+            onClick={onToggleFileTree}
+            aria-label={fileTreeVisible ? "Hide file tree" : "Show file tree"}
+            aria-pressed={fileTreeVisible}
+            title={fileTreeVisible ? "Hide file tree" : "Show file tree"}
+            className={cn(
+              "ml-auto inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 transition-colors",
+              fileTreeVisible
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <PanelRightIcon className="size-3.5" />
+          </button>
+        </InfoTooltip>
+      )}
     </nav>
   );
 }
@@ -378,9 +416,16 @@ function WorkspacePage({
   const [chatNavigationOpen, setChatNavigationOpen] = useState(
     () => initialState?.chatOpen ?? true,
   );
+  const [rightPanelOpen, setRightPanelOpen] = useState(
+    () => initialState?.rightPanelOpen ?? true,
+  );
   const toggleSandbox = useCallback(() => setSandboxOpen((value) => !value), []);
   const toggleChatNavigation = useCallback(
     () => setChatNavigationOpen((value) => !value),
+    [],
+  );
+  const toggleRightPanel = useCallback(
+    () => setRightPanelOpen((value) => !value),
     [],
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -622,7 +667,7 @@ function WorkspacePage({
         // Both chat panes are on the left of their dividers, so dragging right
         // makes the selected pane wider.
         if (dragging.current === "chat") {
-          setChatWidth(Math.max(280, Math.min(720, dragStartWidth.current + delta)));
+          setChatWidth(Math.max(MIN_CHAT_WIDTH, Math.min(maxChatWidthForViewport(), dragStartWidth.current + delta)));
         } else {
           const maxWidth = Math.max(96, Math.min(360, chatWidthRef.current - 168));
           setChatNavWidth(Math.max(96, Math.min(maxWidth, dragStartWidth.current + delta)));
@@ -655,6 +700,7 @@ function WorkspacePage({
       showCompute,
       showAutomation,
       computeScope,
+      rightPanelOpen,
       sandboxOpen,
       chatOpen: chatNavigationOpen,
       treeWidth,
@@ -668,6 +714,7 @@ function WorkspacePage({
       chatNavWidth,
       chatWidth,
       computeScope,
+      rightPanelOpen,
       sandboxOpen,
       sandboxWorkspace,
       showAutomation,
@@ -718,7 +765,7 @@ function WorkspacePage({
   // Flat list of all sandbox file paths for @ mentions (shared across tabs).
   // Cache artifacts are excluded — mentioning __pycache__/*.pyc is never useful.
   const allFiles = useMemo(
-    () => flattenFiles(sandbox.tree).filter((p) => !isJunkFilePath(p)),
+    () => flattenFiles(sandbox.tree).filter((p) => !isJunkFilePath(p) && !isHiddenManagedSandboxFilePath(p)),
     [sandbox.tree],
   );
   const allFolders = useMemo(
@@ -1025,7 +1072,7 @@ function WorkspacePage({
                 set height via CSS and let width autosize. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/ai-scientist.svg"
+              src="/brand/ai-scientist.svg?v=2"
               alt="AI Scientist"
               className="size-7 object-contain"
             />
@@ -1065,36 +1112,12 @@ function WorkspacePage({
           ) : modalJobsLoading ? (
             <span className="sr-only" aria-live="polite">Checking compute jobs</span>
           ) : null}
-          {/* These controls affect the file tree and chat navigation only.
-              The conversation pane itself always remains visible. */}
+          {/* The left navigation and right project panel collapse independently. */}
           <div className="flex items-center gap-0.5 rounded-lg border bg-muted/30 p-0.5">
             <InfoTooltip
               content={
                 <>
-                  <b>{sandboxOpen ? "Hide" : "Show"} file tree</b>
-                  <br />
-                  Show or hide the file tree on the right side of the Files view.
-                </>
-              }
-            >
-              <button
-                onClick={toggleSandbox}
-                aria-label={sandboxOpen ? "Hide file tree" : "Show file tree"}
-                aria-pressed={sandboxOpen}
-                className={cn(
-                  "rounded-md p-1.5 transition-colors",
-                  sandboxOpen
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <PanelRightIcon className="size-4" />
-              </button>
-            </InfoTooltip>
-            <InfoTooltip
-              content={
-                <>
-                  <b>{chatNavigationOpen ? "Hide" : "Show"} chat navigation</b>
+                  <b>{chatNavigationOpen ? "Hide" : "Show"} left navigation</b>
                   <br />
                   Show or hide New chat, Recent chats, and Workflows.
                 </>
@@ -1102,7 +1125,7 @@ function WorkspacePage({
             >
               <button
                 onClick={toggleChatNavigation}
-                aria-label={chatNavigationOpen ? "Hide chat navigation" : "Show chat navigation"}
+                aria-label={chatNavigationOpen ? "Hide left navigation" : "Show left navigation"}
                 aria-pressed={chatNavigationOpen}
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
@@ -1112,6 +1135,29 @@ function WorkspacePage({
                 )}
               >
                 <PanelLeftIcon className="size-4" />
+              </button>
+            </InfoTooltip>
+            <InfoTooltip
+              content={
+                <>
+                  <b>{rightPanelOpen ? "Hide" : "Show"} right panel</b>
+                  <br />
+                  Show or hide Files, Notebook, and Automation.
+                </>
+              }
+            >
+              <button
+                onClick={toggleRightPanel}
+                aria-label={rightPanelOpen ? "Hide right panel" : "Show right panel"}
+                aria-pressed={rightPanelOpen}
+                className={cn(
+                  "rounded-md p-1.5 transition-colors",
+                  rightPanelOpen
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <PanelRightIcon className="size-4" />
               </button>
             </InfoTooltip>
           </div>
@@ -1162,7 +1208,7 @@ function WorkspacePage({
 
       {/* Main content area — project files | preview | chat */}
       <div
-        className={cn("grid min-h-0 flex-1 overflow-hidden lg:flex", isResizing && "select-none")}
+        className={cn("grid min-h-0 min-w-0 flex-1 overflow-hidden lg:flex", isResizing && "select-none")}
         style={{
           gridTemplateColumns: showFileTree ? `min(${treeWidth}px, 30vw) minmax(0, 1fr)` : "minmax(0, 1fr)",
         }}
@@ -1170,13 +1216,16 @@ function WorkspacePage({
 
         {/* The content area: its navigation spans the preview and file tree. */}
         <div className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-3",
+          "min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-3",
+          rightPanelOpen ? "flex" : "hidden",
         )}>
           {isActive && (
             <ProjectNavigation
               active={activeProjectDestination}
               onSelect={selectProjectDestination}
               orientation="horizontal"
+              fileTreeVisible={showFileTree}
+              onToggleFileTree={toggleSandbox}
             />
           )}
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -1212,6 +1261,8 @@ function WorkspacePage({
                   setShowCompute(false);
                   setShowAutomation(true);
                 }}
+                fileTreeVisible={showFileTree}
+                onShowFileTree={() => setSandboxOpen(true)}
                 computeSessionId={activeSessionId}
                 computeScope={computeScope}
                 onComputeScopeChange={setComputeScope}
@@ -1244,7 +1295,7 @@ function WorkspacePage({
         </div>
 
         {/* Drag handle: preview ↔ chat */}
-        {isActive && (
+        {isActive && rightPanelOpen && (
           <div className="-mr-1 hidden lg:order-2 lg:flex">
             <ResizeHandle onMouseDown={startDrag("chat")} />
           </div>
@@ -1254,7 +1305,8 @@ function WorkspacePage({
             its navigation rail can be collapsed. */}
         <div
           className={cn(
-            "col-span-full flex min-h-0 min-w-0 flex-row overflow-hidden shrink-0 lg:w-[var(--chat-width)]",
+            "col-span-full flex min-h-0 min-w-0 flex-row overflow-hidden shrink-0",
+            rightPanelOpen ? "lg:w-[var(--chat-width)]" : "lg:w-full",
             "lg:order-1",
           )}
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}

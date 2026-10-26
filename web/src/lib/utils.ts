@@ -23,6 +23,11 @@ export function isJunkFilePath(path: string): boolean {
   );
 }
 
+/** App-managed sandbox configuration that should not appear as user data. */
+export function isHiddenManagedSandboxFilePath(path: string): boolean {
+  return path === "pyproject.toml";
+}
+
 export function formatCompactTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;

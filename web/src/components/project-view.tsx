@@ -261,7 +261,7 @@ export function ProjectView({
         <div className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/brand/ai-scientist.svg"
+            src="/brand/ai-scientist.svg?v=2"
             alt="AI Scientist"
             className="size-7 object-contain"
           />

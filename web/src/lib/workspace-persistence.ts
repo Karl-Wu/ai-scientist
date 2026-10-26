@@ -96,6 +96,7 @@ export interface ProjectWorkspaceState {
   showCompute: boolean;
   showAutomation: boolean;
   computeScope: ModalComputeScope;
+  rightPanelOpen: boolean;
   sandboxOpen: boolean;
   chatOpen: boolean;
   treeWidth: number;
@@ -358,10 +359,11 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     showCompute: !showNotebook && value.showCompute === true,
     showAutomation: !showNotebook && value.showCompute !== true && value.showAutomation === true,
     computeScope: value.computeScope === "session" ? "session" : "project",
+    rightPanelOpen: value.rightPanelOpen !== false,
     sandboxOpen: value.sandboxOpen !== false,
     chatOpen: value.chatOpen !== false,
     treeWidth: boundedNumber(value.treeWidth, 320, 150, 480),
-    chatWidth: boundedNumber(value.chatWidth, 640, 280, 720),
+    chatWidth: boundedNumber(value.chatWidth, 640, 280, 1200),
     chatNavWidth: boundedNumber(value.chatNavWidth, 136, 96, 360),
     sandbox: {
       openPaths,

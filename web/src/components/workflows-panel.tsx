@@ -14,6 +14,8 @@ import {
   CircleDotIcon,
   ClipboardCheckIcon,
   CloudIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CogIcon,
   CpuIcon,
   CrosshairIcon,
@@ -493,6 +495,8 @@ export function WorkflowsPanel({
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const categoryNavRef = useRef<HTMLDivElement>(null);
+  const [categoryScroll, setCategoryScroll] = useState({ left: false, right: false });
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -529,6 +533,30 @@ export function WorkflowsPanel({
     }
   }, []);
 
+  const updateCategoryScroll = useCallback(() => {
+    const nav = categoryNavRef.current;
+    if (!nav) return;
+    setCategoryScroll({
+      left: nav.scrollLeft > 1,
+      right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1,
+    });
+  }, []);
+
+  useEffect(() => {
+    const nav = categoryNavRef.current;
+    if (!nav) return;
+    updateCategoryScroll();
+    const observer = new ResizeObserver(updateCategoryScroll);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [updateCategoryScroll, visibleCategories.length]);
+
+  const nudgeCategories = useCallback((direction: -1 | 1) => {
+    const nav = categoryNavRef.current;
+    if (!nav) return;
+    nav.scrollBy({ left: direction * Math.max(180, nav.clientWidth * 0.65), behavior: "smooth" });
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Search + category pills */}
@@ -543,19 +571,46 @@ export function WorkflowsPanel({
           />
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-          {visibleCategories.map((cat) => (
+        <div className="relative">
+          <div
+            ref={categoryNavRef}
+            onScroll={updateCategoryScroll}
+            aria-label="Workflow categories"
+            className="flex gap-1.5 overflow-x-auto px-8 pb-0.5 scrollbar-none"
+          >
+            {visibleCategories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => scrollToCategory(cat.id)}
+                className={cn(
+                  "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  CATEGORY_BG[cat.id]
+                )}
+              >
+                <span className={CATEGORY_ICON_COLOR[cat.id]}>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+          {categoryScroll.left && (
             <button
-              key={cat.id}
-              onClick={() => scrollToCategory(cat.id)}
-              className={cn(
-                "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                CATEGORY_BG[cat.id]
-              )}
+              type="button"
+              aria-label="Scroll categories left"
+              onClick={() => nudgeCategories(-1)}
+              className="absolute inset-y-0 left-0 z-10 flex w-7 items-center justify-center rounded-l-md bg-background/95 text-muted-foreground shadow-sm hover:text-foreground"
             >
-              <span className={CATEGORY_ICON_COLOR[cat.id]}>{cat.label}</span>
+              <ChevronLeftIcon className="size-4" />
             </button>
-          ))}
+          )}
+          {categoryScroll.right && (
+            <button
+              type="button"
+              aria-label="Scroll categories right"
+              onClick={() => nudgeCategories(1)}
+              className="absolute inset-y-0 right-0 z-10 flex w-7 items-center justify-center rounded-r-md bg-background/95 text-muted-foreground shadow-sm hover:text-foreground"
+            >
+              <ChevronRightIcon className="size-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -582,7 +637,7 @@ export function WorkflowsPanel({
                         key={w.id}
                         onClick={() => setSelectedWorkflow(w)}
                         className={cn(
-                          "flex items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition-all",
+                          "flex items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all",
                           bgClass
                         )}
                       >
@@ -597,7 +652,7 @@ export function WorkflowsPanel({
                               </span>
                             )}
                           </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-1">
                             {w.description}
                           </p>
                         </div>
