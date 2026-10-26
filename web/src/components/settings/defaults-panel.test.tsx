@@ -67,7 +67,7 @@ describe("DefaultsPanel", () => {
     render(<DefaultsPanel />);
 
     const trigger = await screen.findByRole("combobox", { name: "Default image model" });
-    await waitFor(() => expect(trigger).toHaveTextContent("Not set — Kady's default (OpenAI: GPT Image 2.5 Sunburst)"));
+    await waitFor(() => expect(trigger).toHaveTextContent("Not set — AI Scientist's default (OpenAI: GPT Image 2.5 Sunburst)"));
     await user.click(trigger);
     expect(screen.getByRole("option", { name: /Imagen/ })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("option", { name: /^Google: Gemini 3.1 Flash Image/ })).toHaveTextContent("$0.50 in · $3 out per M tokens");

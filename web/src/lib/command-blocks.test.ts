@@ -18,7 +18,7 @@ describe("parseCommandBlock", () => {
       tail: "user_data/a.csv",
     });
   });
-  it("recognizes Kady's template block and passes plain text through", () => {
+  it("recognizes AI Scientist's template block and passes plain text through", () => {
     expect(parseCommandBlock('<prompt-template name="qc">\nRun QC on a.csv.\n</prompt-template>')).toEqual({
       kind: "template",
       name: "qc",

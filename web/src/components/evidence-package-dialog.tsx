@@ -53,7 +53,7 @@ function PackageDialog({ projectId, candidates, initialRoot }: Props) {
       if (response.headers.get("X-Content-SHA256") !== preview.zipSha256) throw new Error("Download identity did not match the reviewed package");
       const blob = await response.blob();
       if (blob.size !== preview.zipBytes) throw new Error("Downloaded package size did not match its reviewed manifest");
-      if (!globalThis.crypto?.subtle) throw new Error("Browser checksum verification is unavailable; open Kady on localhost or HTTPS");
+      if (!globalThis.crypto?.subtle) throw new Error("Browser checksum verification is unavailable; open AI Scientist on localhost or HTTPS");
       const digest = await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
       const actual = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
       if (actual !== preview.zipSha256) throw new Error("Downloaded bytes failed the reviewed ZIP checksum; nothing was saved");

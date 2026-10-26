@@ -1,5 +1,5 @@
 {
-  "name": "k-dense-byok",
+  "name": "ai-scientist",
   "private": true,
   "scripts": {
     "start": "node start.mjs",

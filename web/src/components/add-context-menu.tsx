@@ -62,7 +62,7 @@ const TABS: TabDescriptor[] = [
       <>
         <b>Research context</b>
         <br />
-        Point Kady at notebook entries, frozen plans, notes, or an earlier
+        Point AI Scientist at notebook entries, frozen plans, notes, or an earlier
         chat. It reads them with its own tools before answering. Applies to
         the next message only.
       </>
@@ -76,7 +76,7 @@ const TABS: TabDescriptor[] = [
       <>
         <b>Delegate</b>
         <br />
-        Hand this message to specific specialists, let Kady choose, or ask
+        Hand this message to specific specialists, let AI Scientist choose, or ask
         for a verification gate before a result is accepted. Applies to the
         next message only.
       </>
@@ -91,7 +91,7 @@ const TABS: TabDescriptor[] = [
         <b>Skills</b>
         <br />
         Opt-in playbooks for specific tasks (e.g. <i>scanpy</i>,{" "}
-        <i>literature-review</i>, <i>modal</i>). Kady follows pinned skills on
+        <i>literature-review</i>, <i>modal</i>). AI Scientist follows pinned skills on
         every message until you remove them.
       </>
     ),
@@ -104,8 +104,8 @@ const TABS: TabDescriptor[] = [
       <>
         <b>Data sources</b>
         <br />
-        Point Kady at public scientific APIs (PubMed, UniProt, Ensembl,
-        etc.). Their names and URLs are added to your message so Kady can
+        Point AI Scientist at public scientific APIs (PubMed, UniProt, Ensembl,
+        etc.). Their names and URLs are added to your message so AI Scientist can
         query and cite them.
       </>
     ),

@@ -38,6 +38,7 @@ import { registerAgentRoutes } from "./api/agents.ts";
 import { registerSpeechRoutes } from "./api/speech.ts";
 import { registerModalRoutes } from "./api/modal.ts";
 import { registerModelProviderRoutes } from "./api/model-providers.ts";
+import { registerOpenApiDocs } from "./api/openapi-docs.ts";
 import { setSessionObserver } from "./agent/session-registry.ts";
 import { attachSessionObserver } from "./agent/session-observer.ts";
 import { registerNextExperimentRoutes } from "./api/next-experiments.ts";
@@ -120,6 +121,11 @@ export async function buildApp() {
   // Binary/unknown request bodies (e.g. PUT /sandbox/file) → raw Buffer.
   // JSON and text/plain keep their built-in parsers; multipart is handled above.
   app.addContentTypeParser("*", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
+
+  // OpenAPI collection + Swagger UI (/docs, /docs/json). Register before
+  // business routes so the plugin is ready when routes are declared; the
+  // document is finalized on listen/ready from the full route table.
+  await registerOpenApiDocs(app);
 
   // Project scope: resolve the active project and run the rest of the request
   // lifecycle inside its AsyncLocalStorage context. Calling `done` inside

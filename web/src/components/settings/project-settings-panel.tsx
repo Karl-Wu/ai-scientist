@@ -221,7 +221,7 @@ function GeneralCard({ project }: { project: Project }) {
 }
 
 const INSTRUCTIONS_TEXT: Record<InstructionsStatus, string> = {
-  current: "Up to date with the instructions Kady ships.",
+  current: "Up to date with the instructions AI Scientist ships.",
   outdated: "An older shipped version — it is upgraded automatically on the next launch.",
   edited:
     "Edited in this project, so newer shipped guidance (raw-data guard, specialist questions) is not applied automatically.",
@@ -275,7 +275,7 @@ function InstructionsCard({ projectId }: { projectId: string }) {
     <SettingsCard
       id="instructions"
       title="Agent instructions (AGENTS.md)"
-      description="The sandbox's AGENTS.md tells the agent how to work in this project: ask before assuming, respect raw data, confirm costs before scheduling. To customize it, open this project's sandbox/AGENTS.md in a local text editor. This file is hidden from Kady's file browser."
+      description="The sandbox's AGENTS.md tells the agent how to work in this project: ask before assuming, respect raw data, confirm costs before scheduling. To customize it, open this project's sandbox/AGENTS.md in a local text editor. This file is hidden from AI Scientist's file browser."
     >
       {dialog}
       <div className="flex items-center gap-3" data-testid="instructions-status">
@@ -350,7 +350,7 @@ function GuardCard({ projectId }: { projectId: string }) {
     <SettingsCard
       id="safety"
       title="Raw-data guard"
-      description="Applies to Kady and to background specialists, in open chats too. A heuristic guard, not a security boundary — see docs/data-guard.md."
+      description="Applies to AI Scientist and to background specialists, in open chats too. A heuristic guard, not a security boundary — see docs/data-guard.md."
     >
       {!initial ? (
         error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">Loading…</p>
@@ -461,7 +461,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
     <SettingsCard
       id="context"
       title="Context compaction"
-      description="Compaction summarizes older messages when a conversation nears the model's context window. Kady puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every chat in this project, including open ones; use “Compact now” in a chat to run it by hand."
+      description="Compaction summarizes older messages when a conversation nears the model's context window. AI Scientist puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every chat in this project, including open ones; use “Compact now” in a chat to run it by hand."
     >
       {!initial ? (
         error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">Loading…</p>

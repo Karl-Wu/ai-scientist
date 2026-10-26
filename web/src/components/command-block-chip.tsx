@@ -8,7 +8,7 @@ import type { CommandBlock } from "@/lib/command-blocks";
 import { cn } from "@/lib/utils";
 
 /**
- * A user message that Kady expanded from `/skill:name` or `/template`: show
+ * A user message that AI Scientist expanded from `/skill:name` or `/template`: show
  * what the user typed as a chip, the expanded instructions behind a toggle,
  * and the user's own arguments/context below.
  */

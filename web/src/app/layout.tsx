@@ -18,8 +18,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "K-Dense BYOK",
-  description: "Multi-agent research assistant",
+  title: "AI Scientist",
+  description: "A research workspace for scientists, biologists, and research experts.",
+  icons: { icon: "/brand/ai-scientist.svg" },
 };
 
 export default function RootLayout({

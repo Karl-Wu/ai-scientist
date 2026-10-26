@@ -143,7 +143,7 @@ export function fusionJudgeModel(cfg: Record<string, unknown>): string | undefin
  * How many times the judge model is billed on one fusion turn.
  *
  * OpenRouter runs "N panel calls + 1 judge call in addition to your normal
- * request" [1]. Kady always sends the `openrouter/fusion` alias (see
+ * request" [1]. AI Scientist always sends the `openrouter/fusion` alias (see
  * server/src/agent/fusion-bridge.ts), and under that alias the plugin's judge
  * "also becomes the model that writes your final answer" [2] — so the judge is
  * billed once for the structured analysis and once for the final answer, while

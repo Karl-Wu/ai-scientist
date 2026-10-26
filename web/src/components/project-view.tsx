@@ -66,7 +66,6 @@ import type { ProjectActivitySummary } from "@/lib/project-activity";
 import { onOpenSettings, type OpenSettingsRequest } from "@/lib/settings-nav";
 import { useProjects } from "@/lib/use-projects";
 import { cn } from "@/lib/utils";
-import { APP_VERSION, isVersioned } from "@/lib/version";
 
 interface ProjectViewProps {
   onOpenProject: (projectId: string) => void;
@@ -259,27 +258,17 @@ export function ProjectView({
     <div className="flex min-h-dvh flex-col bg-muted/20">
       {confirmDialog}
       <header className="flex items-center justify-between border-b bg-background/90 px-6 py-3 backdrop-blur">
-        <a
-          href="https://www.k-dense.ai"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2"
-        >
+        <div className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/brand/kdense-logo.png"
-            alt="K-Dense BYOK"
-            className="h-7 w-auto object-contain dark:invert"
+            src="/brand/ai-scientist.svg"
+            alt="AI Scientist"
+            className="size-7 object-contain"
           />
           <span className="text-sm font-semibold tracking-tight text-foreground/80">
-            BYOK
+            AI Scientist
           </span>
-          {isVersioned && (
-            <span className="text-[11px] text-muted-foreground/60">
-              v{APP_VERSION}
-            </span>
-          )}
-        </a>
+        </div>
 
         <div className="flex items-center gap-1">
           <Button

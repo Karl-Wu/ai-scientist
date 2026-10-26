@@ -22,7 +22,7 @@ function launchable(agents: AgentFile[]): AgentFile[] {
 }
 
 /**
- * Delegation for the next message: name the specialists Kady should hand work
+ * Delegation for the next message: name the specialists AI Scientist should hand work
  * to (or let it choose), and ask for a verification gate before a result is
  * accepted. Both become plain instructions appended to the message.
  */
@@ -112,10 +112,10 @@ export function DelegatePickerBody({
             title={
               <span className="flex items-center gap-1.5">
                 <SparklesIcon className="size-3 text-primary" />
-                Let Kady choose
+                Let AI Scientist choose
               </span>
             }
-            description="Kady splits the work and picks specialists by their descriptions."
+            description="AI Scientist splits the work and picks specialists by their descriptions."
           />
         )}
         {filtered === null ? (
@@ -162,7 +162,7 @@ export function DelegatePickerBody({
         <span className="min-w-0 flex-1">
           <span className="block font-medium text-foreground">Verify before accepting</span>
           <span className="mt-0.5 block leading-relaxed text-muted-foreground/80">
-            Kady has the best-suited verifier specialist
+            AI Scientist has the best-suited verifier specialist
             {verifiers.length > 0 ? ` (${verifiers.length} enabled)` : ""} review the result under a
             verification gate, and accepts it only if the review passes.
           </span>

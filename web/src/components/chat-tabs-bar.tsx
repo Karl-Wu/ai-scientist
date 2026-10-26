@@ -3,7 +3,6 @@
 import {
   DownloadIcon,
   FileTextIcon,
-  HistoryIcon,
   LoaderCircleIcon,
   MessageSquareTextIcon,
   PencilIcon,
@@ -32,10 +31,12 @@ export interface ChatTabDescriptor {
   title: string;
   isStreaming: boolean;
   userMessageCount: number;
+  sessionId?: string | null;
 }
 
 export interface ChatTabsBarProps {
   projectId: string;
+  width?: number;
   tabs: ChatTabDescriptor[];
   activeTabId: string;
   view: "chat" | "workflows";
@@ -80,94 +81,205 @@ function relativeTime(value: string | number): string {
   return days < 7 ? `${days}d ago` : new Date(then).toLocaleDateString();
 }
 
-/** Clock menu listing the project's stored sessions; picking one reopens it
- *  (or focuses the tab that already has it). */
-function HistoryMenu({
+/** Unified list of open tabs and saved conversations, ordered by recent activity. */
+function RecentChatsList({
   projectId,
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onRenameTab,
   onOpenSession,
 }: {
   projectId: string;
+  tabs: ChatTabDescriptor[];
+  activeTabId: string;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onRenameTab: (id: string, title: string) => void;
   onOpenSession: (sessionId: string, title: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const openSessionIds = tabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []);
+  const openSessionKey = openSessionIds.join("\u0000");
 
   useEffect(() => {
-    if (!open) return;
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
+  useEffect(() => {
     let cancelled = false;
-    apiFetch("/sessions", {}, projectId)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: SessionListItem[]) => {
-        if (cancelled) return;
-        const sorted = [...list]
-          .filter((s) => s.messageCount > 0)
-          .sort(
-            (a, b) =>
-              new Date(b.modified).getTime() - new Date(a.modified).getTime(),
-          );
-        setSessions(sorted);
-      })
-      .catch(() => {
-        if (!cancelled) setSessions([]);
-      });
+    const load = () => {
+      apiFetch("/sessions", {}, projectId)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list: SessionListItem[]) => {
+          if (cancelled) return;
+          const sorted = [...list]
+            .filter((s) => s.messageCount > 0)
+            .sort(
+              (a, b) =>
+                new Date(b.modified).getTime() - new Date(a.modified).getTime(),
+            );
+          setSessions(sorted);
+        })
+        .catch(() => {
+          if (!cancelled) setSessions([]);
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 30_000);
+    window.addEventListener("focus", load);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", load);
     };
-  }, [open, projectId]);
+  }, [openSessionKey, projectId]);
+
+  const openBySessionId = new Map(
+    tabs.flatMap((tab) => tab.sessionId ? [[tab.sessionId, tab] as const] : []),
+  );
+  const saved = sessions ?? [];
+  const savedIds = new Set(saved.map((session) => session.id));
+  const unpersistedTabs = [...tabs]
+    .filter((tab) => !tab.sessionId || !savedIds.has(tab.sessionId))
+    .reverse();
+  const recentSessions = saved.map((session) => ({
+    session,
+    tab: openBySessionId.get(session.id),
+  }));
+  const startRename = (tab: ChatTabDescriptor) => {
+    setEditingId(tab.id);
+    setDraftTitle(tab.title);
+  };
+  const commitRename = () => {
+    if (!editingId) return;
+    const next = draftTitle.trim();
+    if (next) onRenameTab(editingId, next);
+    setEditingId(null);
+    setDraftTitle("");
+  };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <InfoTooltip
-        content={
-          <>
-            <b>Chat history</b>
-            <br />
-            Reopen a previous chat from this project — the full transcript is
-            restored and you can continue the conversation.
-          </>
-        }
-      >
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Chat history"
-            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <HistoryIcon className="size-3.5" />
-          </button>
-        </DropdownMenuTrigger>
-      </InfoTooltip>
-      <DropdownMenuContent align="start" className="w-72 max-h-80 overflow-y-auto">
-        <DropdownMenuLabel>Previous chats</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {sessions === null ? (
-          <div className="px-2 py-3 text-xs text-muted-foreground">Loading…</div>
-        ) : sessions.length === 0 ? (
-          <div className="px-2 py-3 text-xs text-muted-foreground">
-            No previous chats in this project yet.
-          </div>
-        ) : (
-          sessions.map((s) => {
-            const title = sessionTitle(s);
+    <section className="mt-3 min-w-0" aria-label="Recent chats">
+      <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Recent
+      </h2>
+      {sessions === null && tabs.length === 0 ? (
+        <div className="px-2 py-2 text-[11px] text-muted-foreground">Loading chats…</div>
+      ) : unpersistedTabs.length === 0 && recentSessions.length === 0 ? (
+        <div className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          No chats yet.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-0.5">
+          {unpersistedTabs.map((tab) => {
+            const isEditing = editingId === tab.id;
+            const canClose = tabs.length > 1;
+            const isActive = tab.id === activeTabId;
             return (
-              <DropdownMenuItem
-                key={s.id}
-                onClick={() => onOpenSession(s.id, title)}
+              <div
+                key={tab.id}
+                className={cn(
+                  "group flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
+                  isActive
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                )}
               >
-                <MessageSquareTextIcon className="size-4 shrink-0" />
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate">{title}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {relativeTime(s.modified)} · {s.messageCount} message
-                    {s.messageCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </DropdownMenuItem>
+                <button
+                  type="button"
+                  onClick={() => onSelectTab(tab.id)}
+                  onDoubleClick={() => startRename(tab)}
+                  title={`${tab.title} — double-click to rename`}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <MessageSquareTextIcon className="size-3.5 shrink-0" />
+                  {tab.isStreaming && <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-primary" />}
+                  {isEditing ? (
+                    <input
+                      ref={inputRef}
+                      value={draftTitle}
+                      onChange={(event) => setDraftTitle(event.target.value)}
+                      onBlur={commitRename}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") commitRename();
+                        if (event.key === "Escape") {
+                          setEditingId(null);
+                          setDraftTitle("");
+                        }
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                      className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+                      maxLength={40}
+                    />
+                  ) : (
+                    <span className="truncate">{tab.title}</span>
+                  )}
+                </button>
+                {!isEditing && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Rename ${tab.title}`}
+                      onClick={() => startRename(tab)}
+                      className="rounded p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-muted-foreground/10 hover:text-foreground group-hover:opacity-70"
+                      title="Rename chat"
+                    >
+                      <PencilIcon className="size-3" />
+                    </button>
+                    {canClose && (
+                      <button
+                        type="button"
+                        aria-label={`Close ${tab.title}`}
+                        onClick={() => onCloseTab(tab.id)}
+                        className="rounded p-0.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-70"
+                        title={tab.isStreaming ? "Close chat (this will cancel the running turn)" : "Close chat"}
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             );
-          })
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          })}
+          {recentSessions.map(({ session, tab }) => {
+            const title = sessionTitle(session);
+            const rowTitle = tab?.title ?? title;
+            return (
+              <button
+                key={session.id}
+                type="button"
+                title={`${rowTitle} · ${relativeTime(session.modified)}`}
+                onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
+                className={cn(
+                  "flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  tab?.id === activeTabId
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                )}
+              >
+                <MessageSquareTextIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{rowTitle}</span>
+                  <span className="text-[10px] text-muted-foreground/75">
+                    {relativeTime(session.modified)}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -198,7 +310,16 @@ async function downloadExport(
   }
 }
 
-function ExportMenu({ projectId, sessionId }: { projectId: string; sessionId: string }) {
+function ExportMenu({
+  projectId,
+  sessionId,
+  orientation = "horizontal",
+}: {
+  projectId: string;
+  sessionId: string;
+  orientation?: "horizontal" | "vertical";
+}) {
+  const vertical = orientation === "vertical";
   return (
     <DropdownMenu>
       <InfoTooltip
@@ -215,7 +336,10 @@ function ExportMenu({ projectId, sessionId }: { projectId: string; sessionId: st
           <button
             type="button"
             aria-label="Export session"
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+              vertical && "w-full justify-start",
+            )}
           >
             <DownloadIcon className="size-3.5" />
             Export
@@ -250,6 +374,7 @@ function ExportMenu({ projectId, sessionId }: { projectId: string; sessionId: st
 
 export function ChatTabsBar({
   projectId,
+  width = 136,
   tabs,
   activeTabId,
   view,
@@ -264,172 +389,60 @@ export function ChatTabsBar({
   canExport = false,
 }: ChatTabsBarProps) {
   const atLimit = tabs.length >= maxTabs;
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editingId && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editingId]);
-
-  const startRename = (tab: ChatTabDescriptor) => {
-    setEditingId(tab.id);
-    setDraftTitle(tab.title);
-  };
-
-  const commitRename = () => {
-    if (!editingId) return;
-    const next = draftTitle.trim();
-    if (next) onRename(editingId, next);
-    setEditingId(null);
-    setDraftTitle("");
-  };
 
   return (
-    <div className="flex shrink-0 items-center gap-1 border-b px-3 py-1.5">
-      {/* Tabs + plus live in a scrollable region. Without this isolation the
-          Workflows pill (after `ml-auto`) gets pushed to the far right of
-          the scroll container — off-screen — once the tab strip overflows. */}
-      <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
-        {tabs.map((tab) => {
-          const isActive = view === "chat" && tab.id === activeTabId;
-          const canClose = tabs.length > 1;
-          const isEditing = editingId === tab.id;
-          return (
-            <div
-              key={tab.id}
-              className={cn(
-                "group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 text-xs font-medium transition-colors max-w-[180px]",
-                isActive
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-              )}
-            >
-              <button
-                onClick={() => onSelect(tab.id)}
-                onDoubleClick={() => startRename(tab)}
-                className="flex min-w-0 items-center gap-1.5"
-                type="button"
-                title={`${tab.title} — double-click to rename`}
-              >
-                <MessageSquareTextIcon className="size-3.5 shrink-0" />
-                {tab.isStreaming && (
-                  <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-primary" />
-                )}
-                {isEditing ? (
-                  <input
-                    ref={inputRef}
-                    value={draftTitle}
-                    onChange={(e) => setDraftTitle(e.target.value)}
-                    onBlur={commitRename}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitRename();
-                      if (e.key === "Escape") {
-                        setEditingId(null);
-                        setDraftTitle("");
-                      }
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                    className="w-24 bg-transparent text-xs font-medium outline-none border-b border-primary/40 focus:border-primary"
-                    maxLength={40}
-                  />
-                ) : (
-                  <span className="truncate">{tab.title}</span>
-                )}
-                {tab.userMessageCount > 0 && !isEditing && (
-                  <span className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary tabular-nums">
-                    {tab.userMessageCount}
-                  </span>
-                )}
-              </button>
-              {!isEditing && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startRename(tab);
-                    }}
-                    type="button"
-                    aria-label={`Rename ${tab.title}`}
-                    className={cn(
-                      "rounded p-0.5 text-muted-foreground/40 transition-all hover:bg-muted-foreground/10 hover:text-foreground",
-                      isActive
-                        ? "opacity-60 hover:opacity-100"
-                        : "opacity-0 group-hover:opacity-60",
-                    )}
-                    title="Rename tab"
-                  >
-                    <PencilIcon className="size-3" />
-                  </button>
-                  {canClose && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onClose(tab.id);
-                      }}
-                      type="button"
-                      aria-label={`Close ${tab.title}`}
-                      className={cn(
-                        "rounded p-0.5 text-muted-foreground/40 transition-all hover:bg-destructive/10 hover:text-destructive",
-                        isActive
-                          ? "opacity-60 hover:opacity-100"
-                          : "opacity-0 group-hover:opacity-60",
-                      )}
-                      title={
-                        tab.isStreaming
-                          ? "Close tab (this will cancel the running turn)"
-                          : "Close tab"
-                      }
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
-
-        <InfoTooltip
-          content={
-            atLimit ? (
-              <>
-                <b>Tab limit reached</b>
-                <br />
-                You can have up to {maxTabs} chat tabs running at once. Close
-                one to open a new one.
-              </>
-            ) : (
-              <>
-                <b>New chat tab</b>
-                <br />
-                Open another chat in the same project. All tabs share the
-                same sandbox files but have independent message history.
-              </>
-            )
-          }
+    <div
+      className="flex h-full shrink-0 flex-col bg-muted/10 p-2"
+      style={{ width }}
+    >
+      <InfoTooltip
+        content={
+          atLimit ? (
+            <>
+              <b>Tab limit reached</b>
+              <br />
+              You can have up to {maxTabs} chat tabs running at once. Close
+              one to open a new one.
+            </>
+          ) : (
+            <>
+              <b>New chat</b>
+              <br />
+              Open another chat in this project.
+            </>
+          )
+        }
+      >
+        <button
+          onClick={onNew}
+          type="button"
+          disabled={atLimit}
+          aria-label="New chat tab"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
-          <button
-            onClick={onNew}
-            type="button"
-            disabled={atLimit}
-            aria-label="New chat tab"
-            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            <PlusIcon className="size-3.5" />
-          </button>
-        </InfoTooltip>
-        <HistoryMenu projectId={projectId} onOpenSession={onOpenSession} />
+          <PlusIcon className="size-3.5" />
+          <span>New chat</span>
+        </button>
+      </InfoTooltip>
+      <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <RecentChatsList
+          projectId={projectId}
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={onSelect}
+          onCloseTab={onClose}
+          onRenameTab={onRename}
+          onOpenSession={onOpenSession}
+        />
       </div>
 
-      <div className="shrink-0 flex items-center gap-1 pl-2 border-l">
+      <div className="mt-auto flex shrink-0 flex-col gap-1 border-t pt-2">
         {view === "chat" && canExport && activeSessionId && (
-          <ExportMenu projectId={projectId} sessionId={activeSessionId} />
+          <ExportMenu
+            projectId={projectId}
+            sessionId={activeSessionId}
+            orientation="vertical"
+          />
         )}
         <InfoTooltip
           content={
@@ -446,7 +459,7 @@ export function ChatTabsBar({
             onClick={onSelectWorkflows}
             type="button"
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+              "flex w-full items-center justify-start gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
               view === "workflows"
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50",

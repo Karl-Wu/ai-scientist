@@ -96,7 +96,7 @@ function PlanningDialog({ entry, sessionId, projectId, model, onSaved }: Props) 
           }}>Generate proposals</Button>
           {lastRequest && <div className="space-y-1 text-[11px]"><p>Last request: {lastRequest}</p><Button variant="ghost" size="xs" disabled={busy} onClick={checkRequest}>Check request status (no retry)</Button>{requestStatus && <p>{requestStatus}</p>}</div>}
         </details>
-        {!view.proposals.length && <p className="text-sm text-muted-foreground">No saved next-investigation proposals yet. Kady can also author one through the notebook tool during a normal chat.</p>}
+        {!view.proposals.length && <p className="text-sm text-muted-foreground">No saved next-investigation proposals yet. AI Scientist can also author one through the notebook tool during a normal chat.</p>}
         {view.proposals.map((proposal) => <details key={`${proposal.source.sessionId}:${proposal.source.entryId}`} open={view.proposals.length === 1} className="rounded border p-3">
           <summary className="cursor-pointer text-sm font-semibold">{proposal.plan.question} · {proposal.status} · context {proposal.contextStatus}</summary>
           <div className="mt-3 space-y-3">

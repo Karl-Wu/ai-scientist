@@ -29,7 +29,7 @@ export interface AppDefaults {
   verifierModel?: string;
 }
 
-/** An image model Kady can meter (GET /settings/image-models). */
+/** An image model AI Scientist can meter (GET /settings/image-models). */
 export interface ImageModelOption {
   ref: string;
   name: string;

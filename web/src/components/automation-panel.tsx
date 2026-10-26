@@ -3,7 +3,7 @@ import { SubagentFleetPanel } from "./subagent-fleet-panel";
 
 /**
  * Project "Automation" tab: pi-subagents durable schedules (recurring or
- * one-shot specialist runs that fire from Kady's resident session, even with
+ * one-shot specialist runs that fire from AI Scientist's resident session, even with
  * no chat tab open) and missions (durable records of delegated work).
  * Schedules are created conversationally ("run the QC pipeline every 6h");
  * this panel shows and controls them.
@@ -160,7 +160,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium">Automation</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Recurring and one-shot specialist runs, plus durable missions. Ask Kady to create one
+            Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one
             (&ldquo;re-run the QC report every 6 hours&rdquo;); they fire from a resident session even with no
             chat open and pause automatically when the project spend limit is reached.
           </p>
@@ -247,7 +247,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
                     <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">{s.workflowScript}</pre>
                     <div className="mt-2 text-muted-foreground">
                       model: {s.model ?? "inherited from the project's latest chat model"}
-                      {s.quiet ? " · quiet (successful fires don't wake Kady)" : ""}
+                      {s.quiet ? " · quiet (successful fires don't wake AI Scientist)" : ""}
                       {" · "}catch-up: {s.catchUp}
                       {s.timeoutMs ? ` · timeout ${Math.round(s.timeoutMs / 60000)} min` : ""}
                       {s.baseRef ? ` · base ${s.baseRef}` : ""}
@@ -282,7 +282,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         </h4>
         {loaded && missions.length === 0 && (
           <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            No missions recorded. Multi-step delegations Kady runs create one automatically; they survive
+            No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive
             restarts and hold decisions, artifacts and receipts.
           </p>
         )}

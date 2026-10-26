@@ -111,7 +111,7 @@ function hitRows(result: MemorySearchResponse): Row[] {
  * Research context for the next message: project notebook records, frozen
  * plans and notes (via the same research-memory search the agent's
  * notebook_search tool uses), plus earlier chats in this project. Picked
- * items become references Kady reads with its own tools; nothing is pasted
+ * items become references AI Scientist reads with its own tools; nothing is pasted
  * into the prompt.
  */
 export function ResearchPickerBody({
@@ -325,7 +325,7 @@ export function ResearchPickerBody({
                 ? "No matching chats."
                 : "No other chats in this project yet."
               : idleRecords
-                ? "No notebook entries yet. Kady records hypotheses, methods and findings here as it works."
+                ? "No notebook entries yet. AI Scientist records hypotheses, methods and findings here as it works."
                 : "No matching records."}
           </div>
         ) : (
@@ -388,8 +388,8 @@ export function ResearchPickerBody({
       <div className="flex items-center justify-between gap-3 border-t px-3 py-1.5">
         <span className="text-[10px] text-muted-foreground">
           {mode === "records"
-            ? "Kady reads picked records with notebook_search before relying on them."
-            : "Kady reads a compact snapshot of each picked chat, taken when you send."}
+            ? "AI Scientist reads picked records with notebook_search before relying on them."
+            : "AI Scientist reads a compact snapshot of each picked chat, taken when you send."}
         </span>
         {selected.length > 0 && (
           <button

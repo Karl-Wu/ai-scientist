@@ -110,7 +110,7 @@ export function SubagentFleetPanel({ projectId }: { projectId: string }) {
       </div>
       {childRows(run.children ?? [])}
     </div>)}
-    {(snapshot?.asyncSnapshot?.omitted?.runs || snapshot?.asyncSnapshot?.omitted?.children || snapshot?.fleet?.omitted) ? <p className="text-xs text-muted-foreground">Some entries are omitted from this bounded view. Ask Kady for a specific run’s status.</p> : null}
+    {(snapshot?.asyncSnapshot?.omitted?.runs || snapshot?.asyncSnapshot?.omitted?.children || snapshot?.fleet?.omitted) ? <p className="text-xs text-muted-foreground">Some entries are omitted from this bounded view. Ask AI Scientist for a specific run’s status.</p> : null}
     {snapshot?.compute?.map((job) => <p key={job.id} className="text-xs">Compute: {job.label} · {job.state}</p>)}
     {selected && <div className="space-y-2 border-t pt-3">
       <div className="flex items-center justify-between"><h4 className="text-sm font-medium">{selected.label}</h4><Button size="sm" variant="ghost" onClick={() => setTranscriptRefresh((n) => n + 1)}>Refresh transcript</Button></div>

@@ -274,7 +274,7 @@ export function LabNotebookHeader({
                 <div className="flex flex-col gap-1">
                   <p className="text-sm font-medium">Turn the trail into a Methods section</p>
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    Kady synthesizes the recorded methods, decisions, and observations in one
+                    AI Scientist synthesizes the recorded methods, decisions, and observations in one
                     budgeted AI call, then saves an editable draft to the sandbox.
                   </p>
                 </div>

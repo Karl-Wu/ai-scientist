@@ -49,9 +49,9 @@ export function ApiTokenGate() {
           </DialogTitle>
           <DialogDescription>
             {hadToken
-              ? "The Kady server rejected the saved access token (it changes each time Kady restarts unless KADY_AUTH_TOKEN is set). "
-              : "This Kady server is protected with an access token. "}
-            Open the link printed in the terminal that started Kady, or paste the
+              ? "The AI Scientist server rejected the saved access token (it changes each time AI Scientist restarts unless KADY_AUTH_TOKEN is set). "
+              : "This AI Scientist server is protected with an access token. "}
+            Open the link printed in the terminal that started AI Scientist, or paste the
             link or token here.
           </DialogDescription>
         </DialogHeader>

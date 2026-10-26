@@ -496,7 +496,7 @@ export function LabNotebookView({
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {scope === "project"
                 ? "Findings from every chat in this project collect here."
-                : "Kady’s notebook — entries appear here as it works, linking hypotheses to evidence and decisions."}
+                : "AI Scientist’s notebook — entries appear here as it works, linking hypotheses to evidence and decisions."}
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-1">

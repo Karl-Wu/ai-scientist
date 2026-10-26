@@ -1,6 +1,6 @@
 /**
  * Cross-panel "prefill the chat composer" handoff (e.g. the LaTeX editor's
- * Ask Kady button). A window event — like CHANGE_EVENT in projects.ts — so
+ * Ask AI Scientist button). A window event — like CHANGE_EVENT in projects.ts — so
  * distant components don't need prop threading. Two listeners cooperate:
  * the active chat tab's composer appends the text (chat-tab.tsx), and
  * page.tsx switches the right column back to the chat view so the prefilled

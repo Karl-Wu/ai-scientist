@@ -19,7 +19,7 @@ export function AppearancePanel() {
     <div className="flex flex-col gap-4">
       <SettingsHeader
         title="Appearance"
-        description="Choose how K-Dense BYOK looks. System follows your operating system's theme. Saved in this browser."
+        description="Choose how AI Scientist looks. System follows your operating system's theme. Saved in this browser."
       />
 
       <div className="flex gap-2">

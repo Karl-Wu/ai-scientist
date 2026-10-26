@@ -196,7 +196,7 @@ export function WatchdogCard({ projectId }: { projectId: string }) {
         />
       </div>
       <p className="mt-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-        Watchdog reviews add model usage. Kady records it in the project ledger and checks the spend cap
+        Watchdog reviews add model usage. AI Scientist records it in the project ledger and checks the spend cap
         before each paid request. Subscription and local models follow their usual billing rules.
       </p>
       <SettingsError className="mt-2">{error}</SettingsError>
@@ -562,7 +562,7 @@ export function SubagentsPanel() {
         title="Specialists"
         description={
           <>
-            Specialist agents Kady can delegate to with the{" "}
+            Specialist agents AI Scientist can delegate to with the{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-[11px]">subagent</code> tool,
             configured per project (current:{" "}
             <span className="font-medium">{activeProject?.name ?? activeProjectId}</span>) as markdown

@@ -87,7 +87,7 @@ export function agentAccent(role: string): AgentAccent {
 
 /** Display label for a lane/badge role. */
 export function roleLabel(role: string): string {
-  if (role === "agent") return "Kady (lead)";
+  if (role === "agent") return "AI Scientist (lead)";
   if (role === "you") return "You";
   return role;
 }

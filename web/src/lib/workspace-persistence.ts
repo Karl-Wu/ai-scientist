@@ -100,6 +100,7 @@ export interface ProjectWorkspaceState {
   chatOpen: boolean;
   treeWidth: number;
   chatWidth: number;
+  chatNavWidth?: number;
   sandbox: SandboxWorkspaceState;
 }
 
@@ -361,6 +362,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     chatOpen: value.chatOpen !== false,
     treeWidth: boundedNumber(value.treeWidth, 320, 150, 480),
     chatWidth: boundedNumber(value.chatWidth, 640, 280, 720),
+    chatNavWidth: boundedNumber(value.chatNavWidth, 136, 96, 360),
     sandbox: {
       openPaths,
       activePath: requestedActivePath && openPaths.includes(requestedActivePath)

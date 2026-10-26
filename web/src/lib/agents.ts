@@ -29,7 +29,7 @@ export interface AgentFile {
   systemPrompt: string;
   /** Checks other agents' work; covered by Settings → Defaults → Verifier model (read-only). */
   verifier?: boolean;
-  /** The verifier model Kady currently routes this specialist to (read-only). */
+  /** The verifier model AI Scientist currently routes this specialist to (read-only). */
   verifierModel?: string;
 }
 

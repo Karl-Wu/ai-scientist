@@ -1,5 +1,5 @@
 /**
- * Optional access token for the Kady backend (see server/src/auth.ts).
+ * Optional access token for the AI Scientist backend (see server/src/auth.ts).
  *
  * A default single-user install never needs one and nothing here changes its
  * behaviour: with no stored token, headers and URLs are left untouched. When

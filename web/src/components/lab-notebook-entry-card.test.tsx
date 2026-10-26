@@ -254,6 +254,6 @@ describe("LabNotebookEntryCard", () => {
     renderCard(
       <LabNotebookEntryCard entry={entry({ role: "agent" })} onOpenFile={() => {}} agentBadge="agent" />,
     );
-    expect(screen.getByText("Kady (lead)")).toBeInTheDocument();
+    expect(screen.getByText("AI Scientist (lead)")).toBeInTheDocument();
   });
 });

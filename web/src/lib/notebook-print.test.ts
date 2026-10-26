@@ -62,10 +62,10 @@ describe("buildNotebookPrintHtml", () => {
       e("a", { role: "agent" }),
       e("b", { role: "literature-scout" }),
     ]);
-    expect(html).toContain('<h2 class="lane">Kady (lead)</h2>');
+    expect(html).toContain('<h2 class="lane">AI Scientist (lead)</h2>');
     expect(html).toContain('<h2 class="lane">literature-scout</h2>');
     // Lead lane comes first.
-    expect(html.indexOf("Kady (lead)")).toBeLessThan(html.indexOf("literature-scout"));
+    expect(html.indexOf("AI Scientist (lead)")).toBeLessThan(html.indexOf("literature-scout"));
   });
 
   it("omits lane headings when only one role is present", () => {

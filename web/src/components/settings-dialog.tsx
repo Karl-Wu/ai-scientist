@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, type ComponentType } from "re
 import dynamic from "next/dynamic";
 import {
   BotIcon,
-  BrainCircuitIcon,
   CloudIcon,
   FolderCogIcon,
   KeyIcon,
@@ -34,7 +33,6 @@ import {
 import { useProjects } from "@/lib/use-projects";
 import { cn } from "@/lib/utils";
 import { AppearancePanel } from "./settings/appearance-panel";
-import { FusionPanel } from "./settings/fusion-panel";
 import { useResizableDialog } from "./settings/use-resizable-dialog";
 
 const panelLoading = () => (
@@ -63,7 +61,6 @@ interface TabDef {
 const MODEL_TABS: TabDef[] = [
   { id: "providers", label: "Providers", icon: CloudIcon },
   { id: "defaults", label: "Defaults", icon: SlidersHorizontalIcon },
-  { id: "fusion", label: "Fusion", icon: BrainCircuitIcon },
 ];
 const PROJECT_TABS: TabDef[] = [
   { id: "project", label: "General", icon: FolderCogIcon },
@@ -198,7 +195,7 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
         <DialogHeader className="border-b px-6 pb-4 pt-6">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="text-xs">
-            Models, this project, and the services Kady connects to.
+            Models, this project, and the services AI Scientist connects to.
           </DialogDescription>
         </DialogHeader>
 
@@ -235,9 +232,6 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
             </TabsContent>
             <TabsContent value="defaults" className="min-w-0 p-5">
               <DefaultsPanel />
-            </TabsContent>
-            <TabsContent value="fusion" className="min-w-0 p-5">
-              <FusionPanel />
             </TabsContent>
             <TabsContent value="project" className="min-w-0 p-5">
               <ProjectSettingsPanel projectId={projectId} />

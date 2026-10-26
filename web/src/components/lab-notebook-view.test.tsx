@@ -256,7 +256,7 @@ describe("LabNotebookView", () => {
     ];
     render(<LabNotebookView {...baseProps} liveEntries={entries} />);
     // Lane headers present; lead labeled and first.
-    const lead = screen.getByText(/Kady \(lead\)/i);
+    const lead = screen.getByText(/AI Scientist \(lead\)/i);
     const scout = screen.getByText("literature-scout");
     expect(lead).toBeInTheDocument();
     expect(scout).toBeInTheDocument();
@@ -653,9 +653,9 @@ describe("LabNotebookView", () => {
       />,
     );
     // Single lane in by-agent view → no lane label…
-    expect(screen.queryByText("Kady (lead)")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI Scientist (lead)")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /timeline/i }));
     // …but the chrono view badges each entry with its author.
-    expect(screen.getByText("Kady (lead)")).toBeInTheDocument();
+    expect(screen.getByText("AI Scientist (lead)")).toBeInTheDocument();
   });
 });

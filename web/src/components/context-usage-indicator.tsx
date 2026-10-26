@@ -80,7 +80,7 @@ export function ContextUsageIndicator({
           <>
             <b>Compact now</b>
             <br />
-            Summarize older messages to free context. Kady keeps a state block
+            Summarize older messages to free context. AI Scientist keeps a state block
             (plan, notebook entries, result ids, environment) ahead of the summary.
             {compactDisabled ? " Available once the current run finishes." : ""}
           </>

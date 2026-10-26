@@ -56,7 +56,7 @@ export function OfficeWorkspace({ path, projectId }: { path: string; projectId: 
         const res = await apiFetch(`/sandbox/office/content?path=${encodeURIComponent(path)}`, { signal: controller.signal }, projectId);
         if (!res.ok) { const detail = await res.json().catch(() => ({})); throw new Error(detail.detail || `Could not load file (${res.status})`); }
         const hash = res.headers.get("X-Content-SHA256");
-        if (!hash) throw new Error("The backend did not provide a document revision. Restart Kady and retry.");
+        if (!hash) throw new Error("The backend did not provide a document revision. Restart AI Scientist and retry.");
         const bytes = await res.arrayBuffer(); if (controller.signal.aborted) return;
         revision.current = hash;
         const protectedFile = res.headers.get("X-Office-Read-Only") === "true";
@@ -100,7 +100,7 @@ export function OfficeWorkspace({ path, projectId }: { path: string; projectId: 
             revision.current = result.revision;
             const newerEdits = changeVersion.current !== job.version;
             setDirty(newerEdits); setPhase(newerEdits ? "Newer changes are not saved yet" : "Saved to project");
-            // Other Kady tabs refresh the preview after an editor save.
+            // Other AI Scientist tabs refresh the preview after an editor save.
             try { localStorage.setItem("kady:office-saved", JSON.stringify({ projectId, path, time: Date.now() })); } catch { /* Preview refresh is best-effort when browser storage is blocked. */ }
           }
         } catch (e) { setError(e instanceof Error ? e.message : "Save failed. Download an edited copy to keep your work."); setDirty(true); }
@@ -135,9 +135,9 @@ export function OfficeWorkspace({ path, projectId }: { path: string; projectId: 
   }
   return <main className="flex h-dvh flex-col overflow-hidden bg-background font-sans">
     <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4 sm:px-5">
-      <a href="/" className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label="Back to Kady"><ArrowLeftIcon className="size-4" /></a>
+      <a href="/" className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" aria-label="Back to AI Scientist"><ArrowLeftIcon className="size-4" /></a>
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50"><FileIcon className="size-4 text-foreground" /></div>
-      <div className="min-w-0 flex-1"><h1 className="truncate text-sm font-medium" title={path}>{title}</h1><div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>Kady Office</span><span aria-hidden="true">/</span><span>{kind === "xlsx" ? "Spreadsheet" : kind === "pptx" ? "Presentation" : "Document"}</span>{readOnly && <span>· Read only</span>}</div></div>
+      <div className="min-w-0 flex-1"><h1 className="truncate text-sm font-medium" title={path}>{title}</h1><div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>AI Scientist Office</span><span aria-hidden="true">/</span><span>{kind === "xlsx" ? "Spreadsheet" : kind === "pptx" ? "Presentation" : "Document"}</span>{readOnly && <span>· Read only</span>}</div></div>
       <Button size="icon-sm" variant="ghost" aria-label={resolvedTheme === "dark" ? "Use light theme" : "Use dark theme"} title="Toggle theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}>
         {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
       </Button>

@@ -14,7 +14,6 @@ import { useProjectCost } from "@/lib/use-project-cost";
 import { useProjectActivities } from "@/lib/use-project-activities";
 import { useModalJobs } from "@/lib/use-modal-jobs";
 import { useProjects } from "@/lib/use-projects";
-import { APP_VERSION, isVersioned, useUpdateCheck } from "@/lib/version";
 import { useSkills } from "@/lib/use-skills";
 import { flattenFiles, flattenFolders, useSandbox } from "@/lib/use-sandbox";
 import { ProjectScopeProvider } from "@/lib/projects";
@@ -32,12 +31,16 @@ import {
 } from "@/lib/modal-jobs";
 import { isJunkFilePath } from "@/lib/utils";
 import {
+  AlarmClockIcon,
+  BookOpenIcon,
+  FilesIcon,
   PanelLeftIcon,
   PanelRightIcon,
   SettingsIcon,
   ServerCogIcon,
   SunIcon,
   MoonIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -66,6 +69,60 @@ import {
 } from "react";
 
 const MAX_CHAT_TABS = 10;
+type ProjectDestination = "files" | "notebook" | "compute" | "automation";
+
+function ProjectNavigation({
+  active,
+  onSelect,
+  orientation = "vertical",
+}: {
+  active: ProjectDestination;
+  onSelect: (destination: ProjectDestination) => void;
+  orientation?: "vertical" | "horizontal";
+}) {
+  const horizontal = orientation === "horizontal";
+  const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
+    { id: "files", label: "Files", hint: "Browse and manage project files", Icon: FilesIcon, color: "text-blue-500" },
+    { id: "notebook", label: "Notebook", hint: "One shared lab notebook for this project", Icon: BookOpenIcon, color: "text-orange-500" },
+    { id: "automation", label: "Automation", hint: "Manage project schedules and missions", Icon: AlarmClockIcon, color: "text-emerald-500" },
+  ];
+
+  return (
+    <nav
+      aria-label="Project navigation"
+      className={cn(
+        "hidden shrink-0 bg-muted/20 lg:flex",
+        horizontal
+          ? "box-border min-h-12 w-full min-w-0 max-w-full flex-wrap items-center gap-1 overflow-x-hidden border-b px-2 py-1.5"
+          : "w-[72px] flex-col gap-1 border-r p-1.5",
+      )}
+    >
+      {items.map(({ id, label, hint, Icon, color }) => (
+        <button
+          key={id}
+          type="button"
+          title={hint}
+          aria-label={label}
+          aria-current={active === id ? "page" : undefined}
+          aria-pressed={active === id}
+          onClick={() => onSelect(id)}
+          className={cn(
+            "shrink-0 font-medium transition-colors",
+            horizontal
+              ? "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs"
+              : "flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-[8px] leading-none",
+            active === id
+              ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+              : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+          )}
+        >
+          <Icon className={cn(horizontal ? "size-3.5" : "size-4", color)} />
+          <span className="whitespace-nowrap">{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
 
 /**
  * Sent by the sandbox "Auto-organize files" wand. Moving a data file silently
@@ -102,10 +159,13 @@ function defaultTabTitle(index: number): string {
 function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
   return (
     <div
-      className="group relative z-10 flex w-1 shrink-0 cursor-col-resize items-center justify-center bg-border hover:bg-blue-400 active:bg-blue-500 transition-colors"
+      role="separator"
+      aria-orientation="vertical"
+      className="group relative z-10 flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-transparent"
       onMouseDown={onMouseDown}
     >
-      <div className="h-8 w-0.5 rounded-full bg-muted-foreground/20 group-hover:bg-blue-400 transition-colors" />
+      <div className="absolute inset-y-0 w-px bg-border transition-colors group-hover:bg-blue-400 group-active:bg-blue-500" />
+      <div className="relative h-8 w-0.5 rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-blue-400" />
     </div>
   );
 }
@@ -308,7 +368,6 @@ function WorkspacePage({
     initialState?.sandbox,
     handleSandboxWorkspaceChange,
   );
-  const { updateAvailable } = useUpdateCheck();
   const { skills: allSkills, loading: skillsLoading } = useSkills();
   const { projects: projectDirectory } = useProjects();
   const { resolvedTheme, setTheme } = useTheme();
@@ -316,11 +375,14 @@ function WorkspacePage({
   const [sandboxOpen, setSandboxOpen] = useState(
     () => initialState?.sandboxOpen ?? true,
   );
-  const [chatOpen, setChatOpen] = useState(
+  const [chatNavigationOpen, setChatNavigationOpen] = useState(
     () => initialState?.chatOpen ?? true,
   );
   const toggleSandbox = useCallback(() => setSandboxOpen((value) => !value), []);
-  const toggleChat = useCallback(() => setChatOpen((value) => !value), []);
+  const toggleChatNavigation = useCallback(
+    () => setChatNavigationOpen((value) => !value),
+    [],
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsRequest, setSettingsRequest] = useState<OpenSettingsRequest | null>(null);
   const [showNotebook, setShowNotebook] = useState(
@@ -332,6 +394,20 @@ function WorkspacePage({
   const [showCompute, setShowCompute] = useState(
     () => initialState?.showCompute ?? false,
   );
+  const activeProjectDestination: ProjectDestination = showNotebook
+    ? "notebook"
+    : showCompute
+      ? "compute"
+      : showAutomation
+        ? "automation"
+        : "files";
+  const filesOnRight = activeProjectDestination === "files";
+  const showFileTree = sandboxOpen && filesOnRight;
+  const selectProjectDestination = useCallback((destination: ProjectDestination) => {
+    setShowNotebook(destination === "notebook");
+    setShowCompute(destination === "compute");
+    setShowAutomation(destination === "automation");
+  }, []);
   const [computeScope, setComputeScope] = useState<ModalComputeScope>(
     () => initialState?.computeScope ?? "project",
   );
@@ -506,27 +582,51 @@ function WorkspacePage({
   const [chatWidth, setChatWidth] = useState(
     () => initialState?.chatWidth ?? 640,
   );
+  const chatWidthRef = useRef(chatWidth);
+  chatWidthRef.current = chatWidth;
+  const [chatNavWidth, setChatNavWidth] = useState(
+    () => initialState?.chatNavWidth ?? 136,
+  );
+  // Keep a useful slice of the conversation pane visible even when the whole
+  // chat column has been resized to its minimum width.
+  const visibleChatNavWidth = Math.min(
+    chatNavWidth,
+    Math.max(96, Math.min(360, chatWidth - 168)),
+  );
   const [isResizing, setIsResizing] = useState(false);
-  const dragging = useRef<"tree" | "chat" | null>(null);
+  const dragging = useRef<"tree" | "chat" | "chat-nav" | null>(null);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
-  const startDrag = useCallback((panel: "tree" | "chat") => (e: React.MouseEvent) => {
+  const startDrag = useCallback((panel: "tree" | "chat" | "chat-nav") => (e: React.MouseEvent) => {
     e.preventDefault();
     dragging.current = panel;
     dragStartX.current = e.clientX;
-    dragStartWidth.current = panel === "tree" ? treeWidth : chatWidth;
+    dragStartWidth.current = panel === "tree"
+      ? treeWidth
+      : panel === "chat"
+        ? chatWidth
+        : visibleChatNavWidth;
     setIsResizing(true);
-  }, [treeWidth, chatWidth]);
+  }, [treeWidth, chatWidth, visibleChatNavWidth]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return;
       const delta = e.clientX - dragStartX.current;
       if (dragging.current === "tree") {
-        setTreeWidth(Math.max(150, Math.min(480, dragStartWidth.current + delta)));
+        // The file tree is now on the right of the preview, so dragging its
+        // divider right makes the tree narrower.
+        setTreeWidth(Math.max(150, Math.min(480, dragStartWidth.current - delta)));
       } else {
-        setChatWidth(Math.max(280, Math.min(720, dragStartWidth.current - delta)));
+        // Both chat panes are on the left of their dividers, so dragging right
+        // makes the selected pane wider.
+        if (dragging.current === "chat") {
+          setChatWidth(Math.max(280, Math.min(720, dragStartWidth.current + delta)));
+        } else {
+          const maxWidth = Math.max(96, Math.min(360, chatWidthRef.current - 168));
+          setChatNavWidth(Math.max(96, Math.min(maxWidth, dragStartWidth.current + delta)));
+        }
       }
     };
     const onUp = () => {
@@ -556,14 +656,16 @@ function WorkspacePage({
       showAutomation,
       computeScope,
       sandboxOpen,
-      chatOpen,
+      chatOpen: chatNavigationOpen,
       treeWidth,
       chatWidth,
+      chatNavWidth,
       sandbox: sandboxWorkspace,
     }),
     [
       activeTabId,
-      chatOpen,
+      chatNavigationOpen,
+      chatNavWidth,
       chatWidth,
       computeScope,
       sandboxOpen,
@@ -597,7 +699,7 @@ function WorkspacePage({
     return () => window.removeEventListener("pagehide", flush);
   }, [hydrated, projectId]);
 
-  // Ask Kady handoff: the active tab's composer (mounted even behind the
+  // Ask AI Scientist handoff: the active tab's composer (mounted even behind the
   // Workflows view) appends the text; this listener makes it visible.
   useEffect(() => {
     if (!isActive) return;
@@ -800,7 +902,7 @@ function WorkspacePage({
     (entryId: string) => {
       // Un-hide the chat column without toggling it closed, then scroll once
       // display:none has lifted (scrollIntoView no-ops on hidden elements).
-      setChatOpen(true);
+      setChatNavigationOpen(true);
       setView("chat");
       setTimeout(() => {
         const ok = tabHandles.current.get(activeTabId)?.scrollToToolCall(entryId) ?? false;
@@ -882,8 +984,30 @@ function WorkspacePage({
         title: t.title,
         isStreaming: tabsMeta[t.id]?.isStreaming ?? false,
         userMessageCount: tabsMeta[t.id]?.userMessageCount ?? 0,
+        sessionId: tabsMeta[t.id]?.sessionId ?? t.sessionId ?? null,
       })),
     [tabs, tabsMeta],
+  );
+
+  const projectFilesPanel = (
+    <FileTreePanel
+      tree={sandbox.tree}
+      selectedPath={sandbox.activeTabPath}
+      uploading={sandbox.uploading}
+      onSelect={handleFileSelect}
+      onDownload={sandbox.downloadFile}
+      onDelete={sandbox.deleteFile}
+      onDownloadDir={sandbox.downloadDir}
+      onDeleteDir={sandbox.deleteDir}
+      onDownloadAll={sandbox.downloadAll}
+      onRefresh={sandbox.fetchTree}
+      onClose={toggleSandbox}
+      onUpload={sandbox.uploadFiles}
+      onOrganize={handleOrganizeFiles}
+      onMove={sandbox.moveItem}
+      onRename={sandbox.renameItem}
+      onCreateDir={sandbox.createDir}
+    />
   );
 
   return (
@@ -901,45 +1025,17 @@ function WorkspacePage({
                 set height via CSS and let width autosize. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/kdense-logo.png"
-              alt="K-Dense BYOK"
-              className="h-7 w-auto object-contain dark:invert"
+              src="/brand/ai-scientist.svg"
+              alt="AI Scientist"
+              className="size-7 object-contain"
             />
-            <span className="text-sm font-semibold tracking-tight text-foreground/80">BYOK</span>
+            <span className="text-sm font-semibold tracking-tight text-foreground/80">AI Scientist</span>
           </button>
-          {isVersioned && (
-            <InfoTooltip
-              content={
-                <>
-                  <b>K-Dense BYOK v{APP_VERSION}</b>
-                  <br />
-                  Bring-your-own-key research assistant. All API calls use keys from your{" "}
-                  <kbd>.env</kbd> file and run on your machine.
-                </>
-              }
-            >
-              <span className="text-[11px] text-muted-foreground/60 cursor-help">
-                v{APP_VERSION}
-              </span>
-            </InfoTooltip>
-          )}
-          {updateAvailable && (
-            <InfoTooltip content="A newer version is available on GitHub. Click to open the release page.">
-              <a
-                href="https://github.com/K-Dense-AI/k-dense-byok"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] font-medium text-blue-500 hover:text-blue-400 transition-colors"
-              >
-                Update available
-              </a>
-            </InfoTooltip>
-          )}
           <span className="mx-1 h-4 w-px bg-border/60" aria-hidden />
           <ProjectSwitcher onOpenProjectView={onOpenProjectView} />
         </div>
         <p className="absolute left-1/2 hidden -translate-x-1/2 text-[11px] text-muted-foreground/60 tracking-wide select-none 2xl:block">
-          Brought to you by K-Dense, Inc.
+          A research workspace for scientists and biologists
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {isActive && <ResourceMonitor />}
@@ -969,21 +1065,21 @@ function WorkspacePage({
           ) : modalJobsLoading ? (
             <span className="sr-only" aria-live="polite">Checking compute jobs</span>
           ) : null}
-          {/* Panel visibility — collapse either side panel to give the center
-              pane (file preview / LaTeX editor) more room. */}
+          {/* These controls affect the file tree and chat navigation only.
+              The conversation pane itself always remains visible. */}
           <div className="flex items-center gap-0.5 rounded-lg border bg-muted/30 p-0.5">
             <InfoTooltip
               content={
                 <>
-                  <b>{sandboxOpen ? "Hide" : "Show"} file browser</b>
+                  <b>{sandboxOpen ? "Hide" : "Show"} file tree</b>
                   <br />
-                  Collapse the left file tree to widen the editor and preview.
+                  Show or hide the file tree on the right side of the Files view.
                 </>
               }
             >
               <button
                 onClick={toggleSandbox}
-                aria-label={sandboxOpen ? "Hide file browser" : "Show file browser"}
+                aria-label={sandboxOpen ? "Hide file tree" : "Show file tree"}
                 aria-pressed={sandboxOpen}
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
@@ -992,30 +1088,30 @@ function WorkspacePage({
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                <PanelLeftIcon className="size-4" />
+                <PanelRightIcon className="size-4" />
               </button>
             </InfoTooltip>
             <InfoTooltip
               content={
                 <>
-                  <b>{chatOpen ? "Hide" : "Show"} chat</b>
+                  <b>{chatNavigationOpen ? "Hide" : "Show"} chat navigation</b>
                   <br />
-                  Collapse the right chat panel to widen the editor and preview.
+                  Show or hide New chat, Recent chats, and Workflows.
                 </>
               }
             >
               <button
-                onClick={toggleChat}
-                aria-label={chatOpen ? "Hide chat" : "Show chat"}
-                aria-pressed={chatOpen}
+                onClick={toggleChatNavigation}
+                aria-label={chatNavigationOpen ? "Hide chat navigation" : "Show chat navigation"}
+                aria-pressed={chatNavigationOpen}
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
-                  chatOpen
+                  chatNavigationOpen
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                <PanelRightIcon className="size-4" />
+                <PanelLeftIcon className="size-4" />
               </button>
             </InfoTooltip>
           </div>
@@ -1064,166 +1160,177 @@ function WorkspacePage({
         </div>
       </header>
 
-      {/* Main content area — three columns: file tree | preview | chat */}
+      {/* Main content area — project files | preview | chat */}
       <div
-        className={cn("grid min-h-0 flex-1 overflow-hidden xl:flex", isResizing && "select-none")}
+        className={cn("grid min-h-0 flex-1 overflow-hidden lg:flex", isResizing && "select-none")}
         style={{
-          gridTemplateColumns: sandboxOpen ? `min(${treeWidth}px, 30vw) minmax(0, 1fr)` : "minmax(0, 1fr)",
-          gridTemplateRows: chatOpen ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)",
+          gridTemplateColumns: showFileTree ? `min(${treeWidth}px, 30vw) minmax(0, 1fr)` : "minmax(0, 1fr)",
         }}
       >
 
-        {/* Left: file tree */}
-        {isActive && sandboxOpen && (
-          <div className="min-h-0 min-w-0 shrink-0 overflow-hidden xl:w-[var(--tree-width)]" style={{ "--tree-width": `${treeWidth}px` } as CSSProperties}>
-            <FileTreePanel
-              tree={sandbox.tree}
-              selectedPath={sandbox.activeTabPath}
-              uploading={sandbox.uploading}
-              onSelect={handleFileSelect}
-              onDownload={sandbox.downloadFile}
-              onDelete={sandbox.deleteFile}
-              onDownloadDir={sandbox.downloadDir}
-              onDeleteDir={sandbox.deleteDir}
-              onDownloadAll={sandbox.downloadAll}
-              onRefresh={sandbox.fetchTree}
-              onClose={toggleSandbox}
-              onUpload={sandbox.uploadFiles}
-              onOrganize={handleOrganizeFiles}
-              onMove={sandbox.moveItem}
-              onRename={sandbox.renameItem}
-              onCreateDir={sandbox.createDir}
+        {/* The content area: its navigation spans the preview and file tree. */}
+        <div className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-3",
+        )}>
+          {isActive && (
+            <ProjectNavigation
+              active={activeProjectDestination}
+              onSelect={selectProjectDestination}
+              orientation="horizontal"
             />
+          )}
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+              <FilePreviewPanel
+                projectId={projectId}
+                isActive={isActive}
+                activeModelRef={tabWorkspaceStates[activeTabId]?.selectedModel.id}
+                tabs={sandbox.tabs}
+                activeTabPath={sandbox.activeTabPath}
+                onTabSelect={handleFileSelect}
+                onTabClose={sandbox.closeTab}
+                onDownload={sandbox.downloadFile}
+                onSaveText={sandbox.saveFile}
+                onSaveImageBlob={sandbox.saveImageBlob}
+                onRetry={sandbox.retryFile}
+                onCompileLatex={sandbox.compileLatex}
+                showNotebook={showNotebook}
+                onSelectNotebook={() => {
+                  setShowCompute(false);
+                  setShowAutomation(false);
+                  setShowNotebook(true);
+                }}
+                showCompute={showCompute}
+                onSelectCompute={() => {
+                  setShowNotebook(false);
+                  setShowAutomation(false);
+                  setShowCompute(true);
+                }}
+                showAutomation={showAutomation}
+                onSelectAutomation={() => {
+                  setShowNotebook(false);
+                  setShowCompute(false);
+                  setShowAutomation(true);
+                }}
+                computeSessionId={activeSessionId}
+                computeScope={computeScope}
+                onComputeScopeChange={setComputeScope}
+                computeFocus={computeFocus}
+                onOpenComputeOutput={handleFileSelect}
+                notebookSessionId={activeSessionId}
+                notebookEntries={notebookEntries}
+                notebookStreaming={notebookStreaming}
+                notebookSubagentCompletions={subagentCompletions}
+                onOpenNotebookFile={handleFileSelect}
+                notebookFocus={notebookFocus}
+                onNotebookJumpToChat={handleNotebookJumpToChat}
+                onOpenNotebookEntry={handleViewInNotebook}
+              />
+            </div>
+            {isActive && filesOnRight && showFileTree && (
+              <div className="-mr-1 hidden lg:flex">
+                <ResizeHandle onMouseDown={startDrag("tree")} />
+              </div>
+            )}
+            {isActive && filesOnRight && showFileTree && (
+              <div
+                className="flex min-h-0 shrink-0 flex-col overflow-hidden lg:w-[min(var(--tree-width),30vw)]"
+                style={{ "--tree-width": `${treeWidth}px` } as CSSProperties}
+              >
+                {projectFilesPanel}
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Drag handle: tree ↔ preview */}
-        {isActive && sandboxOpen && <div className="hidden xl:flex"><ResizeHandle onMouseDown={startDrag("tree")} /></div>}
-
-        {/* Middle: file preview with tabs — always shown; it is the pane the
-            side panels make room for (e.g. the LaTeX editor + PDF). */}
-        <div className="min-h-0 flex-1 min-w-0 overflow-hidden">
-            <FilePreviewPanel
-              projectId={projectId}
-              isActive={isActive}
-              activeModelRef={tabWorkspaceStates[activeTabId]?.selectedModel.id}
-              tabs={sandbox.tabs}
-              activeTabPath={sandbox.activeTabPath}
-              onTabSelect={handleFileSelect}
-              onTabClose={sandbox.closeTab}
-              onDownload={sandbox.downloadFile}
-              onSaveText={sandbox.saveFile}
-              onSaveImageBlob={sandbox.saveImageBlob}
-              onRetry={sandbox.retryFile}
-              onCompileLatex={sandbox.compileLatex}
-              showNotebook={showNotebook}
-              onSelectNotebook={() => {
-                setShowCompute(false);
-                setShowAutomation(false);
-                setShowNotebook(true);
-              }}
-              showCompute={showCompute}
-              onSelectCompute={() => {
-                setShowNotebook(false);
-                setShowAutomation(false);
-                setShowCompute(true);
-              }}
-              showAutomation={showAutomation}
-              onSelectAutomation={() => {
-                setShowNotebook(false);
-                setShowCompute(false);
-                setShowAutomation(true);
-              }}
-              computeSessionId={activeSessionId}
-              computeScope={computeScope}
-              onComputeScopeChange={setComputeScope}
-              computeFocus={computeFocus}
-              onOpenComputeOutput={handleFileSelect}
-              notebookSessionId={activeSessionId}
-              notebookEntries={notebookEntries}
-              notebookStreaming={notebookStreaming}
-              notebookSubagentCompletions={subagentCompletions}
-              onOpenNotebookFile={handleFileSelect}
-              notebookFocus={notebookFocus}
-              onNotebookJumpToChat={handleNotebookJumpToChat}
-              onOpenNotebookEntry={handleViewInNotebook}
-            />
         </div>
 
         {/* Drag handle: preview ↔ chat */}
-        {isActive && chatOpen && <div className="hidden xl:flex"><ResizeHandle onMouseDown={startDrag("chat")} /></div>}
+        {isActive && (
+          <div className="-mr-1 hidden lg:order-2 lg:flex">
+            <ResizeHandle onMouseDown={startDrag("chat")} />
+          </div>
+        )}
 
-        {/* Right: chat / workflows. Kept mounted (hidden via CSS when
-            collapsed) so background chat streams keep running. */}
+        {/* Chat / workflows. The conversation pane is always present; only
+            its navigation rail can be collapsed. */}
         <div
           className={cn(
-            "col-span-full flex min-h-0 min-w-0 flex-col border-l overflow-hidden shrink-0 xl:w-[var(--chat-width)]",
-            !chatOpen && "hidden",
+            "col-span-full flex min-h-0 min-w-0 flex-row overflow-hidden shrink-0 lg:w-[var(--chat-width)]",
+            "lg:order-1",
           )}
           style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
         >
 
-          <ChatTabsBar
-            projectId={projectId}
-            tabs={tabDescriptors}
-            activeTabId={activeTabId}
-            view={view}
-            maxTabs={MAX_CHAT_TABS}
-            onSelect={selectTab}
-            onClose={closeTab}
-            onNew={newTab}
-            onRename={renameTab}
-            onSelectWorkflows={() => setView("workflows")}
-            onOpenSession={openSession}
-            activeSessionId={activeSessionId}
-            canExport={(activeMeta?.userMessageCount ?? 0) > 0}
-          />
-
-          {/* Chat tabs — all kept mounted so background streams continue.
-              Each ChatTab hides itself with `display: none` when inactive. */}
-          {tabs.map((t) => (
-            <ChatTab
-              key={t.id}
-              ref={getTabRefCallback(t.id)}
+          {chatNavigationOpen && (
+            <ChatTabsBar
               projectId={projectId}
-              tabId={t.id}
-              initialSessionId={t.sessionId ?? null}
-              initialWorkspaceState={tabWorkspaceStates[t.id]}
-              isActive={isActive && view === "chat" && t.id === activeTabId}
-              isActiveTab={isActive && t.id === activeTabId}
-              allFiles={allFiles}
-              sandboxReady={sandbox.tree !== null}
-              uploadFiles={sandbox.uploadFiles}
-              onSandboxRefresh={handleSandboxRefresh}
-              onTurnComplete={handleTurnComplete}
-              allSkills={allSkills}
-              skillsReady={!skillsLoading}
-              budgetState={projectCost.budget.state}
-              budgetTotalUsd={projectCost.budget.totalUsd}
-              budgetLimitUsd={projectCost.budget.limitUsd}
-              onMetaChange={handleMetaChange}
-              onWorkspaceStateChange={handleTabWorkspaceStateChange}
-              onSessionUnavailable={forgetTabSession}
-              onViewInNotebook={handleViewInNotebook}
-              onViewCompute={handleViewCompute}
-              onOpenFile={handleFileSelect}
+              width={visibleChatNavWidth}
+              tabs={tabDescriptors}
+              activeTabId={activeTabId}
+              view={view}
+              maxTabs={MAX_CHAT_TABS}
+              onSelect={selectTab}
+              onClose={closeTab}
+              onNew={newTab}
+              onRename={renameTab}
+              onSelectWorkflows={() => setView("workflows")}
+              onOpenSession={openSession}
+              activeSessionId={activeSessionId}
+              canExport={(activeMeta?.userMessageCount ?? 0) > 0}
             />
-          ))}
-
-          {/* Workflows view */}
-          {isActive && view === "workflows" && (
-            <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-              <WorkflowsPanel
-                onLaunch={handleWorkflowLaunch}
-                onUploadFiles={sandbox.uploadFiles}
-                availableFiles={allFiles}
-                availableFolders={allFolders}
-                filesReady={sandbox.tree !== null}
-                onRefreshFiles={sandbox.fetchTree}
-                budgetBlocked={projectCost.budget.state === "exceeded"}
-              />
+          )}
+          {chatNavigationOpen && isActive && (
+            <div className="-mr-1 hidden lg:flex">
+              <ResizeHandle onMouseDown={startDrag("chat-nav")} />
             </div>
           )}
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* Chat tabs — all kept mounted so background streams continue.
+                Each ChatTab hides itself with `display: none` when inactive. */}
+            {tabs.map((t) => (
+              <ChatTab
+                key={t.id}
+                ref={getTabRefCallback(t.id)}
+                projectId={projectId}
+                tabId={t.id}
+                initialSessionId={t.sessionId ?? null}
+                initialWorkspaceState={tabWorkspaceStates[t.id]}
+                isActive={isActive && view === "chat" && t.id === activeTabId}
+                isActiveTab={isActive && t.id === activeTabId}
+                allFiles={allFiles}
+                sandboxReady={sandbox.tree !== null}
+                uploadFiles={sandbox.uploadFiles}
+                onSandboxRefresh={handleSandboxRefresh}
+                onTurnComplete={handleTurnComplete}
+                allSkills={allSkills}
+                skillsReady={!skillsLoading}
+                budgetState={projectCost.budget.state}
+                budgetTotalUsd={projectCost.budget.totalUsd}
+                budgetLimitUsd={projectCost.budget.limitUsd}
+                onMetaChange={handleMetaChange}
+                onWorkspaceStateChange={handleTabWorkspaceStateChange}
+                onSessionUnavailable={forgetTabSession}
+                onViewInNotebook={handleViewInNotebook}
+                onViewCompute={handleViewCompute}
+                onOpenFile={handleFileSelect}
+              />
+            ))}
+
+            {/* Workflows view */}
+            {isActive && view === "workflows" && (
+              <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+                <WorkflowsPanel
+                  onLaunch={handleWorkflowLaunch}
+                  onUploadFiles={sandbox.uploadFiles}
+                  availableFiles={allFiles}
+                  availableFolders={allFolders}
+                  filesReady={sandbox.tree !== null}
+                  onRefreshFiles={sandbox.fetchTree}
+                  budgetBlocked={projectCost.budget.state === "exceeded"}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
       </div>

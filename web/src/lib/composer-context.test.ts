@@ -50,9 +50,9 @@ describe("buildComposerContext", () => {
     expect(text).toContain(".pi/sessions/*_<session>.jsonl");
   });
 
-  it("lets Kady pick specialists when none were named", () => {
+  it("lets AI Scientist pick specialists when none were named", () => {
     const text = buildComposerContext({ delegation: { ...EMPTY_DELEGATION, auto: true }, research: [] });
-    expect(text).toContain("Delegation: Kady picks");
+    expect(text).toContain("Delegation: AI Scientist picks");
     expect(text).toContain("choosing them by their descriptions");
     expect(text).not.toContain("Verification gate");
   });
@@ -102,7 +102,7 @@ describe("contextTitle", () => {
 });
 
 describe("chat snapshots", () => {
-  it("points Kady at the snapshot and round-trips its path", () => {
+  it("points AI Scientist at the snapshot and round-trips its path", () => {
     const ctx: ComposerContext = {
       delegation: EMPTY_DELEGATION,
       research: [{ kind: "chat", sessionId: "s-9", title: "QC", snapshot: ".kady/chat-snapshots/s-9-0123456789abcdef.md" }],

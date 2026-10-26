@@ -198,7 +198,7 @@ describe("configFromForm", () => {
       configFromForm({
         ...base,
         base: stored,
-        oauthClientName: " Kady ",
+        oauthClientName: " AI Scientist ",
         oauthMetadataUrl: "https://auth.example.com/.well-known/oauth-authorization-server",
       }),
     ).toEqual({
@@ -206,7 +206,7 @@ describe("configFromForm", () => {
       oauth: {
         clientId: "abc",
         scope: "read",
-        clientName: "Kady",
+        clientName: "AI Scientist",
         authServerMetadataUrl: "https://auth.example.com/.well-known/oauth-authorization-server",
       },
     });

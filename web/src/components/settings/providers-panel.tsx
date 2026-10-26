@@ -400,10 +400,10 @@ export function ProvidersPanel({ section }: { section?: string }) {
         title="Model providers"
         description={
           <>
-            Kady is bring-your-own-model: sign in with a subscription you already have, paste an
+            Bring your own model to AI Scientist: sign in with a subscription you already have, paste an
             API key, or point it at a local server. Credentials stay on this machine (keys in{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.env</code>, sign-ins in
-            Kady&apos;s Pi credential store) — nothing is sent to K-Dense.
+            AI Scientist&apos;s Pi credential store). Credentials are used only to connect to the model provider you choose.
           </>
         }
         appliesTo="immediately"
@@ -494,7 +494,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
           <SettingsCard
             id="local-servers"
             title="Local model servers"
-            description="Free, private models running on this machine or your network. Kady probes each server and lists its models in the picker while it is reachable."
+            description="Free, private models running on this machine or your network. AI Scientist probes each server and lists its models in the picker while it is reachable."
           >
             <div className="flex flex-col gap-3">
               <LocalServerCard
@@ -515,7 +515,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
                 envVar="OPENAI_COMPATIBLE_BASE_URL"
                 bodyField="openaiCompatibleBaseUrl"
                 defaultUrl="http://localhost:1234"
-                hint="LM Studio, vLLM, llama.cpp server, text-generation-webui — anything serving /v1/models. vLLM's default port (8000) collides with Kady's backend, so move one of them."
+                hint="LM Studio, vLLM, llama.cpp server, text-generation-webui — anything serving /v1/models. vLLM's default port (8000) collides with AI Scientist's backend, so move one of them."
                 credentials={credentials.status}
                 onCredentials={credentials.setStatus}
                 available={models.openaiCompatibleAvailable}
@@ -530,7 +530,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Provider subscriptions have their own quotas and overage rules. Except for
-            Anthropic&apos;s documented metered extra usage, Kady records tokens but does not treat
+            Anthropic&apos;s documented metered extra usage, AI Scientist records tokens but does not treat
             provider-managed subscription usage as project spend.
           </p>
         </>

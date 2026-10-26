@@ -428,7 +428,7 @@ export function SkillsPanel() {
 
       {scope === "global" && (
         <p className="text-[11px] text-muted-foreground">
-          Stored in your Kady Pi agent directory: available to every project and to
+          Stored in your AI Scientist Pi agent directory: available to every project and to
           subagents. A project skill of the same name takes precedence.
         </p>
       )}

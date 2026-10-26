@@ -147,7 +147,7 @@ export function PromptsPanel() {
       const confirmed = await confirm({
         title: `Delete /${row.name}?`,
         description: row.seeded
-          ? "This is one of Kady's shipped templates; Restore defaults brings it back."
+          ? "This is one of AI Scientist's shipped templates; Restore defaults brings it back."
           : "The template file is removed from disk.",
         confirmLabel: "Delete",
         destructive: true,
@@ -166,7 +166,7 @@ export function PromptsPanel() {
     const confirmed = await confirm({
       title: "Restore the shipped templates?",
       description:
-        "Kady's shipped templates are written back to this project. Edited copies with the same names are overwritten; your own templates are untouched.",
+        "AI Scientist's shipped templates are written back to this project. Edited copies with the same names are overwritten; your own templates are untouched.",
       confirmLabel: "Restore defaults",
       destructive: true,
     });

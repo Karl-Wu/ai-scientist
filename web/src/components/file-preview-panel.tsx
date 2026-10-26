@@ -168,13 +168,13 @@ function TabBar({
     });
   }, [tabs]);
 
-  // Note: the Lab Notebook tab below is pinned and always rendered, so this
-  // bar never returns null even when no file tabs are open.
+  // Project surfaces stay pinned in this tab strip on smaller screens. At
+  // desktop widths they move to the project navigation rail.
 
   return (
     <div
       ref={scrollRef}
-      className="flex overflow-x-auto border-b bg-muted/20 shrink-0"
+      className={cn("flex overflow-x-auto border-b bg-muted/20 shrink-0", uniqueTabs.length === 0 && "lg:hidden")}
       style={{ scrollbarWidth: "none" }}
     >
       {/* Pinned Lab Notebook tab — always first, never closable */}
@@ -184,7 +184,7 @@ function TabBar({
         onClick={onSelectNotebook}
         title="Lab Notebook"
         className={cn(
-          "group relative flex shrink-0 cursor-pointer select-none",
+          "group relative flex shrink-0 cursor-pointer select-none lg:hidden",
           "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
           showNotebook
             ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
@@ -202,7 +202,7 @@ function TabBar({
         onClick={onSelectCompute}
         title="Modal Compute"
         className={cn(
-          "group relative flex shrink-0 select-none",
+          "group relative flex shrink-0 select-none lg:hidden",
           "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
           showCompute
             ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
@@ -221,7 +221,7 @@ function TabBar({
           onClick={onSelectAutomation}
           title="Schedules and missions"
           className={cn(
-            "group relative flex shrink-0 select-none",
+            "group relative flex shrink-0 select-none lg:hidden",
             "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
             showAutomation
               ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
@@ -1889,7 +1889,7 @@ export function FilePreviewPanel({
   );
 
   return (
-    <div className="flex h-full flex-col border-r">
+    <div className="flex h-full flex-col">
       {/* Tab bar */}
       <TabBar
         tabs={tabs}

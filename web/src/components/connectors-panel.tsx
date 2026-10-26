@@ -677,7 +677,7 @@ export function ConnectorsPanel() {
 
       {scope === "global" && (
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Stored in your Kady Pi agent directory and used by every project. Pi recommends
+          Stored in your AI Scientist Pi agent directory and used by every project. Pi recommends
           this scope for personal servers and servers with credentials. A project connector
           with the same name replaces the global one.
         </p>
@@ -696,7 +696,7 @@ export function ConnectorsPanel() {
           {login.flow.status === "running" && (
             <>
               <p className="text-muted-foreground">
-                Approve access in the browser window Pi opened. Kady picks up the sign-in
+                Approve access in the browser window Pi opened. AI Scientist picks up the sign-in
                 automatically; running chats reconnect on their next turn.
               </p>
               {login.flow.authorizationUrl && (

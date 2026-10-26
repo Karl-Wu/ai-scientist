@@ -138,7 +138,7 @@ export function ResourceMonitor({ className }: { className?: string }) {
         </div>
         <div className="text-muted-foreground/70 mt-3 text-[11px]">
           Machine-wide usage, sampled every few seconds. &ldquo;app&rdquo; is the
-          Kady backend process.
+          AI Scientist backend process.
         </div>
       </HoverCardContent>
     </HoverCard>

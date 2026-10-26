@@ -29,7 +29,7 @@ async function asset(name: string): Promise<string> {
     chunks.push(Buffer.from(chunk));
   }
   const bytes = Buffer.concat(chunks);
-  if (hash(bytes) !== spec.sha256) throw new Error("The Office runtime download differs from the tested version. Update Kady or retry later.");
+  if (hash(bytes) !== spec.sha256) throw new Error("The Office runtime download differs from the tested version. Update AI Scientist or retry later.");
   const staging = `${file}.${randomUUID()}.tmp`;
   try { await fs.promises.writeFile(staging, bytes); await fs.promises.rename(staging, file); }
   finally { await fs.promises.rm(staging, { force: true }); }

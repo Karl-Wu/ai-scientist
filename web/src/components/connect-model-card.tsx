@@ -20,7 +20,7 @@ export function ConnectModelCard() {
       <div>
         <h3 className="text-sm font-medium">Connect a model to get started</h3>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Kady brings your own model access. Sign in with a subscription you already have, paste an
+          AI Scientist brings your own model access. Sign in with a subscription you already have, paste an
           API key, or run a model locally — credentials stay on this machine.
         </p>
       </div>

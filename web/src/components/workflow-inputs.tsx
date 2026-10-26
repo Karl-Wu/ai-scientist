@@ -68,7 +68,7 @@ export function WorkflowInputs({
   return <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
     <fieldset className="min-w-0 space-y-2">
       <legend className="text-xs font-medium">Project sandbox</legend>
-      <p className="text-xs text-muted-foreground">Choose files or folders already in this project, including results from earlier chats. These are on the machine running BYOK.</p>
+      <p className="text-xs text-muted-foreground">Choose files or folders already in this project, including results from earlier chats. These are on the machine running AI Scientist.</p>
       <div className="flex gap-2">
         <input aria-label="Search sandbox files and folders" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or path" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs" />
         {onRefreshFiles && <Button type="button" size="xs" variant="outline" disabled={refreshing} aria-label="Refresh sandbox files and folders" onClick={async () => {
@@ -116,9 +116,9 @@ export function WorkflowInputs({
       <textarea id={`${id}-sources`} value={sources} onChange={(e) => onSourcesChange(e.target.value)} rows={3}
         placeholder={"/mnt/study/counts.csv\nuser_data/study/\ns3://bucket/study/\nhttps://example.org/data.csv"}
         className="w-full resize-y rounded-md border bg-background px-2 py-1 text-xs" aria-describedby={`${id}-help`} />
-      <p id={`${id}-help`} className="text-xs text-muted-foreground">Paths must be readable where BYOK runs. URLs and storage locations need a reachable source and any required connector or host credentials already configured. Kady checks access when the workflow starts. Do not paste secrets or signed URLs here.</p>
+      <p id={`${id}-help`} className="text-xs text-muted-foreground">Paths must be readable where AI Scientist runs. URLs and storage locations need a reachable source and any required connector or host credentials already configured. AI Scientist checks access when the workflow starts. Do not paste secrets or signed URLs here.</p>
     </details>
-    {uploading && <p role="status" className="text-xs text-muted-foreground">Uploading to the BYOK project…</p>}
+    {uploading && <p role="status" className="text-xs text-muted-foreground">Uploading to the AI Scientist project…</p>}
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
   </div>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MCP server settings API client. Kady's agent uses Pi's built-in MCP
+ * MCP server settings API client. AI Scientist's agent uses Pi's built-in MCP
  * support, which reads two `mcp.json` files: the active project's
  * `sandbox/.pi/mcp.json` (scope "project"; apiFetch scopes by X-Project-Id)
  * and `~/.kady/pi-agent/mcp.json` (scope "global", every project). A project

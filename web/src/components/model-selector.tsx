@@ -301,13 +301,13 @@ export function ModelPickerList({
               </>
             )}
             {model.sourceId === "nvidia" ? (
-              <span>Billed via NVIDIA API credits · not metered by Kady</span>
+              <span>Billed via NVIDIA API credits · not metered by AI Scientist</span>
             ) : model.billingMode === "subscription" &&
               model.sourceId &&
               OAUTH_SECTION_ORDER.includes(model.sourceId) ? (
               <span>Uses provider-managed subscription limits</span>
             ) : model.billingMode === "subscription" ? (
-              <span>Billed to your provider plan or credits · not metered by Kady</span>
+              <span>Billed to your provider plan or credits · not metered by AI Scientist</span>
             ) : model.billingMode === "metered_oauth" ? (
               <span>
                 ${model.pricing.prompt.toFixed(2)} in / ${model.pricing.completion.toFixed(2)} out per 1M tok · extra usage
@@ -478,9 +478,11 @@ export function ModelPickerList({
 export function ModelSelector({
   selected,
   onChange,
+  excludeFusion = false,
 }: {
   selected: Model;
   onChange: (model: Model) => void;
+  excludeFusion?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { modelAvailability } = useModels();
@@ -560,6 +562,7 @@ export function ModelSelector({
         ) : null}
         <ModelPickerList
           selected={selected}
+          excludeFusion={excludeFusion}
           onSelect={handleSelect}
           onNavigate={() => setOpen(false)}
         />

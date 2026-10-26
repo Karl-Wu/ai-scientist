@@ -97,7 +97,7 @@ export const PermissionCard = memo(function PermissionCard({
     >
       <header className="mb-1 flex items-center gap-2 text-xs font-medium">
         <ShieldAlertIcon className="size-3.5 shrink-0" />
-        <span>{pending ? "Kady wants to run a destructive command" : "Destructive command"}</span>
+        <span>{pending ? "AI Scientist wants to run a destructive command" : "Destructive command"}</span>
         {outcome && (
           <span className="ml-auto rounded bg-background/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {OUTCOME_LABEL[outcome] ?? outcome}

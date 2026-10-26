@@ -245,7 +245,7 @@ export function OAuthLoginDialog({
           </DialogTitle>
           <DialogDescription>
             Authentication is handled directly by Pi and the provider. Tokens stay
-            in Kady&apos;s local credential store.
+            in AI Scientist&apos;s local credential store.
           </DialogDescription>
         </DialogHeader>
 

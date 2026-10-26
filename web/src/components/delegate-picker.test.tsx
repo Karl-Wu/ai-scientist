@@ -41,11 +41,11 @@ describe("DelegatePickerBody", () => {
     expect(screen.getByText(/best-suited verifier specialist \(2 enabled\)/)).toBeInTheDocument();
   });
 
-  it("keeps 'Kady chooses' and named specialists mutually exclusive", async () => {
+  it("keeps 'AI Scientist chooses' and named specialists mutually exclusive", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("scout");
-    await user.click(screen.getByRole("checkbox", { name: /Let Kady choose/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Let AI Scientist choose/ }));
     expect(latest).toMatchObject({ auto: true, specialists: [] });
     await user.click(screen.getByRole("checkbox", { name: /^scout/ }));
     expect(latest).toMatchObject({ auto: false, specialists: ["scout"] });

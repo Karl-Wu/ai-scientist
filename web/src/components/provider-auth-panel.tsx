@@ -59,7 +59,7 @@ export function ProviderAuthPanel() {
         <h3 className="text-sm font-medium">Model providers</h3>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           Connect an existing AI subscription or account by signing in. OAuth
-          tokens stay in Kady&apos;s local Pi credential store, which is used by
+          tokens stay in AI Scientist&apos;s local Pi credential store, which is used by
           the lead agent and its specialist processes. API keys for these and
           every other Pi provider live under API keys.
         </p>
@@ -174,7 +174,7 @@ export function ProviderAuthPanel() {
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Provider subscriptions have their own quotas and overage rules. Except
-        for Anthropic&apos;s documented metered extra usage, Kady records tokens
+        for Anthropic&apos;s documented metered extra usage, AI Scientist records tokens
         but does not treat provider-managed subscription usage as project spend.
       </p>
 

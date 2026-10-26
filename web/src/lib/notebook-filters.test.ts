@@ -128,7 +128,7 @@ describe("agentAccent", () => {
 
 describe("roleLabel", () => {
   it("maps the lead role and the user role to display names", () => {
-    expect(roleLabel("agent")).toBe("Kady (lead)");
+    expect(roleLabel("agent")).toBe("AI Scientist (lead)");
     expect(roleLabel("you")).toBe("You");
   });
 

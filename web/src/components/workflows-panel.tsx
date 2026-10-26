@@ -442,6 +442,7 @@ export function WorkflowLaunchDialog({
           <div className="flex items-center gap-2">
             <ModelSelector
               selected={model}
+              excludeFusion
               onChange={(next) => {
                 modelTouched.current = true;
                 setModel(next);

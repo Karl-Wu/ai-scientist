@@ -147,7 +147,7 @@ export function DefaultsPanel() {
         description={
           <>
             What a project&apos;s first chat tab starts with. A new tab opened next to an existing
-            one copies that tab&apos;s choices instead, and runs Kady starts on its own (schedules,
+            one copies that tab&apos;s choices instead, and runs AI Scientist starts on its own (schedules,
             system turns) reuse the project&apos;s latest chat model, falling back to this default.
             Specialists have their own default under{" "}
             <SettingsLink tab="specialists">Specialists</SettingsLink>.
@@ -173,7 +173,7 @@ export function DefaultsPanel() {
                 id="default-model"
                 label="Default model"
                 value={draft.model}
-                emptyLabel={`Not set — Kady's default (${DEFAULT_MODEL.label} unless DEFAULT_MODEL_* is set in .env)`}
+                emptyLabel={`Not set — AI Scientist's default (${DEFAULT_MODEL.label} unless DEFAULT_MODEL_* is set in .env)`}
                 onChange={(model) => setDraft({ ...draft, model })}
               />
               <p className="text-[11px] text-muted-foreground">
@@ -295,7 +295,7 @@ function VerifierModelField({ value, onChange }: { value: string; onChange: (val
 
 const price = (perMillion: number) => `$${Number.isInteger(perMillion) ? perMillion : perMillion.toFixed(2)}`;
 
-/** Image model for `generate_image`: only models Kady can meter are listed. */
+/** Image model for `generate_image`: only models AI Scientist can meter are listed. */
 function ImageModelField({
   value,
   listing,
@@ -337,13 +337,13 @@ function ImageModelField({
         <SelectTrigger id="default-image-model" size="sm" className="h-8 w-full text-xs" aria-label="Default image model">
           {/* Explicit children: the items carry a price line the trigger must not mirror. */}
           <SelectValue>
-            {value ? (selected?.name ?? value) : `Not set — Kady's default (${builtIn[0] ?? "built-in order"})`}
+            {value ? (selected?.name ?? value) : `Not set — AI Scientist's default (${builtIn[0] ?? "built-in order"})`}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
             <SelectItem value={BUILT_IN_IMAGE_MODEL} className="text-xs">
-              Not set — Kady&apos;s default{builtIn.length ? ` (${builtIn.join(", then ")})` : ""}
+              Not set — AI Scientist&apos;s default{builtIn.length ? ` (${builtIn.join(", then ")})` : ""}
             </SelectItem>
           </SelectGroup>
           {connected.length > 0 && (
@@ -364,12 +364,12 @@ function ImageModelField({
         <p className="text-[11px] text-destructive">{error}</p>
       ) : value && selected && !selected.available ? (
         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          This model&apos;s provider is not connected, so Kady uses its built-in default until you connect it under{" "}
+          This model&apos;s provider is not connected, so AI Scientist uses its built-in default until you connect it under{" "}
           <SettingsLink tab="providers">Providers</SettingsLink>.
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          Used when Kady generates figures and schematics, unless you ask for another model in chat. Only models priced
+          Used when AI Scientist generates figures and schematics, unless you ask for another model in chat. Only models priced
           per token are listed, so every image counts toward the project spend cap. Applies right away, including to
           open chats.
         </p>

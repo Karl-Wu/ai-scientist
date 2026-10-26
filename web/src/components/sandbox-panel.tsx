@@ -616,7 +616,7 @@ export const FileTreePanel = memo(function FileTreePanel({
           <InfoTooltip
             content={
               <>
-                <b>Sandbox</b>
+                <b>Project files</b>
                 <br />
                 Shared working directory the agent can read from and write to.
                 Drop files/folders here or upload — they persist across turns
@@ -626,7 +626,7 @@ export const FileTreePanel = memo(function FileTreePanel({
           >
             <div className="flex items-center gap-2 cursor-help">
               <FolderOpenIcon className="size-4 text-blue-500" />
-              <span className="font-semibold text-sm">Sandbox</span>
+              <span className="font-semibold text-sm">Files</span>
               {totalFiles > 0 && (
                 <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 tabular-nums">
                   {totalFiles}
@@ -706,7 +706,7 @@ export const FileTreePanel = memo(function FileTreePanel({
                 <b>Refresh</b>
                 <br />
                 Reload the file tree from disk. Useful if you edited files
-                outside of Kady.
+                outside of AI Scientist.
               </>
             }
           >
@@ -727,7 +727,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         ref={treeViewportRef}
         className="flex-1 overflow-y-auto p-2"
         role="tree"
-        aria-label="Sandbox files"
+        aria-label="Project files"
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         {!tree || ((tree.children ?? []).length === 0 && creatingDirIn === null) ? (
@@ -815,9 +815,9 @@ function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
         <div className="flex items-start gap-2.5">
           <WandSparklesIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold leading-tight">Organize the sandbox with Kady?</p>
+            <p className="text-sm font-semibold leading-tight">Organize the sandbox with AI Scientist?</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Starts a run in the active chat with its current model. Kady
+              Starts a run in the active chat with its current model. AI Scientist
               proposes a folder layout, moves files into it (nothing is
               deleted), and updates paths in scripts and notebooks that
               referenced the moved files.

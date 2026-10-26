@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 /**
  * Notices a Pi extension injected into the conversation (pi-subagents
  * supervisor requests, watchdog findings, background completions, slash
- * command output) and Kady's own compaction marker. Rendered full-width
+ * command output) and AI Scientist's own compaction marker. Rendered full-width
  * between the chat bubbles.
  */
 

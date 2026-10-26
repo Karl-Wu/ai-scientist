@@ -115,18 +115,18 @@ function ComposerContextChips({
         <Chip
           className={DELEGATE_CHIP}
           onRemove={onDelegationChange && (() => onDelegationChange({ ...delegation, auto: false }))}
-          ariaLabel="Stop letting Kady choose specialists"
+          ariaLabel="Stop letting AI Scientist choose specialists"
           tooltip={
             <>
-              <b>Delegate · Kady chooses</b>
+              <b>Delegate · AI Scientist chooses</b>
               <br />
-              Kady splits the work and hands parts to specialists picked by
+              AI Scientist splits the work and hands parts to specialists picked by
               their descriptions. {scope}
             </>
           }
         >
           <SparklesIcon className="size-3 shrink-0 opacity-70" />
-          <span>Specialists: Kady picks</span>
+          <span>Specialists: AI Scientist picks</span>
         </Chip>
       )}
       {delegation.specialists.map((name) => (
@@ -146,7 +146,7 @@ function ComposerContextChips({
             <>
               <b>Delegate · {name}</b>
               <br />
-              Kady briefs this specialist and checks its handoff before
+              AI Scientist briefs this specialist and checks its handoff before
               replying. {scope}
             </>
           }
@@ -165,7 +165,7 @@ function ComposerContextChips({
               <b>Verification gate</b>
               <br />
               The best-suited verifier specialist reviews the result
-              adversarially; Kady accepts it only if the review passes.{" "}
+              adversarially; AI Scientist accepts it only if the review passes.{" "}
               {scope}
             </>
           }
@@ -193,8 +193,8 @@ function ComposerContextChips({
                 {ref.title}
                 <br />
                 {ref.kind === "chat"
-                  ? "Kady reads a compact snapshot of this chat, taken when the message is sent."
-                  : "Kady reads this record with notebook_search before relying on it."}{" "}
+                  ? "AI Scientist reads a compact snapshot of this chat, taken when the message is sent."
+                  : "AI Scientist reads this record with notebook_search before relying on it."}{" "}
                 {scope}
               </>
             }
@@ -331,7 +331,7 @@ export function ContextChipsBar({
               <br />
               {skill.description}
               <br />
-              Kady follows this skill&apos;s instructions on every message
+              AI Scientist follows this skill&apos;s instructions on every message
               until you remove it.
             </>
           }

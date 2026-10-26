@@ -169,7 +169,7 @@ describe("request guard", () => {
     expect(nav.statusCode).toBe(200);
   });
 
-  it("sandboxes every response except PDFs", async () => {
+  it("sandboxes every response except PDFs and /docs", async () => {
     const res = await app.inject({ method: "GET", url: "/health" });
     expect(res.headers["content-security-policy"]).toMatch(/^sandbox;/);
     expect(res.headers["x-content-type-options"]).toBe("nosniff");

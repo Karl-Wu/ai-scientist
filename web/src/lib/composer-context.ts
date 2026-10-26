@@ -25,7 +25,7 @@ export type ResearchRef =
     };
 
 export interface DelegationChoice {
-  /** Specialists the user named; empty with `auto` means "Kady picks". */
+  /** Specialists the user named; empty with `auto` means "AI Scientist picks". */
   specialists: string[];
   auto: boolean;
   verify: boolean;
@@ -94,7 +94,7 @@ export function buildComposerContext(ctx: ComposerContext): string {
     );
   } else if (delegation.auto) {
     sections.push(
-      "Delegation: Kady picks\n" +
+      "Delegation: AI Scientist picks\n" +
         "Delegate the parts of this work that benefit from it to specialists with the subagent tool, choosing them by their descriptions. Give each a self-contained task brief, wait for their results with bg_wait, then check their handoffs against the evidence and synthesize them in your reply.",
     );
   }
@@ -175,7 +175,7 @@ export function splitComposerContext(text: string): { text: string; context: Com
   for (const line of body.split("\n")) {
     if (line.startsWith("Delegation: ")) {
       const value = line.slice("Delegation: ".length).trim();
-      if (value === "Kady picks") delegation.auto = true;
+      if (value === "AI Scientist picks") delegation.auto = true;
       else delegation.specialists = value.split(",").map((s) => s.trim()).filter(Boolean);
       section = null;
     } else if (line === "Verification gate: requested") {

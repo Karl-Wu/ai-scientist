@@ -1,8 +1,8 @@
 /**
- * Recognize the blocks Kady's server writes when it expands a slash command
+ * Recognize the blocks AI Scientist's server writes when it expands a slash command
  * (`/skill:name args`, `/template args`) so the transcript can show a compact
  * chip instead of the full expanded text. Mirrors Pi's `parseSkillBlock`
- * regex for skills; templates use Kady's own `<prompt-template>` wrapper.
+ * regex for skills; templates use AI Scientist's own `<prompt-template>` wrapper.
  */
 import { stripComposerContext } from "./composer-context";
 

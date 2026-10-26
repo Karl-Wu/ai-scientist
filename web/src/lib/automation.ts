@@ -2,7 +2,7 @@
 
 /**
  * Automation client: pi-subagents durable schedules and missions for the
- * active project (read via Kady; actions run through the resident scheduler
+ * active project (read via AI Scientist; actions run through the resident scheduler
  * session on the server).
  */
 import { apiFetch } from "@/lib/projects";

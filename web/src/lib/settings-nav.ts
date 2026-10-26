@@ -25,6 +25,7 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 const LEGACY_TABS: Record<string, SettingsTab> = {
   "model-providers": "providers",
   "api-keys": "services",
+  fusion: "providers",
 };
 
 export interface OpenSettingsRequest {

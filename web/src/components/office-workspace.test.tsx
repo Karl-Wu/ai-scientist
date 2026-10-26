@@ -47,7 +47,7 @@ it("does not export before the engine has opened a document or overwrite read-on
   await act(async () => { message("ready"); }); message("opened");
   expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled(); expect(screen.getByRole("button", { name: "Download copy" })).toBeEnabled();
 });
-it("connects the Kady formatting controls to the existing document without remounting it", async () => {
+it("connects the AI Scientist formatting controls to the existing document without remounting it", async () => {
   const send = await open(); const frame = screen.getByTitle("Office editing workspace");
   message("command-state", { command: ".uno:Bold", enabled: true, value: true });
   expect(screen.getByRole("button", { name: /^Bold$/ })).toHaveAttribute("aria-pressed", "true");
@@ -59,7 +59,7 @@ it("connects the Kady formatting controls to the existing document without remou
   expect(send.mock.calls.at(-1)![0]).toMatchObject({ cmd: "chrome", advanced: true });
   expect(screen.getByTitle("Office editing workspace")).toBe(frame);
 });
-it("commits the Kady formula bar before a keyboard save and preserves edits made after export starts", async () => {
+it("commits the AI Scientist formula bar before a keyboard save and preserves edits made after export starts", async () => {
   render(<OfficeWorkspace path="workbook.xlsx" projectId="office-project" />);
   const send = vi.spyOn((screen.getByTitle("Office editing workspace") as HTMLIFrameElement).contentWindow!, "postMessage");
   message("ready"); await waitFor(() => expect(send).toHaveBeenCalled()); message("opened");

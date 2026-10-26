@@ -124,12 +124,15 @@ export function registerRequestGuard(app: FastifyInstance): void {
     reply.code(403).send({ detail: verdict.detail, reason: verdict.reason });
   });
 
-  app.addHook("onSend", (_req, reply, payload, done) => {
+  app.addHook("onSend", (req, reply, payload, done) => {
     reply.header("X-Content-Type-Options", "nosniff");
     // URLs here may carry `kady_token` (auth.ts); never leak them onward.
     reply.header("Referrer-Policy", "no-referrer");
     const type = String(reply.getHeader("content-type") ?? "").toLowerCase();
-    if (!type.startsWith("application/pdf")) {
+    const path = req.url.split("?")[0] ?? "";
+    // /docs is Swagger UI: it needs scripts. Leave CSP to @fastify/swagger-ui
+    // (staticCSP) instead of the sandbox policy used for sandbox content.
+    if (!type.startsWith("application/pdf") && !path.startsWith("/docs")) {
       reply.header("Content-Security-Policy", CONTENT_CSP);
     }
     done(null, payload);

@@ -32,7 +32,7 @@ import {
   modelUsesBillableBudget,
   type Model,
 } from "@/components/model-selector";
-import { ComputeSelector, type ModalInstance } from "@/components/compute-selector";
+import type { ModalInstance } from "@/components/compute-selector";
 import {
   DEFAULT_THINKING_LEVEL,
   ThinkingSelector,
@@ -359,7 +359,7 @@ function ImageAttachmentsRow() {
 
 /** Append text to the composer, inserting `separator` unless the current
  * value is empty or already ends in whitespace. Single home for the logic
- * shared by file drops, voice transcription, and the Ask Kady prefill. */
+ * shared by file drops, voice transcription, and the Ask AI Scientist prefill. */
 function appendToComposer(
   textInput: { value: string; setInput: (v: string) => void },
   text: string,
@@ -518,7 +518,7 @@ function MessageQueueDisplay({
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
               <ListOrderedIcon className="size-3.5 text-muted-foreground" />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                After this turn — Kady continues
+                After this turn — AI Scientist continues
               </span>
               <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
                 {followUp.length}
@@ -634,7 +634,7 @@ function MessageQueueDisplay({
                       {delegated > 0 && (
                         <span
                           className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                          title={context!.delegation.auto ? "Delegate: Kady picks" : `Delegate: ${context!.delegation.specialists.join(", ")}`}
+                          title={context!.delegation.auto ? "Delegate: AI Scientist picks" : `Delegate: ${context!.delegation.specialists.join(", ")}`}
                         >
                           <UsersIcon className="size-2.5" />
                           {context!.delegation.auto ? "auto" : delegated}
@@ -725,15 +725,9 @@ function ChatInput({
   onModelChange,
   contextUsage,
   onCompact,
-  selectedComputeTarget,
-  onComputeTargetChange,
   thinkingLevel,
   onThinkingLevelChange,
   thinkingDisabled,
-  modalCatalog,
-  modalCatalogLoading,
-  modalCatalogError,
-  onRefreshModalCatalog,
   onUploadFiles,
   allSkills,
   selectedSkills,
@@ -780,15 +774,9 @@ function ChatInput({
   contextUsage: ContextUsage | null;
   /** "Compact now" for the context gauge; undefined hides the action. */
   onCompact?: () => void;
-  selectedComputeTarget: ModalInstance | null;
-  onComputeTargetChange: (instance: ModalInstance | null) => void;
   thinkingLevel: ThinkingLevel;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   thinkingDisabled: boolean;
-  modalCatalog: ModalCatalog | null;
-  modalCatalogLoading: boolean;
-  modalCatalogError: string | null;
-  onRefreshModalCatalog: () => void;
   onUploadFiles: (files: FileList | File[], paths?: string[]) => Promise<string[]>;
   allSkills: Skill[];
   selectedSkills: Skill[];
@@ -819,7 +807,7 @@ function ChatInput({
     budgetState === "exceeded" && modelUsesBillableBudget(selectedModel);
   const controller = usePromptInputController();
 
-  // "Ask Kady" handoff from the LaTeX editor: only the active tab's composer
+  // "Ask AI Scientist" handoff from the LaTeX editor: only the active tab's composer
   // appends the prefill text (it does not submit), so a background tab never
   // steals the event. Gated on the active TAB, not the visible view — tabs
   // stay mounted behind the Workflows view, and page.tsx switches the view
@@ -907,7 +895,7 @@ function ChatInput({
       if (snapshots.failed.length > 0) {
         toast.warning(
           `Couldn't snapshot ${snapshots.failed.length === 1 ? `"${snapshots.failed[0]}"` : `${snapshots.failed.length} chats`}`,
-          { description: "Kady will search the full chat log instead." },
+          { description: "AI Scientist will search the full chat log instead." },
         );
       }
       const composerCtx = buildComposerContext({ delegation, research: snapshots.refs });
@@ -1268,7 +1256,7 @@ function ChatInput({
                   : "Steer the run… (⌥↵ to run after this turn)"
                 : queuedMessages.length >= MAX_QUEUE
                   ? `Queue full (${MAX_QUEUE}/${MAX_QUEUE})`
-                  : "Ask Kady anything… (@ for files, / for commands, + to add context)"
+                  : "Ask AI Scientist anything… (@ for files, / for commands, + to add context)"
             }
             onChange={handleChange}
             onKeyDown={handleKeyDown}
@@ -1295,20 +1283,13 @@ function ChatInput({
               />
               <ModelSelector
                 selected={selectedModel}
+                excludeFusion
                 onChange={onModelChange}
               />
               <ThinkingSelector
                 selected={thinkingLevel}
                 onChange={onThinkingLevelChange}
                 disabled={thinkingDisabled}
-              />
-              <ComputeSelector
-                selected={selectedComputeTarget}
-                onChange={onComputeTargetChange}
-                catalog={modalCatalog}
-                loading={modalCatalogLoading}
-                error={modalCatalogError}
-                onRefresh={onRefreshModalCatalog}
               />
               <ContextUsageIndicator
                 usage={contextUsage}
@@ -1721,7 +1702,7 @@ export interface ChatTabProps {
   projectId: string;
   isActive: boolean;
   /** True when this is the selected tab, even if the Workflows view hides the
-   * chat column — the Ask Kady prefill targets the tab, not the view. */
+   * chat column — the Ask AI Scientist prefill targets the tab, not the view. */
   isActiveTab: boolean;
   /** Stored session to reopen into this tab (History menu / reload recovery). */
   initialSessionId?: string | null;
@@ -2483,21 +2464,12 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
             }}
             contextUsage={contextUsage}
             onCompact={handleCompact}
-            selectedComputeTarget={selectedComputeTarget}
-            onComputeTargetChange={(target) => {
-              markChipsTouched();
-              setSelectedComputeTarget(target);
-            }}
             thinkingLevel={thinkingLevel}
             onThinkingLevelChange={(level) => {
               markChipsTouched();
               setThinkingLevel(level);
             }}
             thinkingDisabled={thinkingDisabled}
-            modalCatalog={modalCatalog}
-            modalCatalogLoading={modalCatalogLoading}
-            modalCatalogError={modalCatalogError}
-            onRefreshModalCatalog={refreshModalCatalog}
             onUploadFiles={uploadFiles}
             allSkills={allSkills}
             selectedSkills={selectedSkills}
