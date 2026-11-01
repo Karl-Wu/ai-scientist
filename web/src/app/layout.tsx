@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ProjectProvider } from "@/lib/use-projects";
 import { ApiTokenGate } from "@/components/api-token-gate";
+import { I18nProvider } from "@/components/i18n-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,9 +35,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <ProjectProvider>
-            <TooltipProvider delayDuration={350}>{children}</TooltipProvider>
-          </ProjectProvider>
+          <I18nProvider>
+            <ProjectProvider>
+              <TooltipProvider delayDuration={350}>{children}</TooltipProvider>
+            </ProjectProvider>
+          </I18nProvider>
           <Toaster />
           <ApiTokenGate />
         </ThemeProvider>

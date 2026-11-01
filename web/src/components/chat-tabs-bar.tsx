@@ -275,25 +275,78 @@ function RecentChatsList({
             const title = sessionTitle(session);
             const rowTitle = tab?.title ?? title;
             return (
-              <button
+              <div
                 key={session.id}
-                type="button"
-                title={`${rowTitle} · ${relativeTime(session.modified)}`}
-                onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                 className={cn(
-                  "flex w-full min-w-0 items-start gap-1 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  "group flex w-full min-w-0 items-start gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
                   tab?.id === activeTabId
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 )}
               >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{rowTitle}</span>
-                  <span className="text-[10px] text-muted-foreground/75">
-                    {relativeTime(session.modified)}
-                  </span>
-                </span>
-              </button>
+                <button
+                  type="button"
+                  title={`${rowTitle} · ${relativeTime(session.modified)}`}
+                  onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
+                  onDoubleClick={() => tab && startRename(tab)}
+                  className="flex min-w-0 flex-1 items-start gap-1 text-left"
+                >
+                  {editingId === tab?.id && tab ? (
+                    <input
+                      ref={inputRef}
+                      value={draftTitle}
+                      onChange={(event) => setDraftTitle(event.target.value)}
+                      onBlur={commitRename}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") commitRename();
+                        if (event.key === "Escape") {
+                          setEditingId(null);
+                          setDraftTitle("");
+                        }
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                      className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+                      maxLength={40}
+                    />
+                  ) : (
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">{rowTitle}</span>
+                      <span className="text-[10px] text-muted-foreground/75">
+                        {relativeTime(session.modified)}
+                      </span>
+                    </span>
+                  )}
+                </button>
+                {tab && editingId !== tab.id && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Chat actions for ${rowTitle}`}
+                        title="Chat actions"
+                        className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
+                      >
+                        <MoreHorizontalIcon className="size-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="right" className="min-w-36">
+                      <DropdownMenuItem onSelect={() => startRename(tab)}>
+                        <PencilIcon className="size-3.5" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => void deleteTab(tab)}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             );
           })}
         </div>
@@ -411,7 +464,7 @@ export function ChatTabsBar({
 
   return (
     <div
-      className="flex h-full shrink-0 flex-col bg-muted/10 p-2"
+      className="flex h-full shrink-0 flex-col border-r border-border bg-muted/10 p-2 lg:border-r-0"
       style={{ width }}
     >
       <InfoTooltip

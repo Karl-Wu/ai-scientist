@@ -102,6 +102,8 @@ export interface ProjectWorkspaceState {
   treeWidth: number;
   chatWidth: number;
   chatNavWidth?: number;
+  mobileProjectHeight?: number;
+  mobileFilesHeight?: number;
   sandbox: SandboxWorkspaceState;
 }
 
@@ -365,6 +367,8 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     treeWidth: boundedNumber(value.treeWidth, 320, 150, 480),
     chatWidth: boundedNumber(value.chatWidth, 640, 280, 1200),
     chatNavWidth: boundedNumber(value.chatNavWidth, 136, 96, 360),
+    mobileProjectHeight: boundedNumber(value.mobileProjectHeight, 36, 24, 70),
+    mobileFilesHeight: boundedNumber(value.mobileFilesHeight, 50, 25, 75),
     sandbox: {
       openPaths,
       activePath: requestedActivePath && openPaths.includes(requestedActivePath)

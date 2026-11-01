@@ -94,8 +94,9 @@ describe("mergeProviderRows", () => {
 
   it("puts popular providers first", () => {
     const rows = mergeProviderRows([], [direct("zai"), direct("anthropic"), direct("groq")], {});
-    expect(rows.map((row) => row.id)).toEqual(["openrouter", "anthropic", "groq", "zai"]);
+    expect(rows.map((row) => row.id)).toEqual(["openrouter", "anthropic", "zai", "groq"]);
     expect(rows.find((row) => row.id === "zai")!.popular).toBe(false);
+    expect(rows.find((row) => row.id === "groq")!.popular).toBe(false);
   });
 
   it("recognizes an OpenRouter key stored in Pi rather than .env", () => {

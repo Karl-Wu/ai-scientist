@@ -1,0 +1,739 @@
+{
+  "categories": {
+    "paper": "论文与手稿",
+    "visual": "可视化与演示",
+    "data": "数据与分析",
+    "literature": "文献与研究",
+    "scicomm": "科学传播",
+    "genomics": "基因组学与转录组学",
+    "proteomics": "蛋白质组学与结构生物学",
+    "cellbio": "细胞生物学与单细胞",
+    "drugdiscovery": "药物发现与药理学",
+    "clinical": "临床与健康科学",
+    "social": "社会科学",
+    "ml": "机器学习与人工智能",
+    "engineering": "工程与仿真"
+  },
+  "workflows": {
+    "review-paper": [
+      "评审论文",
+      "从方法学、统计严谨性、局限性等方面进行批判性评审，并提供建设性意见。"
+    ],
+    "write-paper": [
+      "撰写论文",
+      "根据提供的数据或结果起草完整的学术论文。"
+    ],
+    "write-review-article": [
+      "撰写综述文章",
+      "综合相关文献，分析研究空白并梳理未来方向。"
+    ],
+    "edit-manuscript": [
+      "编辑／改写手稿",
+      "改善手稿的清晰度、语法、行文逻辑和科学表达。"
+    ],
+    "write-rebuttal": [
+      "撰写审稿回复",
+      "逐条回应审稿意见。"
+    ],
+    "format-journal": [
+      "按期刊格式排版",
+      "根据目标期刊的投稿规范重新排版手稿。"
+    ],
+    "write-abstract": [
+      "撰写摘要",
+      "起草或完善结构式论文摘要。"
+    ],
+    "write-cover-letter": [
+      "撰写投稿附信",
+      "起草期刊论文投稿附信。"
+    ],
+    "write-methods": [
+      "撰写方法部分",
+      "根据实验方案或数据撰写详细的方法部分。"
+    ],
+    "write-results": [
+      "撰写结果部分",
+      "根据数据和图表撰写结果部分。"
+    ],
+    "write-discussion": [
+      "撰写讨论部分",
+      "结合相关文献解读研究结果。"
+    ],
+    "write-introduction": [
+      "撰写引言",
+      "撰写介绍研究背景并阐明研究依据的引言。"
+    ],
+    "translate-manuscript": [
+      "翻译手稿",
+      "在不同语言之间翻译科学手稿。"
+    ],
+    "write-supplementary": [
+      "撰写补充材料",
+      "准备补充方法、图表和表格。"
+    ],
+    "reference-check": [
+      "检查并修正参考文献",
+      "核对参考文献、修正格式并查找缺失引文。"
+    ],
+    "graphical-abstract": [
+      "制作图文摘要",
+      "以视觉方式概括论文的主要发现。"
+    ],
+    "publication-figure": [
+      "制作发表级图表",
+      "制作符合发表质量要求的统计图和可视化图表。"
+    ],
+    "slide-deck": [
+      "制作演示文稿",
+      "为学术报告或实验室会议制作演示文稿。"
+    ],
+    "conference-poster": [
+      "制作会议海报",
+      "根据论文或研究结果设计科学会议海报。"
+    ],
+    "infographic": [
+      "制作信息图",
+      "面向更广泛受众制作易于理解的视觉说明。"
+    ],
+    "create-schematic": [
+      "绘制科学示意图",
+      "绘制过程的机制图或概念示意图。"
+    ],
+    "create-flowchart": [
+      "绘制流程图",
+      "绘制实验或分析工作流程图。"
+    ],
+    "create-timeline": [
+      "制定研究时间线",
+      "以可视化方式呈现项目里程碑和交付成果。"
+    ],
+    "create-heatmap": [
+      "制作热图",
+      "根据矩阵数据生成热图。"
+    ],
+    "create-network-diagram": [
+      "绘制网络图",
+      "绘制网络或相互作用关系图。"
+    ],
+    "create-geographic-map": [
+      "制作地理分布图",
+      "将地理或空间数据可视化。"
+    ],
+    "create-dashboard": [
+      "制作交互式仪表板",
+      "创建包含多个面板的交互式数据仪表板。"
+    ],
+    "explore-data": [
+      "探索数据",
+      "进行探索性数据分析，包括分布、相关性、缺失值和可视化。"
+    ],
+    "statistical-analysis": [
+      "统计分析",
+      "选择适当的检验方法，计算 p 值和效应量，并检查统计假设。"
+    ],
+    "reproduce-analysis": [
+      "复现分析",
+      "根据提供的数据重现论文方法并核验结果。"
+    ],
+    "clean-data": [
+      "清洗与转换数据",
+      "整理杂乱数据集，使其适用于后续分析。"
+    ],
+    "predictive-model": [
+      "构建预测模型",
+      "使用提供的数据训练并评估机器学习模型。"
+    ],
+    "time-series-analysis": [
+      "时间序列分析",
+      "进行趋势分解、预测和异常检测。"
+    ],
+    "survival-analysis": [
+      "生存分析",
+      "进行 Kaplan–Meier 分析、Cox 回归和风险建模。"
+    ],
+    "meta-analysis": [
+      "荟萃分析",
+      "汇总多项研究的效应量并评估异质性。"
+    ],
+    "power-analysis": [
+      "统计功效分析",
+      "计算样本量并绘制统计功效曲线。"
+    ],
+    "bayesian-analysis": [
+      "贝叶斯分析",
+      "进行贝叶斯推断并生成后验分布和可信区间。"
+    ],
+    "dimensionality-reduction": [
+      "降维分析",
+      "使用 PCA、t-SNE 或 UMAP 可视化高维数据。"
+    ],
+    "clustering-analysis": [
+      "聚类分析",
+      "使用多种算法进行无监督聚类。"
+    ],
+    "regression-analysis": [
+      "回归分析",
+      "构建线性、逻辑或混合效应回归模型。"
+    ],
+    "anova-analysis": [
+      "方差分析／组间比较",
+      "进行单因素、双因素或重复测量方差分析。"
+    ],
+    "correlation-network": [
+      "相关性网络分析",
+      "构建并可视化基于相关性的网络。"
+    ],
+    "literature-search": [
+      "文献检索",
+      "检索并总结与研究主题相关的论文。"
+    ],
+    "summarize-paper": [
+      "总结论文",
+      "按研究目标、方法、发现和意义进行结构化总结。"
+    ],
+    "compare-papers": [
+      "比较论文",
+      "并列分析多篇论文。"
+    ],
+    "research-landscape": [
+      "绘制研究领域图谱",
+      "可视化呈现某领域的关键主题、团队和趋势。"
+    ],
+    "systematic-review": [
+      "系统综述方案",
+      "按照 PRISMA 方法设计系统综述。"
+    ],
+    "citation-analysis": [
+      "引文分析",
+      "分析一组研究成果的引用模式和影响力。"
+    ],
+    "find-datasets": [
+      "查找公开数据集",
+      "为研究问题定位相关的公开数据集。"
+    ],
+    "track-research-trends": [
+      "追踪研究趋势",
+      "分析出版趋势及领域内的新兴主题。"
+    ],
+    "find-preprints": [
+      "查找最新预印本",
+      "检索 bioRxiv、arXiv 等预印本平台。"
+    ],
+    "patent-landscape": [
+      "专利布局分析",
+      "分析某项技术的专利申请和知识产权格局。"
+    ],
+    "methods-comparison": [
+      "比较研究方法",
+      "系统比较针对同一任务的不同方法。"
+    ],
+    "plain-language-summary": [
+      "撰写通俗摘要",
+      "将研究内容改写为非专业读者或媒体易于理解的文字。"
+    ],
+    "blog-post": [
+      "撰写博客文章",
+      "根据论文或研究结果撰写引人入胜的科学博客。"
+    ],
+    "draft-protocol": [
+      "起草实验方案",
+      "撰写逐步说明的实验或计算方案。"
+    ],
+    "write-press-release": [
+      "撰写新闻稿",
+      "为研究发现撰写机构新闻稿。"
+    ],
+    "social-media-post": [
+      "撰写社交媒体帖子",
+      "通过 Twitter／LinkedIn 帖子串总结研究成果。"
+    ],
+    "podcast-script": [
+      "撰写播客脚本",
+      "为科学主题播客撰写脚本。"
+    ],
+    "policy-brief": [
+      "撰写政策简报",
+      "为决策者撰写基于研究证据的政策简报。"
+    ],
+    "patient-education": [
+      "撰写患者教育材料",
+      "编写患者易于理解的健康信息材料。"
+    ],
+    "write-textbook-chapter": [
+      "撰写教材章节",
+      "围绕某个主题撰写全面的教学章节。"
+    ],
+    "elevator-pitch": [
+      "撰写简短项目推介",
+      "用约 30 秒介绍一项研究项目。"
+    ],
+    "rnaseq-deseq2": [
+      "批量 RNA-seq 分析",
+      "根据 RNA-seq 计数数据进行差异表达分析。"
+    ],
+    "single-cell-rnaseq": [
+      "单细胞 RNA-seq 分析流程",
+      "从原始计数数据到细胞类型注释的完整单细胞 RNA-seq 分析。"
+    ],
+    "variant-calling": [
+      "变异检测与注释",
+      "识别并注释遗传变异。"
+    ],
+    "gwas-analysis": [
+      "全基因组关联分析",
+      "执行全基因组关联研究（GWAS）分析流程。"
+    ],
+    "chipseq-analysis": [
+      "ChIP-seq 峰识别",
+      "识别转录因子结合位点。"
+    ],
+    "atacseq-analysis": [
+      "ATAC-seq 染色质可及性分析",
+      "根据 ATAC-seq 数据定位开放染色质区域。"
+    ],
+    "methylation-analysis": [
+      "DNA 甲基化分析",
+      "分析甲基化芯片或亚硫酸氢盐测序数据。"
+    ],
+    "gene-set-enrichment": [
+      "基因集富集分析",
+      "根据基因列表或排序数据进行 GSEA 和通路富集分析。"
+    ],
+    "gene-regulatory-network": [
+      "基因调控网络分析",
+      "推断并可视化转录调控网络。"
+    ],
+    "genome-annotation": [
+      "基因组注释",
+      "注释基因、重复序列和组装基因组中的其他特征。"
+    ],
+    "comparative-genomics": [
+      "比较基因组学",
+      "比较不同物种的基因组以获得进化方面的见解。"
+    ],
+    "metagenomics-analysis": [
+      "宏基因组分析",
+      "对微生物群落进行分类学和功能谱分析。"
+    ],
+    "rna-velocity": [
+      "RNA 速度分析",
+      "根据剪接与未剪接 RNA 推断细胞状态动态变化。"
+    ],
+    "spatial-transcriptomics": [
+      "空间转录组分析",
+      "分析具有空间位置信息的基因表达数据。"
+    ],
+    "variant-annotation": [
+      "变异注释与解读",
+      "注释遗传变异并评估其临床相关性。"
+    ],
+    "phylogenetic-analysis": [
+      "系统发育分析",
+      "根据序列构建并可视化系统发育树。"
+    ],
+    "gene-expression-atlas": [
+      "基因表达图谱",
+      "查询并可视化不同组织和条件下的基因表达。"
+    ],
+    "protein-structure-analysis": [
+      "蛋白质结构分析",
+      "获取并分析 PDB 结构或 AlphaFold 预测结构。"
+    ],
+    "molecular-docking": [
+      "分子对接",
+      "将配体与蛋白质靶标进行对接并分析结合情况。"
+    ],
+    "mass-spec-proteomics": [
+      "质谱蛋白质组学分析",
+      "分析 LC-MS/MS 蛋白质组学数据。"
+    ],
+    "protein-protein-interaction": [
+      "蛋白质相互作用网络",
+      "构建并分析蛋白质相互作用（PPI）网络。"
+    ],
+    "alphafold-prediction": [
+      "AlphaFold 结构预测",
+      "检索或预测蛋白质三维结构。"
+    ],
+    "protein-engineering": [
+      "蛋白质工程设计",
+      "设计具有更优功能的蛋白质变体。"
+    ],
+    "binding-site-analysis": [
+      "结合位点分析",
+      "分析蛋白质中的配体结合口袋。"
+    ],
+    "molecular-dynamics-sim": [
+      "分子动力学模拟",
+      "设置并分析生物分子的分子动力学模拟。"
+    ],
+    "homology-modeling": [
+      "同源建模",
+      "根据同源模板结构构建三维模型。"
+    ],
+    "protein-function-prediction": [
+      "蛋白质功能预测",
+      "根据序列和结构预测蛋白质功能。"
+    ],
+    "post-translational-mods": [
+      "翻译后修饰分析",
+      "预测并分析翻译后修饰。"
+    ],
+    "structural-alignment": [
+      "结构比对",
+      "比对并比较蛋白质三维结构。"
+    ],
+    "epitope-prediction": [
+      "表位预测",
+      "预测用于疫苗设计的 B 细胞和 T 细胞表位。"
+    ],
+    "scrnaseq-clustering": [
+      "单细胞 RNA-seq 聚类",
+      "识别并描述单细胞 RNA-seq 数据中的细胞簇。"
+    ],
+    "cell-type-annotation": [
+      "细胞类型注释",
+      "使用参考图谱自动标注细胞类型。"
+    ],
+    "trajectory-analysis": [
+      "轨迹／拟时序分析",
+      "推断细胞发育轨迹并确定细胞排序。"
+    ],
+    "flow-cytometry-analysis": [
+      "流式细胞术分析",
+      "对流式细胞数据进行设门、聚类和定量。"
+    ],
+    "cell-cell-communication": [
+      "细胞间通讯分析",
+      "根据单细胞 RNA-seq 推断细胞间信号传导。"
+    ],
+    "multi-omics-integration": [
+      "多组学整合分析",
+      "整合转录组、蛋白质组及其他组学数据。"
+    ],
+    "cell-cycle-analysis": [
+      "细胞周期分析",
+      "评估细胞周期阶段并校正细胞周期效应。"
+    ],
+    "perturbation-analysis": [
+      "扰动／CRISPR 筛选分析",
+      "分析 Perturb-seq 或 CRISPR 筛选数据。"
+    ],
+    "immune-cell-profiling": [
+      "免疫细胞分析",
+      "深入描述免疫细胞群体特征。"
+    ],
+    "lineage-tracing": [
+      "细胞谱系追踪分析",
+      "根据条形码数据重建细胞谱系树。"
+    ],
+    "spatial-cell-analysis": [
+      "空间细胞分析",
+      "分析细胞的空间组织结构和邻域关系。"
+    ],
+    "target-identification": [
+      "药物靶点识别",
+      "识别并验证疾病的治疗靶点。"
+    ],
+    "virtual-screening": [
+      "虚拟筛选",
+      "针对特定靶点筛选化合物库。"
+    ],
+    "admet-prediction": [
+      "ADMET 预测",
+      "预测药物的吸收、分布、代谢、排泄和毒性。"
+    ],
+    "lead-optimization": [
+      "先导化合物优化",
+      "优化先导化合物的效力、选择性和 ADMET 性质。"
+    ],
+    "drug-repurposing": [
+      "药物再利用分析",
+      "寻找现有药物可用于治疗的新适应症。"
+    ],
+    "pharmacokinetics-modeling": [
+      "药代动力学建模",
+      "进行药代动力学建模与模拟。"
+    ],
+    "dose-response-analysis": [
+      "剂量－反应分析",
+      "拟合剂量－反应曲线并计算 EC50／IC50。"
+    ],
+    "drug-interaction-prediction": [
+      "药物相互作用预测",
+      "预测药物间相互作用及其机制。"
+    ],
+    "clinical-trial-design": [
+      "临床试验设计",
+      "设计临床试验方案。"
+    ],
+    "biomarker-discovery": [
+      "生物标志物发现",
+      "根据组学数据识别并验证生物标志物。"
+    ],
+    "toxicity-prediction": [
+      "毒性预测",
+      "预测化合物毒性和潜在安全风险。"
+    ],
+    "pharmacogenomics-analysis": [
+      "药物基因组学分析",
+      "分析影响药物反应的遗传变异。"
+    ],
+    "drug-target-network": [
+      "药物－靶点相互作用网络",
+      "绘制化合物的多药理作用网络。"
+    ],
+    "competitive-landscape-pharma": [
+      "制药行业竞争格局分析",
+      "分析某治疗领域的竞争格局。"
+    ],
+    "side-effect-prediction": [
+      "副作用预测",
+      "根据分子结构预测药物不良反应。"
+    ],
+    "formulation-optimization": [
+      "制剂优化",
+      "优化药物制剂以提高生物利用度。"
+    ],
+    "clinical-trial-analysis": [
+      "临床试验分析",
+      "使用适当的终点分析临床试验数据。"
+    ],
+    "survival-analysis-clinical": [
+      "临床生存分析",
+      "使用 Kaplan–Meier 和 Cox 回归分析临床结局。"
+    ],
+    "epidemiological-study": [
+      "流行病学研究设计",
+      "设计并分析观察性流行病学研究。"
+    ],
+    "medical-image-analysis": [
+      "医学影像分析",
+      "分析放射影像或病理图像。"
+    ],
+    "diagnostic-accuracy": [
+      "诊断准确性分析",
+      "评估诊断试验的敏感度、特异度和 ROC。"
+    ],
+    "treatment-comparison": [
+      "治疗效果比较",
+      "比较不同组别的治疗结局。"
+    ],
+    "risk-prediction-model": [
+      "临床风险预测模型",
+      "构建并验证临床结局风险预测模型。"
+    ],
+    "adverse-event-analysis": [
+      "不良事件分析",
+      "分析临床研究中的安全性数据。"
+    ],
+    "cost-effectiveness-analysis": [
+      "成本效果分析",
+      "评估医疗干预措施的卫生经济学效果。"
+    ],
+    "patient-cohort-study": [
+      "患者队列研究",
+      "分析包含多变量结局的患者队列。"
+    ],
+    "systematic-review-clinical": [
+      "临床系统综述",
+      "按照 PRISMA 规范系统综述临床证据。"
+    ],
+    "clinical-guideline-summary": [
+      "临床指南总结",
+      "总结并比较临床实践指南。"
+    ],
+    "quality-improvement": [
+      "医疗质量改进分析",
+      "分析医疗质量指标和改进举措。"
+    ],
+    "health-equity-analysis": [
+      "健康公平性分析",
+      "分析不同人口群体之间的健康差异。"
+    ],
+    "electronic-health-records": [
+      "电子健康记录分析",
+      "分析结构化电子健康记录数据。"
+    ],
+    "longitudinal-study": [
+      "纵向数据分析",
+      "分析随时间重复测量的数据和面板数据。"
+    ],
+    "population-health-assessment": [
+      "人群健康评估",
+      "评估特定人群的健康状况和需求。"
+    ],
+    "case-control-analysis": [
+      "病例对照分析",
+      "分析匹配或非匹配的病例对照研究数据。"
+    ],
+    "survey-analysis": [
+      "问卷数据分析",
+      "使用适当的统计方法分析问卷回答。"
+    ],
+    "text-mining-social": [
+      "文本挖掘与自然语言处理",
+      "从文本语料中提取主题和模式。"
+    ],
+    "demographic-analysis": [
+      "人口统计分析",
+      "分析人口结构、趋势和预测。"
+    ],
+    "network-analysis-social": [
+      "社会网络分析",
+      "分析社会网络中的中心性、社群和影响力。"
+    ],
+    "sentiment-analysis-social": [
+      "社交媒体情绪分析",
+      "分析社交媒体上的公众情绪。"
+    ],
+    "policy-evaluation": [
+      "政策影响评估",
+      "评估政策干预的因果影响。"
+    ],
+    "education-outcomes": [
+      "教育结果分析",
+      "分析学生表现和教育干预效果。"
+    ],
+    "public-opinion-analysis": [
+      "公众意见分析",
+      "分析民调数据和公众意见趋势。"
+    ],
+    "migration-analysis": [
+      "迁移分析",
+      "分析迁移模式、流动和影响因素。"
+    ],
+    "inequality-measurement": [
+      "不平等测量",
+      "衡量并分析经济或社会不平等。"
+    ],
+    "behavioral-experiment": [
+      "行为实验分析",
+      "分析心理学或行为经济学实验数据。"
+    ],
+    "content-analysis-social": [
+      "内容分析",
+      "系统编码并分析媒体内容或文档。"
+    ],
+    "classification-model": [
+      "构建分类器",
+      "训练分类模型并进行评估和解读。"
+    ],
+    "nlp-text-analysis": [
+      "自然语言处理文本分析",
+      "使用分类、命名实体识别、摘要或嵌入分析文本。"
+    ],
+    "image-classification": [
+      "图像分类",
+      "使用卷积神经网络和迁移学习构建图像分类器。"
+    ],
+    "anomaly-detection": [
+      "异常检测",
+      "检测数据集中的离群值和异常。"
+    ],
+    "feature-engineering": [
+      "特征工程",
+      "从原始数据中创建有用特征。"
+    ],
+    "hyperparameter-tuning": [
+      "超参数调优",
+      "通过系统搜索优化模型超参数。"
+    ],
+    "model-interpretability": [
+      "模型可解释性分析",
+      "使用 SHAP、LIME 和特征分析解释模型预测。"
+    ],
+    "transfer-learning": [
+      "迁移学习",
+      "将预训练模型适配到新的任务和领域。"
+    ],
+    "graph-neural-network": [
+      "图神经网络",
+      "构建用于节点、边或整图预测的 GNN。"
+    ],
+    "generative-model": [
+      "构建生成模型",
+      "训练 VAE、GAN 或扩散模型以生成数据。"
+    ],
+    "reinforcement-learning": [
+      "强化学习",
+      "训练用于序列决策任务的强化学习智能体。"
+    ],
+    "model-comparison": [
+      "模型比较与选择",
+      "系统比较机器学习模型并选择合适方案。"
+    ],
+    "dataset-bias-audit": [
+      "数据集与模型偏差审查",
+      "审查数据和模型的公平性与偏差。"
+    ],
+    "recommendation-system": [
+      "构建推荐系统",
+      "构建协同过滤或基于内容的推荐引擎。"
+    ],
+    "federated-learning-design": [
+      "联邦学习设计",
+      "设计保护隐私的分布式机器学习系统。"
+    ],
+    "cfd-simulation": [
+      "计算流体力学仿真",
+      "进行计算流体力学仿真与分析。"
+    ],
+    "signal-processing": [
+      "信号处理",
+      "对信号进行滤波、变换和分析。"
+    ],
+    "control-system-design": [
+      "控制系统设计",
+      "设计并模拟反馈控制系统。"
+    ],
+    "heat-transfer-analysis": [
+      "传热分析",
+      "分析热传导、对流和辐射传热。"
+    ],
+    "vibration-analysis": [
+      "振动分析",
+      "分析机械振动和模态。"
+    ],
+    "process-simulation": [
+      "过程仿真",
+      "模拟化学或制造过程。"
+    ],
+    "reliability-analysis": [
+      "可靠性分析",
+      "分析系统可靠性、故障率和维护需求。"
+    ],
+    "sensor-data-analysis": [
+      "传感器／物联网数据分析",
+      "处理并分析多传感器时间序列数据。"
+    ],
+    "robot-path-planning": [
+      "机器人路径规划",
+      "为机器人规划无碰撞路径。"
+    ],
+    "structural-analysis-eng": [
+      "结构分析",
+      "分析结构载荷、应力和变形。"
+    ],
+    "finite-element-analysis": [
+      "有限元分析",
+      "建立应力、热学或电磁问题的有限元模型。"
+    ],
+    "circuit-simulation": [
+      "电路仿真",
+      "模拟并分析电子电路。"
+    ],
+    "metabolic-modeling": [
+      "代谢通量分析",
+      "基于约束的代谢网络建模。"
+    ],
+    "glycan-analysis": [
+      "糖基工程与分析",
+      "分析并设计糖基化模式。"
+    ],
+    "digital-pathology": [
+      "数字病理分析",
+      "分析全视野数字病理切片图像。"
+    ]
+  }
+}

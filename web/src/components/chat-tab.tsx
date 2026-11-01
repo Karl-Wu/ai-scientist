@@ -1233,7 +1233,7 @@ function ChatInput({
                   : "Image is too large (20MB max).",
             )
           }
-          className="@container/composer rounded-xl border shadow-sm"
+          className="@container/composer w-full min-w-0 rounded-xl border shadow-sm"
         >
           <ImageAttachmentsRow />
           <ContextChipsBar
@@ -1249,6 +1249,7 @@ function ChatInput({
             onDelegationChange={onDelegationChange}
           />
           <PromptInputTextarea
+            className="min-w-0 text-sm"
             placeholder={
               isStreaming
                 ? pendingSteers.length + pendingFollowUps.length > 0
@@ -1261,12 +1262,10 @@ function ChatInput({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
           />
-          {/* From ~30rem up the toolbar is one row: the model/compute chips
-              truncate instead of pushing dictate + send onto a second line.
-              Below that (the chat pane can shrink to 280px) wrapping is the
-              lesser evil, so the container query hands control back. */}
-          <PromptInputFooter className="@min-[30rem]/composer:flex-nowrap">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          {/* Narrow chat panes use a deliberate two-row toolbar: context and
+              model above, thinking/context usage beside the send actions below. */}
+          <PromptInputFooter className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-1.5 gap-y-1 @min-[36rem]/composer:flex @min-[36rem]/composer:flex-nowrap">
+            <div className="col-span-2 flex min-w-0 items-center gap-1.5 @min-[36rem]/composer:col-span-1 @min-[36rem]/composer:flex-1">
               <AddContextMenu
                 selectedDbs={selectedDbs}
                 onDbsChange={onDbsChange}
@@ -1286,6 +1285,8 @@ function ChatInput({
                 excludeFusion
                 onChange={onModelChange}
               />
+            </div>
+            <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 @min-[36rem]/composer:col-auto @min-[36rem]/composer:flex-1">
               <ThinkingSelector
                 selected={thinkingLevel}
                 onChange={onThinkingLevelChange}
@@ -1297,7 +1298,7 @@ function ChatInput({
                 compactDisabled={isStreaming}
               />
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="col-start-2 row-start-2 flex shrink-0 items-center gap-1.5 @min-[36rem]/composer:col-auto @min-[36rem]/composer:row-auto">
               <InfoTooltip
                 content={
                   <>
@@ -1425,7 +1426,11 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const flushChunk = () => {
     if (!chunk.length) return;
     orderedBlocks.push(
-      <ToolActivityList key={`tools-${chunk[0].id}`} activities={chunk} />,
+      <ToolActivityList
+        key={`tools-${chunk[0].id}`}
+        activities={chunk}
+        compactHistory={!isLast}
+      />,
     );
     chunk = [];
   };

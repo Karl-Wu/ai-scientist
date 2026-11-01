@@ -383,13 +383,48 @@ export function NotebookEntryChip({
 }
 
 /** The collapsible list of tool calls the agent made during a turn. */
-export function ToolActivityList({ activities }: { activities: ActivityItem[] }) {
+export function ToolActivityList({
+  activities,
+  compactHistory = false,
+}: {
+  activities: ActivityItem[];
+  /** Older turns keep only a one-line summary until the user opens them. */
+  compactHistory?: boolean;
+}) {
   if (!activities.length) return null;
+  const hidden = compactHistory ? activities : activities.slice(0, -1);
+  const latest = compactHistory ? [] : activities.slice(-1);
+  const failed = hidden.filter((item) => item.status === "error").length;
+  const running = hidden.filter((item) => item.status === "running").length;
+  const completed = hidden.filter((item) => item.status === "complete").length;
+
   return (
     <div className="my-1 space-y-1">
-      {activities.map((a) => (
-        <ToolCard key={a.id} item={a} />
-      ))}
+      {hidden.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger
+            className={cn(
+              "group flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground",
+              failed > 0 && "text-destructive",
+            )}
+          >
+            <ChevronRightIcon className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+            <span className="font-medium">Earlier activity</span>
+            <span className="min-w-0 flex-1 truncate">
+              {hidden.length} {hidden.length === 1 ? "step" : "steps"}
+              {completed > 0 ? ` · ${completed} completed` : ""}
+              {running > 0 ? ` · ${running} running` : ""}
+              {failed > 0 ? ` · ${failed} failed` : ""}
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-1 border-l-2 border-muted pl-2">
+              {hidden.map((item) => <ToolCard key={item.id} item={item} />)}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+      {latest.map((item) => <ToolCard key={item.id} item={item} />)}
     </div>
   );
 }

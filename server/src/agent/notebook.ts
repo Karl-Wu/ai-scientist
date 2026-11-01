@@ -156,6 +156,7 @@ export function makeNotebookTool(
     promptSnippet:
       "notebook: log a structured hypothesis/method/observation/decision entry to the live lab notebook",
     promptGuidelines: [
+      "Write the title and all human-readable narrative fields in the language the user used for the current research request. If the user explicitly asks for another output language, follow that instead. For mixed-language requests, use the dominant language. Keep fixed type values, field names, code, commands, file paths, units and proper nouns unchanged; do not infer the language from the UI.",
       "Keep a running lab notebook: call `notebook` at natural milestones — when forming a hypothesis, before and after running an analysis, and whenever a result changes your plan.",
       "For procedures, set execution.status to planned, attempted, completed or unverified. Before running use planned; after a failed/partial/cancelled run use attempted and retain the failure. Completed requires execution.evidence with the command/run id, observed output/exit and exact evidence paths. Missing evidence means unverified. Append a linked follow-up after execution; do not let a plan entry imply completion. Scientific outcome and execution status are separate, and your report is not independent verification.",
       "Prefer several small, timely entries over one big summary at the end; the user watches the notebook fill in as you work.",

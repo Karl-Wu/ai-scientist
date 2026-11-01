@@ -193,17 +193,33 @@ function defaultTabTitle(index: number): string {
   return `Chat ${index + 1}`;
 }
 
-// Thin vertical drag handle between two panels
-function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+// Thin drag handle between two panels
+function ResizeHandle({
+  onPointerDown,
+  orientation = "vertical",
+}: {
+  onPointerDown: (e: React.PointerEvent) => void;
+  orientation?: "vertical" | "horizontal";
+}) {
+  const vertical = orientation === "vertical";
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
-      className="group relative z-10 flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-transparent"
-      onMouseDown={onMouseDown}
+      aria-orientation={orientation}
+      className={cn(
+        "group relative z-10 flex shrink-0 touch-none items-center justify-center bg-transparent",
+        vertical ? "w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
+      )}
+      onPointerDown={onPointerDown}
     >
-      <div className="absolute inset-y-0 w-px bg-border transition-colors group-hover:bg-blue-400 group-active:bg-blue-500" />
-      <div className="relative h-8 w-0.5 rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-blue-400" />
+      <div className={cn(
+        "absolute bg-border transition-colors group-hover:bg-blue-400 group-active:bg-blue-500",
+        vertical ? "inset-y-0 w-px" : "inset-x-0 h-px",
+      )} />
+      <div className={cn(
+        "relative rounded-full bg-muted-foreground/25 transition-colors group-hover:bg-blue-400",
+        vertical ? "h-8 w-0.5" : "h-0.5 w-8",
+      )} />
     </div>
   );
 }
@@ -627,6 +643,12 @@ function WorkspacePage({
   const [chatWidth, setChatWidth] = useState(
     () => initialState?.chatWidth ?? 640,
   );
+  const [mobileProjectHeight, setMobileProjectHeight] = useState(
+    () => initialState?.mobileProjectHeight ?? 36,
+  );
+  const [mobileFilesHeight, setMobileFilesHeight] = useState(
+    () => initialState?.mobileFilesHeight ?? 50,
+  );
   const chatWidthRef = useRef(chatWidth);
   chatWidthRef.current = chatWidth;
   const [chatNavWidth, setChatNavWidth] = useState(
@@ -639,26 +661,54 @@ function WorkspacePage({
     Math.max(96, Math.min(360, chatWidth - 168)),
   );
   const [isResizing, setIsResizing] = useState(false);
-  const dragging = useRef<"tree" | "chat" | "chat-nav" | null>(null);
+  const dragging = useRef<"tree" | "chat" | "chat-nav" | "mobile-project" | "mobile-files" | null>(null);
   const dragStartX = useRef(0);
+  const dragStartY = useRef(0);
   const dragStartWidth = useRef(0);
+  const dragStartProjectHeight = useRef(36);
+  const dragStartFilesHeight = useRef(50);
+  const dragStartProjectContentHeight = useRef(1);
 
-  const startDrag = useCallback((panel: "tree" | "chat" | "chat-nav") => (e: React.MouseEvent) => {
+  const startDrag = useCallback((panel: "tree" | "chat" | "chat-nav" | "mobile-project" | "mobile-files") => (e: React.PointerEvent) => {
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragging.current = panel;
     dragStartX.current = e.clientX;
-    dragStartWidth.current = panel === "tree"
-      ? treeWidth
-      : panel === "chat"
-        ? chatWidth
-        : visibleChatNavWidth;
+    dragStartY.current = e.clientY;
+    if (panel === "mobile-project") {
+      dragStartProjectHeight.current = mobileProjectHeight;
+    } else if (panel === "mobile-files") {
+      dragStartFilesHeight.current = mobileFilesHeight;
+      dragStartProjectContentHeight.current = Math.max(
+        1,
+        e.currentTarget.parentElement?.parentElement?.clientHeight ?? 1,
+      );
+    } else {
+      dragStartWidth.current = panel === "tree"
+        ? treeWidth
+        : panel === "chat"
+          ? chatWidth
+          : visibleChatNavWidth;
+    }
     setIsResizing(true);
-  }, [treeWidth, chatWidth, visibleChatNavWidth]);
+  }, [treeWidth, chatWidth, visibleChatNavWidth, mobileProjectHeight, mobileFilesHeight]);
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       if (!dragging.current) return;
       const delta = e.clientX - dragStartX.current;
+      if (dragging.current === "mobile-project") {
+        const viewportHeight = Math.max(1, window.innerHeight);
+        const deltaVh = ((e.clientY - dragStartY.current) / viewportHeight) * 100;
+        const maxVh = Math.max(24, Math.min(70, ((viewportHeight - 190) / viewportHeight) * 100));
+        setMobileProjectHeight(Math.max(24, Math.min(maxVh, dragStartProjectHeight.current - deltaVh)));
+        return;
+      }
+      if (dragging.current === "mobile-files") {
+        const deltaPercent = ((e.clientY - dragStartY.current) / dragStartProjectContentHeight.current) * 100;
+        setMobileFilesHeight(Math.max(25, Math.min(75, dragStartFilesHeight.current + deltaPercent)));
+        return;
+      }
       if (dragging.current === "tree") {
         // The file tree is now on the right of the preview, so dragging its
         // divider right makes the tree narrower.
@@ -678,11 +728,11 @@ function WorkspacePage({
       dragging.current = null;
       setIsResizing(false);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
     return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
     };
   }, []);
 
@@ -706,6 +756,8 @@ function WorkspacePage({
       treeWidth,
       chatWidth,
       chatNavWidth,
+      mobileProjectHeight,
+      mobileFilesHeight,
       sandbox: sandboxWorkspace,
     }),
     [
@@ -713,6 +765,8 @@ function WorkspacePage({
       chatNavigationOpen,
       chatNavWidth,
       chatWidth,
+      mobileProjectHeight,
+      mobileFilesHeight,
       computeScope,
       rightPanelOpen,
       sandboxOpen,
@@ -1066,7 +1120,7 @@ function WorkspacePage({
             type="button"
             onClick={onOpenProjectView}
             aria-label="Back to projects"
-            className="flex items-center gap-2"
+            className="flex items-start gap-2"
           >
             {/* Plain <img> to avoid Next/Image's aspect-ratio warning when we
                 set height via CSS and let width autosize. */}
@@ -1076,7 +1130,10 @@ function WorkspacePage({
               alt="AI Scientist"
               className="size-7 object-contain"
             />
-            <span className="text-sm font-semibold tracking-tight text-foreground/80">AI Scientist</span>
+            <span className="flex flex-col items-start pt-0.5">
+              <span className="text-sm font-semibold leading-4 tracking-tight text-foreground/80">AI Scientist</span>
+              <span className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground/70">Powered by DeepWorks</span>
+            </span>
           </button>
           <span className="mx-1 h-4 w-px bg-border/60" aria-hidden />
           <ProjectSwitcher onOpenProjectView={onOpenProjectView} />
@@ -1206,19 +1263,19 @@ function WorkspacePage({
         </div>
       </header>
 
-      {/* Main content area — project files | preview | chat */}
+      {/* Main content area — narrow windows stack the chat above a compact
+          project panel, while desktop keeps the resizable side-by-side layout. */}
       <div
-        className={cn("grid min-h-0 min-w-0 flex-1 overflow-hidden lg:flex", isResizing && "select-none")}
-        style={{
-          gridTemplateColumns: showFileTree ? `min(${treeWidth}px, 30vw) minmax(0, 1fr)` : "minmax(0, 1fr)",
-        }}
+        className={cn("relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:flex-row", isResizing && "select-none")}
       >
 
         {/* The content area: its navigation spans the preview and file tree. */}
         <div className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:order-3",
-          rightPanelOpen ? "flex" : "hidden",
-        )}>
+          "order-3 min-h-0 min-w-0 flex-col overflow-hidden lg:order-3 lg:flex-1",
+          rightPanelOpen
+            ? "flex h-[var(--mobile-project-height)] flex-none lg:h-auto"
+            : "hidden",
+        )} style={{ "--mobile-project-height": `${mobileProjectHeight}dvh` } as CSSProperties}>
           {isActive && (
             <ProjectNavigation
               active={activeProjectDestination}
@@ -1228,7 +1285,7 @@ function WorkspacePage({
               onToggleFileTree={toggleSandbox}
             />
           )}
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div data-project-content-panels className="flex min-h-0 min-w-0 flex-1 flex-col-reverse overflow-hidden lg:flex-row">
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
               <FilePreviewPanel
                 projectId={projectId}
@@ -1279,14 +1336,19 @@ function WorkspacePage({
               />
             </div>
             {isActive && filesOnRight && showFileTree && (
+              <div className="lg:hidden">
+                <ResizeHandle orientation="horizontal" onPointerDown={startDrag("mobile-files")} />
+              </div>
+            )}
+            {isActive && filesOnRight && showFileTree && (
               <div className="-mr-1 hidden lg:flex">
-                <ResizeHandle onMouseDown={startDrag("tree")} />
+                <ResizeHandle onPointerDown={startDrag("tree")} />
               </div>
             )}
             {isActive && filesOnRight && showFileTree && (
               <div
-                className="flex min-h-0 shrink-0 flex-col overflow-hidden lg:w-[min(var(--tree-width),30vw)]"
-                style={{ "--tree-width": `${treeWidth}px` } as CSSProperties}
+                className="flex min-h-0 min-w-0 basis-[var(--mobile-files-height)] flex-col overflow-hidden lg:min-w-0 lg:flex-none lg:shrink-0 lg:basis-auto lg:w-[min(var(--tree-width),30vw)]"
+                style={{ "--tree-width": `${treeWidth}px`, "--mobile-files-height": `${mobileFilesHeight}%` } as CSSProperties}
               >
                 {projectFilesPanel}
               </div>
@@ -1294,10 +1356,16 @@ function WorkspacePage({
           </div>
         </div>
 
+        {isActive && rightPanelOpen && (
+          <div className="order-2 lg:hidden">
+            <ResizeHandle orientation="horizontal" onPointerDown={startDrag("mobile-project")} />
+          </div>
+        )}
+
         {/* Drag handle: preview ↔ chat */}
         {isActive && rightPanelOpen && (
           <div className="-mr-1 hidden lg:order-2 lg:flex">
-            <ResizeHandle onMouseDown={startDrag("chat")} />
+            <ResizeHandle onPointerDown={startDrag("chat")} />
           </div>
         )}
 
@@ -1305,7 +1373,7 @@ function WorkspacePage({
             its navigation rail can be collapsed. */}
         <div
           className={cn(
-            "col-span-full flex min-h-0 min-w-0 flex-row overflow-hidden shrink-0",
+            "relative order-1 flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden lg:order-1 lg:flex-none lg:shrink-0",
             rightPanelOpen ? "lg:w-[var(--chat-width)]" : "lg:w-full",
             "lg:order-1",
           )}
@@ -1332,7 +1400,7 @@ function WorkspacePage({
           )}
           {chatNavigationOpen && isActive && (
             <div className="-mr-1 hidden lg:flex">
-              <ResizeHandle onMouseDown={startDrag("chat-nav")} />
+              <ResizeHandle onPointerDown={startDrag("chat-nav")} />
             </div>
           )}
 

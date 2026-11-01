@@ -64,10 +64,6 @@ const POPULAR = [
   "openai",
   "google",
   "github-copilot",
-  "xai",
-  "deepseek",
-  "mistral",
-  "groq",
 ];
 
 function rank(id: string): number {

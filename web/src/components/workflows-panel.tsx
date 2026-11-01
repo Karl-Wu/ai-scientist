@@ -108,6 +108,9 @@ import workflowsData from "@/data/workflows.json";
 import { useAppDefaults } from "@/lib/app-settings";
 import { WorkflowInputs, type WorkflowInputProps } from "@/components/workflow-inputs";
 import { buildWorkflowPrompt } from "@/lib/workflow-inputs";
+import { useI18n } from "@/components/i18n-provider";
+import type { Locale } from "@/lib/i18n";
+import workflowLocaleZh from "@/data/workflow-locales/zh-CN.json";
 
 export type Workflow = {
   id: string;
@@ -121,6 +124,20 @@ export type Workflow = {
 };
 
 const ALL_WORKFLOWS = workflowsData as Workflow[];
+const ZH_WORKFLOW_LOCALE = workflowLocaleZh as {
+  categories: Record<string, string>;
+  workflows: Record<string, [string, string]>;
+};
+
+function localizedCategoryLabel(category: { id: string; label: string }, locale: Locale) {
+  return locale === "zh-CN" ? ZH_WORKFLOW_LOCALE.categories[category.id] ?? category.label : category.label;
+}
+
+function localizedWorkflow(workflow: Workflow, locale: Locale): Workflow {
+  if (locale !== "zh-CN") return workflow;
+  const translation = ZH_WORKFLOW_LOCALE.workflows[workflow.id];
+  return translation ? { ...workflow, name: translation[0], description: translation[1] } : workflow;
+}
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Activity: ActivityIcon,
@@ -210,24 +227,15 @@ const CATEGORIES: { id: string; label: string; color: string }[] = [
   { id: "visual", label: "Visual & Presentation", color: "text-rose-500" },
   { id: "data", label: "Data & Analysis", color: "text-emerald-500" },
   { id: "literature", label: "Literature & Research", color: "text-violet-500" },
-  { id: "grants", label: "Grants & Planning", color: "text-amber-500" },
   { id: "scicomm", label: "Science Communication", color: "text-cyan-500" },
   { id: "genomics", label: "Genomics & Transcriptomics", color: "text-teal-500" },
   { id: "proteomics", label: "Proteomics & Structural Biology", color: "text-indigo-500" },
   { id: "cellbio", label: "Cell Biology & Single-Cell", color: "text-fuchsia-500" },
-  { id: "chemistry", label: "Chemistry & Computational Chemistry", color: "text-orange-500" },
   { id: "drugdiscovery", label: "Drug Discovery & Pharmacology", color: "text-red-500" },
-  { id: "physics", label: "Physics & Quantum Computing", color: "text-yellow-600" },
-  { id: "materials", label: "Materials Science", color: "text-slate-500" },
   { id: "clinical", label: "Clinical & Health Sciences", color: "text-green-500" },
-  { id: "neuro", label: "Neuroscience", color: "text-purple-500" },
-  { id: "ecology", label: "Ecology & Environmental Science", color: "text-lime-600" },
-  { id: "finance", label: "Finance & Economics", color: "text-sky-500" },
   { id: "social", label: "Social Sciences", color: "text-pink-500" },
-  { id: "math", label: "Mathematics & Modeling", color: "text-stone-500" },
   { id: "ml", label: "Machine Learning & AI", color: "text-blue-600" },
   { id: "engineering", label: "Engineering & Simulation", color: "text-zinc-500" },
-  { id: "astro", label: "Astronomy & Space Science", color: "text-violet-600" },
 ];
 
 const CATEGORY_BG: Record<string, string> = {
@@ -235,24 +243,15 @@ const CATEGORY_BG: Record<string, string> = {
   visual: "bg-rose-500/10 hover:bg-rose-500/15 border-rose-500/20",
   data: "bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20",
   literature: "bg-violet-500/10 hover:bg-violet-500/15 border-violet-500/20",
-  grants: "bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/20",
   scicomm: "bg-cyan-500/10 hover:bg-cyan-500/15 border-cyan-500/20",
   genomics: "bg-teal-500/10 hover:bg-teal-500/15 border-teal-500/20",
   proteomics: "bg-indigo-500/10 hover:bg-indigo-500/15 border-indigo-500/20",
   cellbio: "bg-fuchsia-500/10 hover:bg-fuchsia-500/15 border-fuchsia-500/20",
-  chemistry: "bg-orange-500/10 hover:bg-orange-500/15 border-orange-500/20",
   drugdiscovery: "bg-red-500/10 hover:bg-red-500/15 border-red-500/20",
-  physics: "bg-yellow-500/10 hover:bg-yellow-500/15 border-yellow-500/20",
-  materials: "bg-slate-500/10 hover:bg-slate-500/15 border-slate-500/20",
   clinical: "bg-green-500/10 hover:bg-green-500/15 border-green-500/20",
-  neuro: "bg-purple-500/10 hover:bg-purple-500/15 border-purple-500/20",
-  ecology: "bg-lime-500/10 hover:bg-lime-500/15 border-lime-500/20",
-  finance: "bg-sky-500/10 hover:bg-sky-500/15 border-sky-500/20",
   social: "bg-pink-500/10 hover:bg-pink-500/15 border-pink-500/20",
-  math: "bg-stone-500/10 hover:bg-stone-500/15 border-stone-500/20",
   ml: "bg-blue-600/10 hover:bg-blue-600/15 border-blue-600/20",
   engineering: "bg-zinc-500/10 hover:bg-zinc-500/15 border-zinc-500/20",
-  astro: "bg-violet-600/10 hover:bg-violet-600/15 border-violet-600/20",
 };
 
 const CATEGORY_ICON_COLOR: Record<string, string> = {
@@ -260,24 +259,15 @@ const CATEGORY_ICON_COLOR: Record<string, string> = {
   visual: "text-rose-500",
   data: "text-emerald-500",
   literature: "text-violet-500",
-  grants: "text-amber-500",
   scicomm: "text-cyan-500",
   genomics: "text-teal-500",
   proteomics: "text-indigo-500",
   cellbio: "text-fuchsia-500",
-  chemistry: "text-orange-500",
   drugdiscovery: "text-red-500",
-  physics: "text-yellow-600",
-  materials: "text-slate-500",
   clinical: "text-green-500",
-  neuro: "text-purple-500",
-  ecology: "text-lime-600",
-  finance: "text-sky-500",
   social: "text-pink-500",
-  math: "text-stone-500",
   ml: "text-blue-600",
   engineering: "text-zinc-500",
-  astro: "text-violet-600",
 };
 
 function WorkflowIcon({ name, className }: { name: string; className?: string }) {
@@ -492,6 +482,7 @@ export function WorkflowsPanel({
   onLaunch: (prompt: string, model: Model, inputFiles: string[]) => void;
   budgetBlocked?: boolean;
 } & WorkflowInputProps) {
+  const { locale, setLocale } = useI18n();
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -501,13 +492,19 @@ export function WorkflowsPanel({
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return ALL_WORKFLOWS;
-    return ALL_WORKFLOWS.filter(
-      (w) =>
+    return ALL_WORKFLOWS.filter((w) => {
+      const localized = localizedWorkflow(w, locale);
+      const category = CATEGORIES.find((candidate) => candidate.id === w.category);
+      return (
         w.name.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
-        w.category.toLowerCase().includes(q)
-    );
-  }, [search]);
+        w.category.toLowerCase().includes(q) ||
+        localized.name.toLowerCase().includes(q) ||
+        localized.description.toLowerCase().includes(q) ||
+        (category ? localizedCategoryLabel(category, locale).toLowerCase().includes(q) : false)
+      );
+    });
+  }, [search, locale]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Workflow[]>();
@@ -561,14 +558,25 @@ export function WorkflowsPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Search + category pills */}
       <div className="shrink-0 border-b px-4 py-3 space-y-2.5">
-        <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search workflows..."
-            className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary placeholder:text-muted-foreground/50"
-          />
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <SearchIcon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search workflows..."
+              className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary placeholder:text-muted-foreground/50"
+            />
+          </div>
+          <select
+            aria-label="Workflow language"
+            value={locale}
+            onChange={(event) => setLocale(event.target.value as Locale)}
+            className="h-9 shrink-0 rounded-lg border bg-background px-2 text-xs text-muted-foreground outline-none focus:border-primary"
+          >
+            <option value="en">English</option>
+            <option value="zh-CN">简体中文</option>
+          </select>
         </div>
 
         <div className="relative">
@@ -587,7 +595,7 @@ export function WorkflowsPanel({
                   CATEGORY_BG[cat.id]
                 )}
               >
-                <span className={CATEGORY_ICON_COLOR[cat.id]}>{cat.label}</span>
+                <span className={CATEGORY_ICON_COLOR[cat.id]}>{localizedCategoryLabel(cat, locale)}</span>
               </button>
             ))}
           </div>
@@ -623,7 +631,7 @@ export function WorkflowsPanel({
             return (
               <section key={cat.id} data-category={cat.id}>
                 <h3 className={cn("mb-2.5 text-xs font-semibold uppercase tracking-wider", cat.color)}>
-                  {cat.label}
+                  {localizedCategoryLabel(cat, locale)}
                   <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
                     ({workflows.length})
                   </span>
@@ -644,7 +652,7 @@ export function WorkflowsPanel({
                         <WorkflowIcon name={w.icon} className={cn("mt-0.5 size-4 shrink-0", iconColor)} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-foreground">{w.name}</span>
+                            <span className="text-sm font-medium text-foreground">{localizedWorkflow(w, locale).name}</span>
                             {w.requiresFiles && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-px text-[9px] font-medium text-amber-600 dark:text-amber-400 border border-amber-500/20">
                                 <DatabaseIcon className="size-2.5" />
@@ -653,7 +661,7 @@ export function WorkflowsPanel({
                             )}
                           </div>
                           <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-1">
-                            {w.description}
+                            {localizedWorkflow(w, locale).description}
                           </p>
                         </div>
                       </button>
@@ -668,7 +676,7 @@ export function WorkflowsPanel({
 
       {selectedWorkflow && (
         <WorkflowLaunchDialog
-          workflow={selectedWorkflow}
+          workflow={localizedWorkflow(selectedWorkflow, locale)}
           open={!!selectedWorkflow}
           onOpenChange={(open) => {
             if (!open) setSelectedWorkflow(null);

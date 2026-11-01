@@ -102,6 +102,7 @@ export const notebookChildTool: ToolDefinition<typeof NotebookParams> = {
   promptSnippet:
     "notebook: log a hypothesis/method/observation/decision entry to the shared lab notebook",
   promptGuidelines: [
+    "Write the title and all human-readable narrative fields in the language the user used for the current research request. If the user explicitly asks for another output language, follow that instead. For mixed-language requests, use the dominant language. Keep fixed type values, field names, code, commands, file paths, units and proper nouns unchanged; do not infer the language from the UI.",
     "Keep a running lab notebook: call `notebook` at natural milestones as you work, not in one dump at the end.",
     "For procedures, set execution.status to planned, attempted, completed or unverified. Before running use planned; failed/partial/cancelled execution is attempted. Completed requires execution.evidence naming the command/run id, observed output/exit and exact log/result paths; otherwise use unverified. Append a linked follow-up after execution. Scientific outcome is separate from execution, and an authored report is not independent verification.",
     "Attach `artifacts` for any entry tied to a file you wrote so the notebook links to real output.",
