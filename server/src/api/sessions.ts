@@ -70,6 +70,7 @@ import {
 } from "../agent/session-export.ts";
 import { toHistory } from "../agent/session-history.ts";
 import {
+  archiveSession,
   createSession,
   getModelRegistry,
   getModelRuntime,
@@ -177,6 +178,29 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
       messageCount: i.messageCount,
       firstMessage: i.firstMessage,
     }));
+  });
+
+  app.delete<{ Params: { id: string } }>("/sessions/:id", async (req, reply) => {
+    const projectId = currentProjectId();
+    const paths = activePaths();
+    const id = req.params.id;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) {
+      return reply.code(400).send({ detail: "Invalid session id" });
+    }
+    if (id === schedulerSessionId(paths)) {
+      return reply.code(409).send({ detail: "System sessions cannot be deleted" });
+    }
+    // Share the run lock so a new prompt cannot start during disposal/archive.
+    const claim = claimRun(projectId, id);
+    if (!claim) return reply.code(409).send({ detail: "Stop the running chat before deleting it" });
+    try {
+      const file = findSessionFile(paths, id);
+      if (!file) return reply.code(404).send({ detail: "No such session" });
+      await archiveSession(projectId, paths, id, file);
+      return { deleted: true };
+    } finally {
+      claim.release();
+    }
   });
 
   // Full transcript of a stored session, replayed as client frames so the UI

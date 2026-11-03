@@ -1,0 +1,15 @@
+{
+  "retrieved_date": "2026-11-03",
+  "upstream": "https://github.com/owid/covid-19-data/blob/master/public/data/README.md",
+  "source_file": "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv",
+  "source_file_sha256": "8473d0f0fdf962e1ffbd5b85b18726fc96a49bab109e271186c339725a12b10c",
+  "prepared_file": "covid19_country_weekly_2020-01-01_2023-12-31.csv",
+  "prepared_file_sha256": "1efb87b7e672010ac439d0d80e1838969648cd9db755c710075981c1b5f832bf",
+  "date_range": {
+    "start": "2020-01-01",
+    "end": "2023-12-31"
+  },
+  "aggregation": "One row per ISO-3 country/territory and Monday-start epidemiological week. Case/death rates are means of available OWID 7-day-smoothed per-million observations in that week. Vaccination and other cumulative/state indicators use the last non-missing source value within the week; no across-week imputation. Static covariates use the last non-missing source value within the week. Aggregates without ISO-3 codes and rows without continent are excluded.",
+  "rows": 49210,
+  "columns": 21
+}

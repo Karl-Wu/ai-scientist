@@ -146,6 +146,7 @@ const live = new Map<string, AgentSession>();
 // Share construction as well as the resulting live object: duplicate builds
 // register conflicting extension hosts and can route Stop to the wrong agent.
 const opening = new Map<string, Promise<AgentSession | null>>();
+const deleting = new Set<string>();
 const keyFor = (projectId: string, sessionId: string) => `${projectId}:${sessionId}`;
 
 // Sessions with a claimed run. A run holds its claim across async model setup
@@ -542,6 +543,7 @@ export async function getSession(
   options: OpenSessionOptions = {},
 ): Promise<AgentSession | null> {
   const k = keyFor(projectId, sessionId);
+  if (deleting.has(k)) return null;
   const existing = live.get(k);
   if (existing) {
     live.delete(k); // re-insert to mark most-recently-used
@@ -579,6 +581,21 @@ export async function disposeSession(projectId: string, sessionId: string): Prom
   const k = keyFor(projectId, sessionId);
   const s = live.get(k);
   if (s) await release(projectId, k, s);
+}
+
+/** Remove a chat from discovery, retaining its transcript outside Pi's sessions dir. */
+export async function archiveSession(projectId: string, paths: ProjectPaths, sessionId: string, file: string): Promise<void> {
+  const key = keyFor(projectId, sessionId);
+  deleting.add(key);
+  try {
+    await opening.get(key);
+    await disposeSession(projectId, sessionId);
+    const trash = path.join(path.dirname(paths.sessionsDir), "sessions-trash");
+    fs.mkdirSync(trash, { recursive: true });
+    fs.renameSync(file, path.join(trash, `${Date.now()}-${path.basename(file)}`));
+  } finally {
+    deleting.delete(key);
+  }
 }
 
 /** Stop every live session before its project directory is removed. */

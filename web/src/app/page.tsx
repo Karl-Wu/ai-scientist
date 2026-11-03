@@ -59,6 +59,8 @@ import {
   type WorkspaceScreen,
 } from "@/lib/workspace-persistence";
 import { seedChatStateFromTab } from "@/lib/new-tab-state";
+import { useAppDefaults } from "@/lib/app-settings";
+import { useModels } from "@/lib/use-models";
 import {
   useCallback,
   useEffect,
@@ -423,6 +425,10 @@ function WorkspacePage({
     handleSandboxWorkspaceChange,
   );
   const { skills: allSkills, loading: skillsLoading } = useSkills();
+  const appDefaults = useAppDefaults();
+  const { models: newChatModels } = useModels();
+  const newChatDefaultModel = useRef<Model | undefined>(undefined);
+  newChatDefaultModel.current = newChatModels.find((model) => model.id === appDefaults?.model);
   const { projects: projectDirectory } = useProjects();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -839,12 +845,12 @@ function WorkspacePage({
     // isActive=false and display:none.
     if (tabsRef.current.length >= MAX_CHAT_TABS) return;
     const id = makeTabId();
-    // A new chat continues the same piece of work far more often than it
-    // switches models, so carry the active tab's model, thinking level, and
-    // compute target over instead of resetting to the app defaults. Drafts,
+    // Honor the saved default model; inherit thinking/compute and, when no
+    // default model is configured, the active tab's model. Drafts,
     // attachments, and queued prompts stay with the tab they belong to.
     const seeded = seedChatStateFromTab(
       tabWorkspaceStatesRef.current[activeTabIdRef.current],
+      newChatDefaultModel.current,
     );
     if (seeded) {
       setTabWorkspaceStates((prev) => ({ ...prev, [id]: seeded }));

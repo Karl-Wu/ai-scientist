@@ -3,8 +3,8 @@
 /**
  * App-wide defaults for new chats (Settings → Models → Defaults), stored by
  * the backend in `<agentDir>/kady-settings.json` so every browser and the
- * server's own fallback runs agree. New tabs still copy the tab they were
- * opened from; these seed a project's first tab.
+ * server's own fallback runs agree. New tabs prefer the saved default model;
+ * other choices can be copied from the tab they were opened from.
  */
 
 import { useEffect, useState } from "react";
@@ -128,10 +128,13 @@ export function useAppDefaults(): AppDefaults | null {
         });
     void load(false);
     const onChanged = () => void load(false);
+    const onFocus = () => void load(true);
     window.addEventListener(CHANGED_EVENT, onChanged);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
       window.removeEventListener(CHANGED_EVENT, onChanged);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
   return defaults;

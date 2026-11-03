@@ -67,7 +67,7 @@ export function findSessionFile(paths: ProjectPaths, sessionId: string): string 
   if (!fs.existsSync(paths.sessionsDir)) return null;
   const match = fs
     .readdirSync(paths.sessionsDir)
-    .find((f) => f.endsWith(`${sessionId}.jsonl`) || f === `${sessionId}.jsonl`);
+    .find((f) => f.endsWith(`_${sessionId}.jsonl`) || f === `${sessionId}.jsonl`);
   return match ? path.join(paths.sessionsDir, match) : null;
 }
 

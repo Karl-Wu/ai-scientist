@@ -32,6 +32,15 @@ describe("seedChatStateFromTab", () => {
     expect(seeded.selectedComputeTarget).toBe(compute);
   });
 
+  it("uses the explicit default model instead of inheriting an older chat's selection", () => {
+    const luna = { ...model, id: "openrouter/openai/gpt-6-luna", label: "GPT-6 Luna" };
+    const seeded = seedChatStateFromTab(source, luna)!;
+    expect(seeded.selectedModel).toBe(luna);
+    expect(seeded.thinkingLevel).toBe(source.thinkingLevel);
+    expect(seeded.selectedComputeTarget).toBe(source.selectedComputeTarget);
+    expect(source.selectedModel).toBe(model);
+  });
+
   it("does not carry over conversation-specific content", () => {
     const seeded = seedChatStateFromTab(source)!;
     expect(seeded.attachedFiles).toEqual([]);

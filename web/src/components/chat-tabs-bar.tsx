@@ -12,6 +12,7 @@ import {
   WorkflowIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import {
   DropdownMenu,
@@ -106,6 +107,8 @@ function RecentChatsList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const deletedSessions = useRef(new Set<string>());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
   const openSessionIds = tabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []);
   const openSessionKey = openSessionIds.join("\u0000");
@@ -125,7 +128,7 @@ function RecentChatsList({
         .then((list: SessionListItem[]) => {
           if (cancelled) return;
           const sorted = [...list]
-            .filter((s) => s.messageCount > 0)
+            .filter((s) => s.messageCount > 0 && !deletedSessions.current.has(`${projectId}:${s.id}`))
             .sort(
               (a, b) =>
                 new Date(b.modified).getTime() - new Date(a.modified).getTime(),
@@ -169,16 +172,36 @@ function RecentChatsList({
     setEditingId(null);
     setDraftTitle("");
   };
-  const deleteTab = async (tab: ChatTabDescriptor) => {
+  const deleteChat = async (title: string, tab?: ChatTabDescriptor, sessionId = tab?.sessionId) => {
+    if (tab?.isStreaming || deletingId) return;
     const ok = await confirm({
-      title: `Delete “${tab.title}”?`,
-      description: "This removes the chat from the open chats list.",
+      title: `Delete “${title}”?`,
+      description: "Remove this conversation and its chat history from Recent chats. Project files, notebook entries and cost records are kept.",
       confirmLabel: "Delete",
       destructive: true,
     });
     if (!ok) return;
-    if (tabs.length === 1) onNewTab();
-    onCloseTab(tab.id);
+    const deletionKey = sessionId ?? tab?.id ?? title;
+    setDeletingId(deletionKey);
+    try {
+      if (sessionId) {
+        const response = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, projectId);
+        if (!response.ok && response.status !== 404) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.detail ?? "Could not delete chat. Please try again.");
+        }
+        deletedSessions.current.add(`${projectId}:${sessionId}`);
+        setSessions((current) => current?.filter((session) => session.id !== sessionId) ?? current);
+      }
+      if (tab) {
+        if (tabs.length === 1) onNewTab();
+        onCloseTab(tab.id);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete chat. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -259,7 +282,8 @@ function RecentChatsList({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"
-                          onSelect={() => void deleteTab(tab)}
+                          disabled={tab.isStreaming || deletingId !== null}
+                          onSelect={() => void deleteChat(tab.title, tab)}
                         >
                           <Trash2Icon className="size-3.5" />
                           Delete
@@ -318,7 +342,7 @@ function RecentChatsList({
                     </span>
                   )}
                 </button>
-                {tab && editingId !== tab.id && (
+                {(!tab || editingId !== tab.id) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -331,14 +355,19 @@ function RecentChatsList({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" side="right" className="min-w-36">
-                      <DropdownMenuItem onSelect={() => startRename(tab)}>
-                        <PencilIcon className="size-3.5" />
-                        Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
+                      {tab && (
+                        <>
+                          <DropdownMenuItem onSelect={() => startRename(tab)}>
+                            <PencilIcon className="size-3.5" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
                       <DropdownMenuItem
                         variant="destructive"
-                        onSelect={() => void deleteTab(tab)}
+                        disabled={tab?.isStreaming || deletingId !== null}
+                        onSelect={() => void deleteChat(rowTitle, tab, session.id)}
                       >
                         <Trash2Icon className="size-3.5" />
                         Delete
