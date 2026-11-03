@@ -141,6 +141,7 @@ import { toast } from "sonner";
 import { SettingsLink } from "@/components/settings-link";
 import { ConnectModelCard } from "@/components/connect-model-card";
 import { computeInstanceFromDefault, useAppDefaults } from "@/lib/app-settings";
+import { suggestedChatTitle } from "@/lib/chat-title";
 import { openSettings } from "@/lib/settings-nav";
 import { workflowScriptsIn } from "@/lib/workflow-script";
 
@@ -1669,6 +1670,7 @@ export interface ChatTabMeta {
   isStreaming: boolean;
   needsInput: boolean;
   userMessageCount: number;
+  suggestedTitle?: string;
   notebookEntries: NotebookEntry[];
   subagentCompletions: number;
 }
@@ -2108,6 +2110,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     () => messages.filter((m) => m.role === "user").length,
     [messages],
   );
+  const suggestedTitle = suggestedChatTitle(messages.find((message) => message.role === "user" && message.content.trim())?.content);
   const needsInput = isStreaming && messages.some((message) =>
     message.activities?.some((activity) =>
       (activity.toolName === "interview" || activity.toolName === "permission") &&
@@ -2122,6 +2125,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       isStreaming,
       needsInput,
       userMessageCount,
+      suggestedTitle,
       notebookEntries,
       subagentCompletions,
     });
@@ -2133,6 +2137,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     isStreaming,
     needsInput,
     userMessageCount,
+    suggestedTitle,
     notebookEntries,
     subagentCompletions,
     onMetaChange,

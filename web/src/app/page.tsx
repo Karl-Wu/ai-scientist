@@ -59,6 +59,7 @@ import {
   type WorkspaceScreen,
 } from "@/lib/workspace-persistence";
 import { seedChatStateFromTab } from "@/lib/new-tab-state";
+import { resolveChatTitle } from "@/lib/chat-title";
 import { useAppDefaults } from "@/lib/app-settings";
 import { useModels } from "@/lib/use-models";
 import {
@@ -177,6 +178,7 @@ const ORGANIZE_FILES_PROMPT =
 interface ChatTabEntry {
   id: string;
   title: string;
+  titleIsCustom?: boolean;
   /** Stored session reopened into this tab (History menu), if any. */
   sessionId?: string;
 }
@@ -486,7 +488,7 @@ function WorkspacePage({
   const initialTabId = INITIAL_TAB_ID;
   const [tabs, setTabs] = useState<ChatTabEntry[]>(() =>
     initialState?.tabs.length
-      ? initialState.tabs.map(({ id, title, sessionId }) => ({ id, title, sessionId }))
+      ? initialState.tabs.map(({ id, title, titleIsCustom, sessionId }) => ({ id, title, titleIsCustom, sessionId }))
       : [{ id: initialTabId, title: defaultTabTitle(0) }],
   );
   const [activeTabId, setActiveTabId] = useState<string>(
@@ -553,14 +555,17 @@ function WorkspacePage({
 
   const handleMetaChange = useCallback(
     (tabId: string, meta: ChatTabMeta) => {
-      if (meta.sessionId) {
+      if (meta.sessionId || meta.suggestedTitle) {
         setTabs((current) => {
-          if (!current.some((tab) => tab.id === tabId && tab.sessionId !== meta.sessionId)) {
+          if (!current.some((tab) => tab.id === tabId && (
+            (meta.sessionId && tab.sessionId !== meta.sessionId) ||
+            resolveChatTitle(tab.title, meta.suggestedTitle, tab.titleIsCustom) !== tab.title
+          ))) {
             return current;
           }
           return current.map((tab) =>
-            tab.id === tabId && tab.sessionId !== meta.sessionId
-              ? { ...tab, sessionId: meta.sessionId ?? undefined }
+            tab.id === tabId
+              ? { ...tab, title: resolveChatTitle(tab.title, meta.suggestedTitle, tab.titleIsCustom), sessionId: meta.sessionId ?? tab.sessionId }
               : tab,
           );
         });
@@ -899,7 +904,7 @@ function WorkspacePage({
 
   const renameTab = useCallback((id: string, title: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, title } : t)),
+      prev.map((t) => (t.id === id ? { ...t, title, titleIsCustom: true } : t)),
     );
   }, []);
 
@@ -1089,6 +1094,7 @@ function WorkspacePage({
       tabs.map((t) => ({
         id: t.id,
         title: t.title,
+        titleIsCustom: t.titleIsCustom,
         isStreaming: tabsMeta[t.id]?.isStreaming ?? false,
         userMessageCount: tabsMeta[t.id]?.userMessageCount ?? 0,
         sessionId: tabsMeta[t.id]?.sessionId ?? t.sessionId ?? null,

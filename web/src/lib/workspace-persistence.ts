@@ -84,6 +84,7 @@ export interface SandboxWorkspaceState {
 export interface WorkspaceTabState {
   id: string;
   title: string;
+  titleIsCustom?: boolean;
   sessionId?: string;
   chat?: ChatWorkspaceState;
 }
@@ -342,7 +343,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     const sessionId = rawSessionId && !seenSessions.has(rawSessionId) ? rawSessionId : undefined;
     if (sessionId) seenSessions.add(sessionId);
     const chat = sanitizeStoredChat(item.chat);
-    return [{ id, title, ...(sessionId ? { sessionId } : {}), ...(chat ? { chat } : {}) }];
+    return [{ id, title, ...(item.titleIsCustom === true ? { titleIsCustom: true } : {}), ...(sessionId ? { sessionId } : {}), ...(chat ? { chat } : {}) }];
   });
   if (tabs.length === 0) return null;
   const requestedActiveTab = stringValue(value.activeTabId);
@@ -572,7 +573,7 @@ async function storeProject(projectId: string, state: ProjectWorkspaceState): Pr
 
   for (const tab of state.tabs) {
     if (!tab.chat) {
-      tabs.push({ id: tab.id, title: tab.title, ...(tab.sessionId ? { sessionId: tab.sessionId } : {}) });
+      tabs.push({ id: tab.id, title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}), ...(tab.sessionId ? { sessionId: tab.sessionId } : {}) });
       continue;
     }
     const attachments: StoredBlobRef[] = [];
@@ -601,7 +602,7 @@ async function storeProject(projectId: string, state: ProjectWorkspaceState): Pr
     }
     tabs.push({
       id: tab.id,
-      title: tab.title,
+      title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
       ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       chat: {
         ...tab.chat,
@@ -631,7 +632,7 @@ async function hydrateProject(stored: StoredProjectState): Promise<ProjectWorksp
     if (!tab.chat) {
       tabs.push({
         id: tab.id,
-        title: tab.title,
+        title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
         ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       });
       continue;
@@ -663,7 +664,7 @@ async function hydrateProject(stored: StoredProjectState): Promise<ProjectWorksp
     }
     tabs.push({
       id: tab.id,
-      title: tab.title,
+      title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
       ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       chat: {
         ...tab.chat,
@@ -683,7 +684,7 @@ function projectMetadataFromState(
     ...state,
     tabs: state.tabs.map((tab) => ({
       id: tab.id,
-      title: tab.title,
+      title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
       ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       ...(tab.chat
         ? {

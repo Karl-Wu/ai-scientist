@@ -27,10 +27,12 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { commandPreview } from "@/lib/command-blocks";
+import { resolveChatTitle } from "@/lib/chat-title";
 
 export interface ChatTabDescriptor {
   id: string;
   title: string;
+  titleIsCustom?: boolean;
   isStreaming: boolean;
   userMessageCount: number;
   sessionId?: string | null;
@@ -110,8 +112,7 @@ function RecentChatsList({
   const deletedSessions = useRef(new Set<string>());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const openSessionIds = tabs.flatMap((tab) => tab.sessionId ? [tab.sessionId] : []);
-  const openSessionKey = openSessionIds.join("\u0000");
+  const openSessionKey = tabs.map((tab) => `${tab.sessionId ?? tab.id}:${tab.userMessageCount}:${tab.isStreaming}`).join("\u0000");
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -238,7 +239,7 @@ function RecentChatsList({
                   title={`${tab.title} — double-click to rename`}
                   className="flex min-w-0 flex-1 items-center gap-1 text-left"
                 >
-                  {tab.isStreaming && <LoaderCircleIcon className="size-3 shrink-0 animate-spin text-primary" />}
+                  {tab.isStreaming && <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
                   {isEditing ? (
                     <input
                       ref={inputRef}
@@ -297,7 +298,7 @@ function RecentChatsList({
           })}
           {recentSessions.map(({ session, tab }) => {
             const title = sessionTitle(session);
-            const rowTitle = tab?.title ?? title;
+            const rowTitle = tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
             return (
               <div
                 key={session.id}
@@ -310,11 +311,14 @@ function RecentChatsList({
               >
                 <button
                   type="button"
-                  title={`${rowTitle} · ${relativeTime(session.modified)}`}
+                  title={`${rowTitle} · ${tab?.isStreaming ? "Running" : relativeTime(session.modified)}`}
                   onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                   onDoubleClick={() => tab && startRename(tab)}
                   className="flex min-w-0 flex-1 items-start gap-1 text-left"
                 >
+                  {tab?.isStreaming && (
+                    <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
+                  )}
                   {editingId === tab?.id && tab ? (
                     <input
                       ref={inputRef}

@@ -114,6 +114,16 @@ describe("workspace persistence schema", () => {
     });
   });
 
+  it.each([true, false])("preserves a manual placeholder title across reload (chat state: %s)", async (withChat) => {
+    await saveProjectWorkspaceState("project-a", {
+      ...projectState,
+      tabs: [{ ...projectState.tabs[0], title: "Chat 1", titleIsCustom: true, chat: withChat ? projectState.tabs[0].chat : undefined }],
+    });
+    await saveWorkspaceShellState("workspace", ["project-a"]);
+    const restored = await loadWorkspaceSnapshot();
+    expect(restored.projects["project-a"].tabs[0]).toMatchObject({ title: "Chat 1", titleIsCustom: true });
+  });
+
   it("falls back safely for invalid JSON and unsupported versions", () => {
     expect(parseWorkspaceMetadata("{not-json")).toMatchObject({
       version: WORKSPACE_SCHEMA_VERSION,
