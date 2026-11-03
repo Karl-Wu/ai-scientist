@@ -258,15 +258,16 @@ export function ProjectView({
     <div className="flex min-h-dvh flex-col bg-muted/20">
       {confirmDialog}
       <header className="flex items-center justify-between border-b bg-background/90 px-6 py-3 backdrop-blur">
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/ai-scientist.svg?v=2"
             alt="AI Scientist"
             className="size-7 object-contain"
           />
-          <span className="text-sm font-semibold tracking-tight text-foreground/80">
-            AI Scientist
+          <span className="flex flex-col items-start pt-0.5">
+            <span className="text-sm font-semibold leading-4 tracking-tight text-foreground/80">AI Scientist</span>
+            <span className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground/70">Powered by DeepWorks</span>
           </span>
         </div>
 

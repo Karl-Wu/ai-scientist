@@ -46,6 +46,10 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const FILE_DRAG_TYPE = "application/x-kady-filepath";
+const TREE_ACTIONS_CLASS =
+  "absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded bg-background px-0.5 " +
+  "pointer-events-none opacity-0 transition-opacity " +
+  "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -283,34 +287,37 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
             onCancel={onCancelRename}
           />
         ) : (
-          <FileTreeName>{node.name}</FileTreeName>
+          <FileTreeName className="min-w-0 flex-1 group-hover/folder:pr-20 group-focus-within/folder:pr-20 [@media(hover:none)]:pr-20" title={node.name}>{node.name}</FileTreeName>
         )}
         {renamingPath !== node.path && (
-          <FileTreeActions>
+          <FileTreeActions
+            aria-label={`Folder actions for ${node.name}`}
+            className={cn(TREE_ACTIONS_CLASS, "group-hover/folder:pointer-events-auto group-hover/folder:opacity-100 group-focus-within/folder:pointer-events-auto group-focus-within/folder:opacity-100")}
+          >
             <button
               onClick={() => onStartCreateDir(node.path)}
-              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/folder:opacity-100"
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
               title="New folder inside"
             >
               <FolderPlusIcon className="size-3" />
             </button>
             <button
               onClick={() => onStartRename(node.path)}
-              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/folder:opacity-100"
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
               title={`Rename ${node.name}`}
             >
               <PencilIcon className="size-3" />
             </button>
             <button
               onClick={() => onDownloadDir(node.path)}
-              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/folder:opacity-100"
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
               title={`Download ${node.name} as zip`}
             >
               <DownloadIcon className="size-3" />
             </button>
             <button
               onClick={() => onDeleteDir(node.path)}
-              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/folder:opacity-100"
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
               title={`Delete ${node.name}`}
             >
               <Trash2Icon className="size-3" />
@@ -361,27 +368,30 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
           onCancel={onCancelRename}
         />
       ) : (
-        <FileTreeName>{node.name}</FileTreeName>
+        <FileTreeName className="min-w-0 flex-1 group-hover/file:pr-14 group-focus-within/file:pr-14 [@media(hover:none)]:pr-14" title={node.name}>{node.name}</FileTreeName>
       )}
       {renamingPath !== node.path && (
-        <FileTreeActions>
+        <FileTreeActions
+          aria-label={`File actions for ${node.name}`}
+          className={cn(TREE_ACTIONS_CLASS, "group-hover/file:pointer-events-auto group-hover/file:opacity-100 group-focus-within/file:pointer-events-auto group-focus-within/file:opacity-100")}
+        >
           <button
             onClick={() => onStartRename(node.path)}
-            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/file:opacity-100"
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
             title={`Rename ${node.name}`}
           >
             <PencilIcon className="size-3" />
           </button>
           <button
             onClick={() => onDownload(node.path)}
-            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/file:opacity-100"
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
             title={`Download ${node.name}`}
           >
             <DownloadIcon className="size-3" />
           </button>
           <button
             onClick={() => onDelete(node.path)}
-            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/file:opacity-100"
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
             title={`Delete ${node.name}`}
           >
             <Trash2Icon className="size-3" />

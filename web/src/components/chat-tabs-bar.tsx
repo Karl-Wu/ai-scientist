@@ -29,6 +29,14 @@ import { cn } from "@/lib/utils";
 import { commandPreview } from "@/lib/command-blocks";
 import { resolveChatTitle } from "@/lib/chat-title";
 
+const CHAT_ACTIONS_CLASS =
+  "absolute right-1.5 top-1.5 z-10 rounded bg-background/95 p-1 text-muted-foreground opacity-0 pointer-events-none transition-[opacity,color,background-color] " +
+  "group-hover/chat-row:opacity-100 group-hover/chat-row:pointer-events-auto " +
+  "group-focus-within/chat-row:opacity-100 group-focus-within/chat-row:pointer-events-auto " +
+  "data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto " +
+  "hover:bg-muted-foreground/10 hover:text-foreground " +
+  "[@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto";
+
 export interface ChatTabDescriptor {
   id: string;
   title: string;
@@ -226,7 +234,7 @@ function RecentChatsList({
               <div
                 key={tab.id}
                 className={cn(
-                  "group flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
+                  "group/chat-row relative flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
                   isActive
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
@@ -237,7 +245,7 @@ function RecentChatsList({
                   onClick={() => onSelectTab(tab.id)}
                   onDoubleClick={() => startRename(tab)}
                   title={`${tab.title} — double-click to rename`}
-                  className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                  className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                 >
                   {tab.isStreaming && <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
                   {isEditing ? (
@@ -259,7 +267,7 @@ function RecentChatsList({
                       maxLength={40}
                     />
                   ) : (
-                    <span className="truncate">{tab.title}</span>
+                    <span className="min-w-0 flex-1 truncate">{tab.title}</span>
                   )}
                 </button>
                 {!isEditing && (
@@ -270,7 +278,7 @@ function RecentChatsList({
                           type="button"
                           aria-label={`Chat actions for ${tab.title}`}
                           title="Chat actions"
-                          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
+                          className={CHAT_ACTIONS_CLASS}
                         >
                           <MoreHorizontalIcon className="size-3.5" />
                         </button>
@@ -303,7 +311,7 @@ function RecentChatsList({
               <div
                 key={session.id}
                 className={cn(
-                  "group flex w-full min-w-0 items-start gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
+                  "group/chat-row relative flex w-full min-w-0 items-start gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
                   tab?.id === activeTabId
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
@@ -314,7 +322,7 @@ function RecentChatsList({
                   title={`${rowTitle} · ${tab?.isStreaming ? "Running" : relativeTime(session.modified)}`}
                   onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                   onDoubleClick={() => tab && startRename(tab)}
-                  className="flex min-w-0 flex-1 items-start gap-1 text-left"
+                  className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                 >
                   {tab?.isStreaming && (
                     <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
@@ -338,7 +346,7 @@ function RecentChatsList({
                       maxLength={40}
                     />
                   ) : (
-                    <span className="flex min-w-0 flex-col">
+                    <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{rowTitle}</span>
                       <span className="text-[10px] text-muted-foreground/75">
                         {relativeTime(session.modified)}
@@ -353,7 +361,7 @@ function RecentChatsList({
                         type="button"
                         aria-label={`Chat actions for ${rowTitle}`}
                         title="Chat actions"
-                        className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
+                        className={CHAT_ACTIONS_CLASS}
                       >
                         <MoreHorizontalIcon className="size-3.5" />
                       </button>
