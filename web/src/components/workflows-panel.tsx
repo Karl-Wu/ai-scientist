@@ -16,6 +16,7 @@ import {
   CloudIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
   CogIcon,
   CpuIcon,
   CrosshairIcon,
@@ -580,15 +581,18 @@ export function WorkflowsPanel({
               className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary placeholder:text-muted-foreground/50"
             />
           </div>
+          <div className="relative shrink-0">
           <select
             aria-label="Workflow language"
             value={locale}
             onChange={(event) => setLocale(event.target.value as Locale)}
-            className="h-9 shrink-0 rounded-lg border bg-background px-2 text-xs text-muted-foreground outline-none focus:border-primary"
+            className="h-9 appearance-none rounded-lg border bg-background pl-3 pr-8 text-xs text-muted-foreground outline-none focus:border-primary"
           >
             <option value="en">English</option>
             <option value="zh-CN">简体中文</option>
           </select>
+          <ChevronDownIcon aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          </div>
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
