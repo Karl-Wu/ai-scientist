@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkflowLaunchDialog, WorkflowsPanel, type Workflow } from "./workflows-panel";
 import type { WorkflowInputProps } from "./workflow-inputs";
 
+vi.mock("@/components/i18n-provider", () => ({ useI18n: () => ({ locale: "en", setLocale: vi.fn() }) }));
+
 const modelState = vi.hoisted(() => ({ availability: "available", billable: true }));
 vi.mock("@/components/model-selector", () => ({
   DEFAULT_MODEL: { id: "test/model", name: "Test model" },
@@ -19,7 +21,7 @@ const workflow: Workflow = {
   placeholders: [{ key: "question", label: "Research question", required: true }],
 };
 
-function setup(props: WorkflowInputProps & { workflow?: Workflow; budgetBlocked?: boolean } = {}) {
+function setup(props: WorkflowInputProps & { workflow?: Workflow; budgetBlocked?: boolean; chatRunning?: boolean } = {}) {
   const onLaunch = vi.fn();
   render(<WorkflowLaunchDialog workflow={workflow} open onOpenChange={vi.fn()} onLaunch={onLaunch} {...props} />);
   if (screen.queryByPlaceholderText("Research question")) fireEvent.change(screen.getByPlaceholderText("Research question"), { target: { value: "treatment response" } });
@@ -29,6 +31,14 @@ function setup(props: WorkflowInputProps & { workflow?: Workflow; budgetBlocked?
 beforeEach(() => { modelState.availability = "available"; modelState.billable = true; });
 
 describe("workflow data sources", () => {
+  it("blocks launching into a running chat and explains how to continue", () => {
+    const onLaunch = setup({ chatRunning: true });
+    expect(screen.getByRole("status")).toHaveTextContent(/chat is running|当前会话正在运行/);
+    expect(screen.getByRole("button", { name: "Run workflow" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Run workflow" }));
+    expect(onLaunch).not.toHaveBeenCalled();
+  });
+
   it("opens on sandbox files and folders before device uploads", () => {
     setup({ availableFiles: ["results/counts.csv"], availableFolders: ["results"], onUploadFiles: vi.fn() });
     const picker = screen.getByRole("group", { name: "Project sandbox" });

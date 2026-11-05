@@ -342,8 +342,8 @@ export function ModalJobChip({
 
 /**
  * Compact chip for a `notebook` tool call: the entry itself renders in the
- * Lab Notebook panel, so the transcript shows a one-line pointer with an
- * optional jump ("View in notebook"). item.id === the notebook entry id.
+ * Journal panel, so the transcript shows a one-line pointer with an
+ * optional jump ("View in journal"). item.id === the notebook entry id.
  */
 export function NotebookEntryChip({
   item,
@@ -361,10 +361,10 @@ export function NotebookEntryChip({
   return (
     <div
       data-tool-call-id={item.id}
-      className="my-1 flex w-full items-center gap-2 rounded-md border border-orange-500/25 bg-orange-500/5 px-2.5 py-1.5 text-xs"
+      className="my-1 flex w-full items-center gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10 px-2.5 py-1.5 text-xs"
     >
-      <BookOpenIcon className="size-3.5 shrink-0 text-orange-500" />
-      <span className="font-medium text-foreground">Notebook · {typeLabel}</span>
+      <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
+      <span className="font-medium text-foreground">Journal · {typeLabel}</span>
       {title && (
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{title}</span>
       )}
@@ -375,7 +375,7 @@ export function NotebookEntryChip({
           onClick={() => onView(item.id)}
           className="shrink-0 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
-          View in notebook
+          View in journal
         </button>
       )}
     </div>

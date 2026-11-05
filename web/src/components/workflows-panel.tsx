@@ -126,7 +126,7 @@ export type Workflow = {
 const ALL_WORKFLOWS = workflowsData as Workflow[];
 const ZH_WORKFLOW_LOCALE = workflowLocaleZh as {
   categories: Record<string, string>;
-  workflows: Record<string, [string, string]>;
+  workflows: Record<string, string[]>;
 };
 
 function localizedCategoryLabel(category: { id: string; label: string }, locale: Locale) {
@@ -286,13 +286,16 @@ export function WorkflowLaunchDialog({
   filesReady,
   onRefreshFiles,
   budgetBlocked = false,
+  chatRunning = false,
 }: {
   workflow: Workflow;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onLaunch: (prompt: string, model: Model, inputFiles: string[]) => void;
   budgetBlocked?: boolean;
+  chatRunning?: boolean;
 } & WorkflowInputProps) {
+  const { locale } = useI18n();
   const [model, setModel] = useState<Model>(DEFAULT_MODEL);
   const { modelAvailability, models: knownModels } = useModels();
   // Start from Settings → Defaults until the user picks a model here.
@@ -335,7 +338,7 @@ export function WorkflowLaunchDialog({
   const finalPrompt = buildWorkflowPrompt(editedPrompt ?? assembledPrompt, inputFiles, sources, inputFolders);
 
   const handleLaunch = useCallback(() => {
-    if (uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable) return;
+    if (chatRunning || uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable) return;
     onLaunch(finalPrompt, model, inputFiles);
     onOpenChange(false);
     setPlaceholderValues({});
@@ -344,7 +347,7 @@ export function WorkflowLaunchDialog({
     setSources("");
     setEditedPrompt(null);
     setIsEditingPrompt(false);
-  }, [finalPrompt, model, inputFiles, onLaunch, onOpenChange, uploading, canLaunch, selectedBudgetBlocked, modelAvailable]);
+  }, [finalPrompt, model, inputFiles, onLaunch, onOpenChange, chatRunning, uploading, canLaunch, selectedBudgetBlocked, modelAvailable]);
 
   const iconColor = CATEGORY_ICON_COLOR[workflow.category] ?? "text-muted-foreground";
 
@@ -443,13 +446,20 @@ export function WorkflowLaunchDialog({
           </div>
         </div>
 
+        {chatRunning && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {locale === "zh-CN"
+              ? "当前会话正在运行。请等待完成，或新建会话后启动工作流。"
+              : "This chat is running. Wait for it to finish or start a new chat before launching a workflow."}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             onClick={handleLaunch}
-            disabled={uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable}
+            disabled={chatRunning || uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable}
             title={
               !modelAvailable
                 ? selectedModelAvailability === "checking"
@@ -478,9 +488,11 @@ export function WorkflowsPanel({
   filesReady,
   onRefreshFiles,
   budgetBlocked = false,
+  chatRunning = false,
 }: {
   onLaunch: (prompt: string, model: Model, inputFiles: string[]) => void;
   budgetBlocked?: boolean;
+  chatRunning?: boolean;
 } & WorkflowInputProps) {
   const { locale, setLocale } = useI18n();
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
@@ -546,7 +558,7 @@ export function WorkflowsPanel({
     const observer = new ResizeObserver(updateCategoryScroll);
     observer.observe(nav);
     return () => observer.disconnect();
-  }, [updateCategoryScroll, visibleCategories.length]);
+  }, [updateCategoryScroll, visibleCategories.length, locale]);
 
   const nudgeCategories = useCallback((direction: -1 | 1) => {
     const nav = categoryNavRef.current;
@@ -579,12 +591,24 @@ export function WorkflowsPanel({
           </select>
         </div>
 
-        <div className="relative">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {(categoryScroll.left || categoryScroll.right) && (
+            <button
+              type="button"
+              aria-label="Scroll categories left"
+              title="Previous categories"
+              disabled={!categoryScroll.left}
+              onClick={() => nudgeCategories(-1)}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-30"
+            >
+              <ChevronLeftIcon className="size-4" />
+            </button>
+          )}
           <div
             ref={categoryNavRef}
             onScroll={updateCategoryScroll}
             aria-label="Workflow categories"
-            className="flex gap-1.5 overflow-x-auto px-8 pb-0.5 scrollbar-none"
+            className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 scrollbar-none"
           >
             {visibleCategories.map((cat) => (
               <button
@@ -599,22 +623,14 @@ export function WorkflowsPanel({
               </button>
             ))}
           </div>
-          {categoryScroll.left && (
-            <button
-              type="button"
-              aria-label="Scroll categories left"
-              onClick={() => nudgeCategories(-1)}
-              className="absolute inset-y-0 left-0 z-10 flex w-7 items-center justify-center rounded-l-md bg-background/95 text-muted-foreground shadow-sm hover:text-foreground"
-            >
-              <ChevronLeftIcon className="size-4" />
-            </button>
-          )}
-          {categoryScroll.right && (
+          {(categoryScroll.left || categoryScroll.right) && (
             <button
               type="button"
               aria-label="Scroll categories right"
+              title="More categories"
+              disabled={!categoryScroll.right}
               onClick={() => nudgeCategories(1)}
-              className="absolute inset-y-0 right-0 z-10 flex w-7 items-center justify-center rounded-r-md bg-background/95 text-muted-foreground shadow-sm hover:text-foreground"
+              className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronRightIcon className="size-4" />
             </button>
@@ -636,7 +652,7 @@ export function WorkflowsPanel({
                     ({workflows.length})
                   </span>
                 </h3>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
                   {workflows.map((w) => {
                     const bgClass = CATEGORY_BG[w.category] ?? "";
                     const iconColor = CATEGORY_ICON_COLOR[w.category] ?? "text-muted-foreground";
@@ -645,13 +661,13 @@ export function WorkflowsPanel({
                         key={w.id}
                         onClick={() => setSelectedWorkflow(w)}
                         className={cn(
-                          "flex items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all",
+                          "flex min-w-0 items-start gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all",
                           bgClass
                         )}
                       >
                         <WorkflowIcon name={w.icon} className={cn("mt-0.5 size-4 shrink-0", iconColor)} />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                             <span className="text-sm font-medium text-foreground">{localizedWorkflow(w, locale).name}</span>
                             {w.requiresFiles && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-px text-[9px] font-medium text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -688,6 +704,7 @@ export function WorkflowsPanel({
           filesReady={filesReady}
           onRefreshFiles={onRefreshFiles}
           budgetBlocked={budgetBlocked}
+          chatRunning={chatRunning}
         />
       )}
     </div>

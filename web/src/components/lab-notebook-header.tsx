@@ -236,9 +236,9 @@ export function LabNotebookHeader({
     <header className="@container/notebook shrink-0">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <BookOpenIcon className="size-4 shrink-0 text-orange-500" />
+          <BookOpenIcon className="size-4 shrink-0 text-blue-500" />
           <div className="min-w-0">
-            <h1 className="text-xs font-semibold">Lab Notebook</h1>
+            <h1 className="text-xs font-semibold">Journal</h1>
             <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p>
           </div>
         </div>
@@ -313,7 +313,7 @@ export function LabNotebookHeader({
                   title={
                     canExport
                       ? undefined
-                      : "Start a chat before exporting its notebook"
+                      : "Start a chat before exporting its journal"
                   }
                 >
                   <DownloadIcon data-icon="inline-start" />
@@ -341,7 +341,7 @@ export function LabNotebookHeader({
               variant="outline"
               size="icon-xs"
               onClick={onPrint}
-              aria-label="Save notebook as PDF"
+              aria-label="Save journal as PDF"
               title="Export as PDF"
             >
               <PrinterIcon />
@@ -352,7 +352,7 @@ export function LabNotebookHeader({
 
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-1.5">
         <SegmentedToggle
-          label="Notebook scope"
+          label="Journal scope"
           value={scope}
           onChange={onScopeChange}
           options={[
@@ -362,7 +362,7 @@ export function LabNotebookHeader({
         />
         {scope === "session" && hasEntries && (
           <SegmentedToggle
-            label="Notebook layout"
+            label="Journal layout"
             value={viewMode}
             onChange={onViewModeChange}
             options={[

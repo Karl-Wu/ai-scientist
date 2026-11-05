@@ -303,7 +303,7 @@ export function LabNotebookView({
       focusTimerRef.current = setTimeout(() => {
         if (pendingFocusRef.current === id) {
           pendingFocusRef.current = null;
-          toast.error("That notebook entry isn't in this chat's notebook.");
+          toast.error("That journal entry isn't in this chat's journal.");
         }
       }, FOCUS_DEADLINE_MS);
       requestAnimationFrame(tryFocus);
@@ -343,7 +343,7 @@ export function LabNotebookView({
           ? { path: `/sessions/${encodeURIComponent(sessionId)}/notebook/export`, name: sessionId }
           : null;
     if (!target) {
-      toast.error("Start a chat before exporting its notebook.");
+      toast.error("Start a chat before exporting its journal.");
       return;
     }
     try {
@@ -480,7 +480,7 @@ export function LabNotebookView({
       />
       {displayedData.error && (
         <div role="alert" className="flex items-center gap-2 border-b bg-amber-500/10 px-4 py-2 text-xs">
-          <span>Notebook refresh failed. Displayed evidence checks may be out of date.</span>
+          <span>Journal refresh failed. Displayed evidence checks may be out of date.</span>
           <Button variant="outline" size="xs" onClick={displayedData.refresh}>Retry</Button>
         </div>
       )}
@@ -496,7 +496,7 @@ export function LabNotebookView({
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {scope === "project"
                 ? "Findings from every chat in this project collect here."
-                : "AI Scientist’s notebook — entries appear here as it works, linking hypotheses to evidence and decisions."}
+                : "AI Scientist’s journal — entries appear here as it works, linking hypotheses to evidence and decisions."}
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-1">

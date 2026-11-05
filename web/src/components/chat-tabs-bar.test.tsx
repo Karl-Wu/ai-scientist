@@ -12,8 +12,8 @@ const saved = { id: "saved-chat", name: "Historical chat", created: Date.now(), 
 const fetchMock = vi.mocked(apiFetch);
 const props = {
   projectId: "project-a", tabs: [{ id: "blank", title: "New chat", isStreaming: false, userMessageCount: 0 }],
-  activeTabId: "blank", view: "chat" as const, maxTabs: 10,
-  onSelect: vi.fn(), onClose: vi.fn(), onNew: vi.fn(), onRename: vi.fn(), onSelectWorkflows: vi.fn(), onOpenSession: vi.fn(),
+  activeTabId: "blank", maxTabs: 10,
+  onSelect: vi.fn(), onClose: vi.fn(), onNew: vi.fn(), onRename: vi.fn(), onOpenSession: vi.fn(),
 };
 beforeEach(() => {
   vi.clearAllMocks();

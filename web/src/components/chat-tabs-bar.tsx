@@ -9,9 +9,8 @@ import {
   PlusIcon,
   TerminalIcon,
   Trash2Icon,
-  WorkflowIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import {
@@ -49,15 +48,14 @@ export interface ChatTabDescriptor {
 export interface ChatTabsBarProps {
   projectId: string;
   width?: number;
+  workspaceNavigation?: ReactNode;
   tabs: ChatTabDescriptor[];
   activeTabId: string;
-  view: "chat" | "workflows";
   maxTabs: number;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, title: string) => void;
-  onSelectWorkflows: () => void;
   /** Reopen a stored session (from the History menu) into a tab. */
   onOpenSession: (sessionId: string, title: string) => void;
   /** Session id of the active tab, for reproducibility export. */
@@ -217,7 +215,7 @@ function RecentChatsList({
     <section className="mt-3 min-w-0" aria-label="Recent chats">
       {dialog}
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Recent
+        Sessions
       </h2>
       {sessions === null && tabs.length === 0 ? (
         <div className="px-2 py-2 text-[11px] text-muted-foreground">Loading chats…</div>
@@ -488,15 +486,14 @@ function ExportMenu({
 export function ChatTabsBar({
   projectId,
   width = 136,
+  workspaceNavigation,
   tabs,
   activeTabId,
-  view,
   maxTabs,
   onSelect,
   onClose,
   onNew,
   onRename,
-  onSelectWorkflows,
   onOpenSession,
   activeSessionId,
   canExport = false,
@@ -505,7 +502,7 @@ export function ChatTabsBar({
 
   return (
     <div
-      className="flex h-full shrink-0 flex-col border-r border-border bg-muted/10 p-2 lg:border-r-0"
+      className="flex h-full shrink-0 flex-col border-r border-border bg-muted/20 p-2 lg:border-r-0"
       style={{ width }}
     >
       <InfoTooltip
@@ -531,13 +528,19 @@ export function ChatTabsBar({
           type="button"
           disabled={atLimit}
           aria-label="New chat tab"
-          className="flex h-9 shrink-0 items-center gap-2 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+          className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-40"
         >
           <PlusIcon className="size-3.5" />
           <span>New chat</span>
         </button>
       </InfoTooltip>
       <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {workspaceNavigation && (
+          <section className="mb-5 mt-3 min-w-0" aria-label="Workspace">
+            <h2 className="px-2 pb-2 text-[10px] font-medium text-muted-foreground">Workspace</h2>
+            {workspaceNavigation}
+          </section>
+        )}
         <RecentChatsList
           projectId={projectId}
           tabs={tabs}
@@ -550,40 +553,15 @@ export function ChatTabsBar({
         />
       </div>
 
-      <div className="mt-auto flex shrink-0 flex-col gap-1 border-t pt-2">
-        {view === "chat" && canExport && activeSessionId && (
+      {canExport && activeSessionId && (
+        <div className="mt-auto flex shrink-0 flex-col border-t pt-2">
           <ExportMenu
             projectId={projectId}
             sessionId={activeSessionId}
             orientation="vertical"
           />
-        )}
-        <InfoTooltip
-          content={
-            <>
-              <b>Workflows</b>
-              <br />
-              Pre-built scientific pipelines (e.g. RNA-seq, literature
-              review). Pick a template, attach inputs, and launch — they
-              run in the active chat tab.
-            </>
-          }
-        >
-          <button
-            onClick={onSelectWorkflows}
-            type="button"
-            className={cn(
-              "flex w-full items-center justify-start gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-              view === "workflows"
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            <WorkflowIcon className="size-3.5" />
-            Workflows
-          </button>
-        </InfoTooltip>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ import {
   FolderOpenIcon,
   FolderPlusIcon,
   FolderUpIcon,
-  XIcon,
+  PanelRightCloseIcon,
   RefreshCwIcon,
   UploadIcon,
   LoaderIcon,
@@ -735,9 +735,9 @@ export const FileTreePanel = memo(function FileTreePanel({
               <RefreshCwIcon className="size-3.5" />
             </button>
           </InfoTooltip>
-          <InfoTooltip content="Hide the sandbox panel">
-            <button onClick={onClose} aria-label="Close sandbox panel" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-              <XIcon className="size-3.5" />
+          <InfoTooltip content="Hide file list">
+            <button onClick={onClose} aria-label="Hide file list" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <PanelRightCloseIcon className="size-3.5" />
             </button>
           </InfoTooltip>
         </div>

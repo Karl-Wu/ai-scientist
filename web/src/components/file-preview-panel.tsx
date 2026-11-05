@@ -182,7 +182,7 @@ function TabBar({
         type="button"
         data-active={showNotebook}
         onClick={onSelectNotebook}
-        title="Lab Notebook"
+        title="Journal"
         className={cn(
           "group relative flex shrink-0 cursor-pointer select-none lg:hidden",
           "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
@@ -191,8 +191,8 @@ function TabBar({
             : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         )}
       >
-        <BookOpenIcon className="size-3.5 shrink-0 text-orange-500" />
-        <span className="whitespace-nowrap font-medium">Lab Notebook</span>
+        <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
+        <span className="whitespace-nowrap font-medium">Journal</span>
       </button>
 
       {/* Pinned Compute tab — project job history, never closable */}
@@ -219,7 +219,7 @@ function TabBar({
           type="button"
           data-active={showAutomation}
           onClick={onSelectAutomation}
-          title="Schedules and missions"
+          title="Scheduled tasks and ongoing missions"
           className={cn(
             "group relative flex shrink-0 select-none lg:hidden",
             "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
@@ -229,7 +229,7 @@ function TabBar({
           )}
         >
           <AlarmClockIcon className="size-3.5 shrink-0 text-emerald-500" />
-          <span className="whitespace-nowrap font-medium">Automation</span>
+          <span className="whitespace-nowrap font-medium">Tasks</span>
         </button>
       )}
 

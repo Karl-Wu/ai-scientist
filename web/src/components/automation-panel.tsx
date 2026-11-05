@@ -2,7 +2,7 @@
 import { SubagentFleetPanel } from "./subagent-fleet-panel";
 
 /**
- * Project "Automation" tab: pi-subagents durable schedules (recurring or
+ * Project "Tasks" tab: pi-subagents durable schedules (recurring or
  * one-shot specialist runs that fire from AI Scientist's resident session, even with
  * no chat tab open) and missions (durable records of delegated work).
  * Schedules are created conversationally ("run the QC pipeline every 6h");
@@ -158,14 +158,14 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
       {dialog}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Automation</h3>
+          <h3 className="text-sm font-medium">Tasks</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one
             (&ldquo;re-run the QC report every 6 hours&rdquo;); they fire from a resident session even with no
             chat open and pause automatically when the project spend limit is reached.
           </p>
         </div>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} aria-label="Refresh automation">
+        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} aria-label="Refresh tasks">
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -182,15 +182,16 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <section aria-label="Schedules" className="flex flex-col gap-2">
+      <section aria-label="Scheduled tasks" className="flex flex-col gap-2">
         <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <AlarmClockIcon className="size-3.5" /> Schedules
+          <AlarmClockIcon className="size-3.5" /> Scheduled tasks
         </h4>
+        <p className="text-xs text-muted-foreground">Tasks that run once at a set time or repeat on a schedule.</p>
         {!loaded ? (
           <p className="text-xs text-muted-foreground">Loading…</p>
         ) : schedules.length === 0 ? (
           <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            No schedules yet. In a chat: &ldquo;every night at 2am, have the data validator re-check user_data
+            No scheduled tasks yet. In a chat: &ldquo;every night at 2am, have the data validator re-check user_data
             and log a notebook entry&rdquo;.
           </p>
         ) : (
@@ -280,6 +281,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <FlagIcon className="size-3.5" /> Missions
         </h4>
+        <p className="text-xs text-muted-foreground">Ongoing, multi-step tasks with saved progress, decisions, and results.</p>
         {loaded && missions.length === 0 && (
           <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
             No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive

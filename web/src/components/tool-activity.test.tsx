@@ -21,8 +21,9 @@ describe("ToolActivityList", () => {
         ]}
       />,
     );
-    expect(container.querySelector('[data-tool-call-id="tc_a"]')).not.toBeNull();
     expect(container.querySelector('[data-tool-call-id="tc_b"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Earlier activity/ }));
+    expect(container.querySelector('[data-tool-call-id="tc_a"]')).not.toBeNull();
   });
 
   it("renders nothing for an empty activity list", () => {
@@ -204,13 +205,13 @@ describe("NotebookEntryChip", () => {
         item={item({ toolName: "notebook", args: { type: "hypothesis", title: "Six cell types" } })}
       />,
     );
-    expect(screen.getByText("Notebook · Hypothesis")).toBeInTheDocument();
+    expect(screen.getByText("Journal · Hypothesis")).toBeInTheDocument();
     expect(screen.getByText("Six cell types")).toBeInTheDocument();
   });
 
   it("falls back to 'Entry' when the args carry no type", () => {
     render(<NotebookEntryChip item={item({ toolName: "notebook", args: {} })} />);
-    expect(screen.getByText("Notebook · Entry")).toBeInTheDocument();
+    expect(screen.getByText("Journal · Entry")).toBeInTheDocument();
   });
 
   it("carries the tool-call id on its root element", () => {
@@ -220,17 +221,17 @@ describe("NotebookEntryChip", () => {
     expect(container.querySelector('[data-tool-call-id="tc_9"]')).not.toBeNull();
   });
 
-  it("shows 'View in notebook' only when onView is given, and fires it with the entry id", () => {
+  it("shows 'View in journal' only when onView is given, and fires it with the entry id", () => {
     const onView = vi.fn();
     const { rerender } = render(
       <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} />,
     );
-    expect(screen.queryByRole("button", { name: /view in notebook/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /view in journal/i })).not.toBeInTheDocument();
 
     rerender(
       <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} onView={onView} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /view in notebook/i }));
+    fireEvent.click(screen.getByRole("button", { name: /view in journal/i }));
     expect(onView).toHaveBeenCalledWith("tc_9");
   });
 });

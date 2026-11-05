@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileTreePanel } from "@/components/sandbox-panel";
 import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/lazy-surfaces";
 import type { Model } from "@/components/model-selector";
@@ -23,7 +24,6 @@ import {
   summarizeProjectActivity,
   type ProjectActivitySummary,
 } from "@/lib/project-activity";
-import { onChatPrefill } from "@/lib/chat-prefill";
 import { onOpenSettings, type OpenSettingsRequest } from "@/lib/settings-nav";
 import {
   OPEN_MODAL_JOB_EVENT,
@@ -32,6 +32,9 @@ import {
 import { isHiddenManagedSandboxFilePath, isJunkFilePath } from "@/lib/utils";
 import {
   AlarmClockIcon,
+  ChevronLeftIcon,
+  FolderIcon,
+  WorkflowIcon,
   BookOpenIcon,
   FilesIcon,
   PanelLeftIcon,
@@ -75,7 +78,7 @@ const MAX_CHAT_TABS = 10;
 const MIN_CHAT_WIDTH = 280;
 const MAX_CHAT_WIDTH = 1200;
 const MIN_PROJECT_PANEL_WIDTH = 320;
-type ProjectDestination = "files" | "notebook" | "compute" | "automation";
+type ProjectDestination = "workflows" | "files" | "notebook" | "compute" | "automation";
 
 function maxChatWidthForViewport(): number {
   return Math.min(MAX_CHAT_WIDTH, Math.max(MIN_CHAT_WIDTH, window.innerWidth - MIN_PROJECT_PANEL_WIDTH));
@@ -84,36 +87,35 @@ function maxChatWidthForViewport(): number {
 function ProjectNavigation({
   active,
   onSelect,
-  fileTreeVisible,
-  onToggleFileTree,
   orientation = "vertical",
 }: {
-  active: ProjectDestination;
+  active: ProjectDestination | undefined;
   onSelect: (destination: ProjectDestination) => void;
-  fileTreeVisible: boolean;
-  onToggleFileTree: () => void;
-  orientation?: "vertical" | "horizontal";
+  orientation?: "vertical" | "horizontal" | "sidebar";
 }) {
   const horizontal = orientation === "horizontal";
+  const sidebar = orientation === "sidebar";
   const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
     { id: "files", label: "Files", hint: "Browse and manage project files", Icon: FilesIcon, color: "text-blue-500" },
-    { id: "notebook", label: "Notebook", hint: "One shared lab notebook for this project", Icon: BookOpenIcon, color: "text-orange-500" },
-    { id: "automation", label: "Automation", hint: "Manage project schedules and missions", Icon: AlarmClockIcon, color: "text-emerald-500" },
+    { id: "workflows", label: "Workflows", hint: "Browse and launch scientific workflows", Icon: WorkflowIcon, color: "text-violet-500" },
+    { id: "notebook", label: "Journal", hint: "One shared research journal for this project", Icon: BookOpenIcon, color: "text-blue-500" },
+    { id: "automation", label: "Tasks", hint: "Manage scheduled tasks and ongoing missions", Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
+
 
   return (
     <nav
       aria-label="Project navigation"
       className={cn(
-        "hidden shrink-0 bg-muted/20 lg:flex",
-        horizontal
+        sidebar ? "flex min-w-0 shrink-0 flex-col gap-1" : "flex shrink-0 bg-muted/20",
+        sidebar ? "w-full" : horizontal
           ? "box-border min-h-12 w-full min-w-0 max-w-full flex-wrap items-center gap-1 overflow-x-hidden border-b px-2 py-1.5"
           : "w-[72px] flex-col gap-1 border-r p-1.5",
       )}
     >
       {items.map(({ id, label, hint, Icon, color }) => (
+        <div key={id} className="contents">
         <button
-          key={id}
           type="button"
           title={hint}
           aria-label={label}
@@ -122,45 +124,19 @@ function ProjectNavigation({
           onClick={() => onSelect(id)}
           className={cn(
             "shrink-0 font-medium transition-colors",
-            horizontal
+            sidebar ? "flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-xs" : horizontal
               ? "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs"
               : "flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-[8px] leading-none",
             active === id
-              ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+              ? (sidebar ? "bg-muted text-foreground" : "bg-background text-foreground shadow-sm ring-1 ring-border")
               : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
           )}
         >
-          <Icon className={cn(horizontal ? "size-3.5" : "size-4", color)} />
+          <Icon className={cn("shrink-0", horizontal ? "size-3.5" : "size-4", color)} />
           <span className="whitespace-nowrap">{label}</span>
         </button>
+        </div>
       ))}
-      {horizontal && active === "files" && (
-        <InfoTooltip
-          content={
-            <>
-              <b>{fileTreeVisible ? "Hide" : "Show"} file tree</b>
-              <br />
-              Show or hide the project file list.
-            </>
-          }
-        >
-          <button
-            type="button"
-            onClick={onToggleFileTree}
-            aria-label={fileTreeVisible ? "Hide file tree" : "Show file tree"}
-            aria-pressed={fileTreeVisible}
-            title={fileTreeVisible ? "Hide file tree" : "Show file tree"}
-            className={cn(
-              "ml-auto inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 transition-colors",
-              fileTreeVisible
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <PanelRightIcon className="size-3.5" />
-          </button>
-        </InfoTooltip>
-      )}
     </nav>
   );
 }
@@ -443,7 +419,26 @@ function WorkspacePage({
   const [rightPanelOpen, setRightPanelOpen] = useState(
     () => initialState?.rightPanelOpen ?? true,
   );
-  const toggleSandbox = useCallback(() => setSandboxOpen((value) => !value), []);
+  const [narrowProjectLayout, setNarrowProjectLayout] = useState(false);
+  const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const update = () => {
+      setNarrowProjectLayout(media.matches);
+      setFileDrawerOpen(false);
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const openFileList = useCallback(() => {
+    if (narrowProjectLayout) setFileDrawerOpen(true);
+    else setSandboxOpen(true);
+  }, [narrowProjectLayout]);
+  const closeFileList = useCallback(() => {
+    if (narrowProjectLayout) setFileDrawerOpen(false);
+    else setSandboxOpen(false);
+  }, [narrowProjectLayout]);
   const toggleChatNavigation = useCallback(
     () => setChatNavigationOpen((value) => !value),
     [],
@@ -463,7 +458,12 @@ function WorkspacePage({
   const [showCompute, setShowCompute] = useState(
     () => initialState?.showCompute ?? false,
   );
-  const activeProjectDestination: ProjectDestination = showNotebook
+  const [view, setView] = useState<"chat" | "workflows">(
+    () => initialState?.view ?? "chat",
+  );
+  const activeProjectDestination: ProjectDestination = view === "workflows"
+    ? "workflows"
+    : showNotebook
     ? "notebook"
     : showCompute
       ? "compute"
@@ -471,8 +471,9 @@ function WorkspacePage({
         ? "automation"
         : "files";
   const filesOnRight = activeProjectDestination === "files";
-  const showFileTree = sandboxOpen && filesOnRight;
+  const showFileTree = filesOnRight && (narrowProjectLayout ? fileDrawerOpen : sandboxOpen);
   const selectProjectDestination = useCallback((destination: ProjectDestination) => {
+    setView(destination === "workflows" ? "workflows" : "chat");
     setShowNotebook(destination === "notebook");
     setShowCompute(destination === "compute");
     setShowAutomation(destination === "automation");
@@ -493,9 +494,6 @@ function WorkspacePage({
   );
   const [activeTabId, setActiveTabId] = useState<string>(
     () => initialState?.activeTabId ?? initialTabId,
-  );
-  const [view, setView] = useState<"chat" | "workflows">(
-    () => initialState?.view ?? "chat",
   );
   const [tabWorkspaceStates, setTabWorkspaceStates] = useState<
     Record<string, ChatWorkspaceState>
@@ -811,13 +809,6 @@ function WorkspacePage({
     return () => window.removeEventListener("pagehide", flush);
   }, [hydrated, projectId]);
 
-  // Ask AI Scientist handoff: the active tab's composer (mounted even behind the
-  // Workflows view) appends the text; this listener makes it visible.
-  useEffect(() => {
-    if (!isActive) return;
-    return onChatPrefill(() => setView("chat"));
-  }, [isActive]);
-
   // Deep links into Settings ("raise the limit in project settings", …).
   useEffect(() => {
     if (!isActive) return;
@@ -866,7 +857,6 @@ function WorkspacePage({
         : [...prev, { id, title: defaultTabTitle(prev.length) }],
     );
     setActiveTabId(id);
-    setView("chat");
   }, []);
 
   const closeTab = useCallback((id: string) => {
@@ -910,7 +900,6 @@ function WorkspacePage({
 
   const selectTab = useCallback((id: string) => {
     setActiveTabId(id);
-    setView("chat");
   }, []);
 
   // A tab whose stored session no longer exists on disk: keep the tab, drop the
@@ -940,7 +929,6 @@ function WorkspacePage({
         Object.entries(tabsMeta).find(([, meta]) => meta.sessionId === sessionId)?.[0];
       if (openTabId) {
         setActiveTabId(openTabId);
-        setView("chat");
         return;
       }
       if (tabsRef.current.length >= MAX_CHAT_TABS) return;
@@ -949,28 +937,27 @@ function WorkspacePage({
         prev.length >= MAX_CHAT_TABS ? prev : [...prev, { id, title, sessionId }],
       );
       setActiveTabId(id);
-      setView("chat");
     },
     [tabsMeta],
   );
 
   // ------------------------------------------------------------------
   // Workflow launch — routes to the active chat tab via its imperative
-  // handle and switches the view back to "chat".
+  // handle while keeping the workflow catalogue open.
   // ------------------------------------------------------------------
 
   const handleWorkflowLaunch = useCallback(
     async (prompt: string, model: Model, inputFiles: string[]) => {
       const handle = tabHandles.current.get(activeTabId);
-      if (!handle) return;
-      setView("chat");
+      if (!handle || activeMeta?.isStreaming) return;
       await handle.launchWorkflow(prompt, model, inputFiles);
     },
-    [activeTabId],
+    [activeTabId, activeMeta?.isStreaming],
   );
 
   const handleFileSelect = useCallback((path: string) => {
     sandboxSelectFile(path);
+    setView("chat");
     setShowNotebook(false);
     setShowCompute(false);
     setShowAutomation(false);
@@ -978,7 +965,6 @@ function WorkspacePage({
   const handleOrganizeFiles = useCallback(() => {
     const handle = tabHandles.current.get(activeTabId);
     if (!handle) return;
-    setView("chat");
     void handle.sendQuick(ORGANIZE_FILES_PROMPT);
   }, [activeTabId]);
 
@@ -987,6 +973,7 @@ function WorkspacePage({
   // ------------------------------------------------------------------
   const [notebookFocus, setNotebookFocus] = useState<{ id: string; token: number } | null>(null);
   const handleViewInNotebook = useCallback((entryId: string) => {
+    setView("chat");
     setShowCompute(false);
     setShowAutomation(false);
     setShowNotebook(true);
@@ -994,6 +981,7 @@ function WorkspacePage({
   }, []);
   const [computeFocus, setComputeFocus] = useState<{ id: string; token: number } | null>(null);
   const handleViewCompute = useCallback((jobId?: string) => {
+    setView("chat");
     setShowNotebook(false);
     setShowAutomation(false);
     setShowCompute(true);
@@ -1015,7 +1003,6 @@ function WorkspacePage({
       // Un-hide the chat column without toggling it closed, then scroll once
       // display:none has lifted (scrollIntoView no-ops on hidden elements).
       setChatNavigationOpen(true);
-      setView("chat");
       setTimeout(() => {
         const ok = tabHandles.current.get(activeTabId)?.scrollToToolCall(entryId) ?? false;
         if (!ok) toast.error("Couldn't find this entry in the chat transcript.");
@@ -1107,14 +1094,17 @@ function WorkspacePage({
       tree={sandbox.tree}
       selectedPath={sandbox.activeTabPath}
       uploading={sandbox.uploading}
-      onSelect={handleFileSelect}
+      onSelect={(path) => {
+        handleFileSelect(path);
+        if (narrowProjectLayout) setFileDrawerOpen(false);
+      }}
       onDownload={sandbox.downloadFile}
       onDelete={sandbox.deleteFile}
       onDownloadDir={sandbox.downloadDir}
       onDeleteDir={sandbox.deleteDir}
       onDownloadAll={sandbox.downloadAll}
       onRefresh={sandbox.fetchTree}
-      onClose={toggleSandbox}
+      onClose={closeFileList}
       onUpload={sandbox.uploadFiles}
       onOrganize={handleOrganizeFiles}
       onMove={sandbox.moveItem}
@@ -1211,7 +1201,7 @@ function WorkspacePage({
                 <>
                   <b>{rightPanelOpen ? "Hide" : "Show"} right panel</b>
                   <br />
-                  Show or hide Files, Notebook, and Automation.
+                  Show or hide Files, Workflows, Journal, and Tasks.
                 </>
               }
             >
@@ -1288,17 +1278,30 @@ function WorkspacePage({
             ? "flex h-[var(--mobile-project-height)] flex-none lg:h-auto"
             : "hidden",
         )} style={{ "--mobile-project-height": `${mobileProjectHeight}dvh` } as CSSProperties}>
-          {isActive && (
+          {isActive && !chatNavigationOpen && (
             <ProjectNavigation
               active={activeProjectDestination}
               onSelect={selectProjectDestination}
               orientation="horizontal"
-              fileTreeVisible={showFileTree}
-              onToggleFileTree={toggleSandbox}
             />
           )}
-          <div data-project-content-panels className="flex min-h-0 min-w-0 flex-1 flex-col-reverse overflow-hidden lg:flex-row">
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div data-project-content-panels className="relative flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {view === "workflows" && (
+                <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+                  <WorkflowsPanel
+                    onLaunch={handleWorkflowLaunch}
+                    onUploadFiles={sandbox.uploadFiles}
+                    availableFiles={allFiles}
+                    availableFolders={allFolders}
+                    filesReady={sandbox.tree !== null}
+                    onRefreshFiles={sandbox.fetchTree}
+                    chatRunning={activeMeta?.isStreaming ?? false}
+                    budgetBlocked={projectCost.budget.state === "exceeded"}
+                  />
+                </div>
+              )}
+              <div className={cn("min-h-0 min-w-0 flex-1 overflow-hidden", view === "workflows" && "hidden")}>
               <FilePreviewPanel
                 projectId={projectId}
                 isActive={isActive}
@@ -1313,25 +1316,13 @@ function WorkspacePage({
                 onRetry={sandbox.retryFile}
                 onCompileLatex={sandbox.compileLatex}
                 showNotebook={showNotebook}
-                onSelectNotebook={() => {
-                  setShowCompute(false);
-                  setShowAutomation(false);
-                  setShowNotebook(true);
-                }}
+                onSelectNotebook={() => selectProjectDestination("notebook")}
                 showCompute={showCompute}
-                onSelectCompute={() => {
-                  setShowNotebook(false);
-                  setShowAutomation(false);
-                  setShowCompute(true);
-                }}
+                onSelectCompute={() => selectProjectDestination("compute")}
                 showAutomation={showAutomation}
-                onSelectAutomation={() => {
-                  setShowNotebook(false);
-                  setShowCompute(false);
-                  setShowAutomation(true);
-                }}
+                onSelectAutomation={() => selectProjectDestination("automation")}
                 fileTreeVisible={showFileTree}
-                onShowFileTree={() => setSandboxOpen(true)}
+                onShowFileTree={openFileList}
                 computeSessionId={activeSessionId}
                 computeScope={computeScope}
                 onComputeScopeChange={setComputeScope}
@@ -1346,24 +1337,47 @@ function WorkspacePage({
                 onNotebookJumpToChat={handleNotebookJumpToChat}
                 onOpenNotebookEntry={handleViewInNotebook}
               />
+              </div>
             </div>
-            {isActive && filesOnRight && showFileTree && (
-              <div className="lg:hidden">
-                <ResizeHandle orientation="horizontal" onPointerDown={startDrag("mobile-files")} />
+            {isActive && filesOnRight && !showFileTree && (
+              <div className="flex w-9 shrink-0 items-start justify-center border-l bg-muted/10 pt-2">
+                <button
+                  type="button"
+                  onClick={openFileList}
+                  aria-label="Show file list"
+                  aria-expanded={false}
+                  title="Show file list"
+                  className="flex flex-col items-center gap-1 rounded-l-md border border-r-0 bg-background px-1 py-2 text-blue-500 shadow-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <FolderIcon className="size-4" />
+                  <ChevronLeftIcon className="size-3" />
+                </button>
               </div>
             )}
-            {isActive && filesOnRight && showFileTree && (
-              <div className="-mr-1 hidden lg:flex">
-                <ResizeHandle onPointerDown={startDrag("tree")} />
-              </div>
+            {isActive && filesOnRight && showFileTree && !narrowProjectLayout && (
+              <>
+                <div className="-mr-1 flex">
+                  <ResizeHandle onPointerDown={startDrag("tree")} />
+                </div>
+                <div
+                  className="flex min-h-0 min-w-0 flex-none shrink-0 flex-col overflow-hidden w-[min(var(--tree-width),30vw)]"
+                  style={{ "--tree-width": `${treeWidth}px` } as CSSProperties}
+                >
+                  {projectFilesPanel}
+                </div>
+              </>
             )}
-            {isActive && filesOnRight && showFileTree && (
-              <div
-                className="flex min-h-0 min-w-0 basis-[var(--mobile-files-height)] flex-col overflow-hidden lg:min-w-0 lg:flex-none lg:shrink-0 lg:basis-auto lg:w-[min(var(--tree-width),30vw)]"
-                style={{ "--tree-width": `${treeWidth}px`, "--mobile-files-height": `${mobileFilesHeight}%` } as CSSProperties}
-              >
-                {projectFilesPanel}
-              </div>
+            {isActive && filesOnRight && narrowProjectLayout && (
+              <Dialog open={fileDrawerOpen} onOpenChange={setFileDrawerOpen}>
+                <DialogContent
+                  showCloseButton={false}
+                  aria-describedby={undefined}
+                  className="inset-y-0 left-auto right-0 top-0 flex h-dvh w-[360px] max-w-[90vw] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-r-0 p-0 sm:max-w-[90vw]"
+                >
+                  <DialogTitle className="sr-only">Project files</DialogTitle>
+                  {projectFilesPanel}
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         </div>
@@ -1396,15 +1410,23 @@ function WorkspacePage({
             <ChatTabsBar
               projectId={projectId}
               width={visibleChatNavWidth}
+              workspaceNavigation={
+                <ProjectNavigation
+                  active={rightPanelOpen ? activeProjectDestination : undefined}
+                  onSelect={(destination) => {
+                    selectProjectDestination(destination);
+                    setRightPanelOpen(true);
+                  }}
+                  orientation="sidebar"
+                />
+              }
               tabs={tabDescriptors}
               activeTabId={activeTabId}
-              view={view}
               maxTabs={MAX_CHAT_TABS}
               onSelect={selectTab}
               onClose={closeTab}
               onNew={newTab}
               onRename={renameTab}
-              onSelectWorkflows={() => setView("workflows")}
               onOpenSession={openSession}
               activeSessionId={activeSessionId}
               canExport={(activeMeta?.userMessageCount ?? 0) > 0}
@@ -1427,7 +1449,7 @@ function WorkspacePage({
                 tabId={t.id}
                 initialSessionId={t.sessionId ?? null}
                 initialWorkspaceState={tabWorkspaceStates[t.id]}
-                isActive={isActive && view === "chat" && t.id === activeTabId}
+                isActive={isActive && t.id === activeTabId}
                 isActiveTab={isActive && t.id === activeTabId}
                 allFiles={allFiles}
                 sandboxReady={sandbox.tree !== null}
@@ -1448,20 +1470,7 @@ function WorkspacePage({
               />
             ))}
 
-            {/* Workflows view */}
-            {isActive && view === "workflows" && (
-              <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-                <WorkflowsPanel
-                  onLaunch={handleWorkflowLaunch}
-                  onUploadFiles={sandbox.uploadFiles}
-                  availableFiles={allFiles}
-                  availableFolders={allFolders}
-                  filesReady={sandbox.tree !== null}
-                  onRefreshFiles={sandbox.fetchTree}
-                  budgetBlocked={projectCost.budget.state === "exceeded"}
-                />
-              </div>
-            )}
+
           </div>
         </div>
 

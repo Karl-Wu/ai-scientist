@@ -97,7 +97,7 @@ describe("AutomationPanel", () => {
     vi.spyOn(lib, "getSchedules").mockResolvedValue({ schedules: [], heldByBudget: [], schedulerSessionId: null });
     vi.spyOn(lib, "getMissions").mockResolvedValue([]);
     render(<AutomationPanel projectId="p1" />);
-    expect(await screen.findByText(/No schedules yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No scheduled tasks yet/)).toBeInTheDocument();
     expect(screen.getByText(/No missions recorded/)).toBeInTheDocument();
   });
 });
