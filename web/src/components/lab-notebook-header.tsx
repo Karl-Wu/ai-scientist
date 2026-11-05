@@ -377,10 +377,8 @@ export function LabNotebookHeader({
             {filteredCount} of {totalCount} shown
           </span>
         )}
-      </div>
-
-      {hasEntries && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b px-4 py-1.5">
+        {hasEntries && (
+          <>
           {ALL_TYPES.map((type) => {
             const meta = TYPE_META[type];
             const active = filters.types.has(type);
@@ -445,8 +443,9 @@ export function LabNotebookHeader({
               </Button>
             )}
           </span>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {hasEntries && hasMeta && (
         <div className="flex flex-col gap-1 border-b px-4 py-1.5 text-[10px] text-muted-foreground">
