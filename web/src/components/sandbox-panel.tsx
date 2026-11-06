@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import {
   FileTreeIcon,
   FileTreeName,
@@ -170,6 +172,7 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
   expandedPaths,
   onToggleDirectory,
 }: VirtualTreeRowProps) {
+  const t = useT();
   const style = {
     height: FILE_TREE_ROW_HEIGHT,
     transform: `translateY(${top}px)`,
@@ -189,7 +192,7 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
         <FolderIcon className="size-4 shrink-0 text-blue-500" />
         <InlineInput
           defaultValue=""
-          placeholder="Folder name"
+          placeholder={t("Folder name")}
           onSubmit={(name) =>
             onCreateDir(row.parentPath ? `${row.parentPath}/${name}` : name)
           }
@@ -291,34 +294,34 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
         )}
         {renamingPath !== node.path && (
           <FileTreeActions
-            aria-label={`Folder actions for ${node.name}`}
+            aria-label={t("Folder actions for {name}", { name: node.name })}
             className={cn(TREE_ACTIONS_CLASS, "group-hover/folder:pointer-events-auto group-hover/folder:opacity-100 group-focus-within/folder:pointer-events-auto group-focus-within/folder:opacity-100")}
           >
             <button
               onClick={() => onStartCreateDir(node.path)}
               className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              title="New folder inside"
+              title={t("New folder inside")}
             >
               <FolderPlusIcon className="size-3" />
             </button>
             <button
               onClick={() => onStartRename(node.path)}
               className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              title={`Rename ${node.name}`}
+              title={t("Rename {name}", { name: node.name })}
             >
               <PencilIcon className="size-3" />
             </button>
             <button
               onClick={() => onDownloadDir(node.path)}
               className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              title={`Download ${node.name} as zip`}
+              title={t("Download {name} as zip", { name: node.name })}
             >
               <DownloadIcon className="size-3" />
             </button>
             <button
               onClick={() => onDeleteDir(node.path)}
               className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-              title={`Delete ${node.name}`}
+              title={t("Delete {name}", { name: node.name })}
             >
               <Trash2Icon className="size-3" />
             </button>
@@ -372,27 +375,27 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
       )}
       {renamingPath !== node.path && (
         <FileTreeActions
-          aria-label={`File actions for ${node.name}`}
+          aria-label={t("File actions for {name}", { name: node.name })}
           className={cn(TREE_ACTIONS_CLASS, "group-hover/file:pointer-events-auto group-hover/file:opacity-100 group-focus-within/file:pointer-events-auto group-focus-within/file:opacity-100")}
         >
           <button
             onClick={() => onStartRename(node.path)}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-            title={`Rename ${node.name}`}
+            title={t("Rename {name}", { name: node.name })}
           >
             <PencilIcon className="size-3" />
           </button>
           <button
             onClick={() => onDownload(node.path)}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-            title={`Download ${node.name}`}
+            title={t("Download {name}", { name: node.name })}
           >
             <DownloadIcon className="size-3" />
           </button>
           <button
             onClick={() => onDelete(node.path)}
             className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-            title={`Delete ${node.name}`}
+            title={t("Delete {name}", { name: node.name })}
           >
             <Trash2Icon className="size-3" />
           </button>
@@ -458,6 +461,7 @@ export const FileTreePanel = memo(function FileTreePanel({
   onRename,
   onCreateDir,
 }: FileTreePanelProps) {
+  const t = useT();
   const displayTree = useMemo(() => (tree ? hideManagedProjectConfig(tree) : null), [tree]);
   const totalFiles = useMemo(() => (displayTree ? countFiles(displayTree) : 0), [displayTree]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -627,7 +631,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-primary/5 border-2 border-dashed border-primary rounded-md">
           <div className="flex flex-col items-center gap-1.5">
             <UploadIcon className="size-5 text-primary" />
-            <span className="text-xs font-medium text-primary">Drop files or folders to upload</span>
+            <span className="text-xs font-medium text-primary">{t("Drop files or folders to upload")}</span>
           </div>
         </div>
       )}
@@ -637,17 +641,14 @@ export const FileTreePanel = memo(function FileTreePanel({
           <InfoTooltip
             content={
               <>
-                <b>Project files</b>
+                <b>{t("Project files")}</b>
                 <br />
-                Shared working directory the agent can read from and write to.
-                Drop files/folders here or upload — they persist across turns
-                in this project.
-              </>
+                {t("Shared working directory the agent can read from and write to. Drop files/folders here or upload — they persist across turns in this project.")}</>
             }
           >
             <div className="flex items-center gap-2 cursor-help">
               <FolderOpenIcon className="size-4 text-blue-500" />
-              <span className="font-semibold text-sm">Files</span>
+              <span className="font-semibold text-sm">{t("Files")}</span>
               {totalFiles > 0 && (
                 <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 tabular-nums">
                   {totalFiles}
@@ -667,14 +668,14 @@ export const FileTreePanel = memo(function FileTreePanel({
             <InfoTooltip
               content={
                 <>
-                  <b>Download all as zip</b>
+                  <b>{t("Download all as zip")}</b>
                   <br />
                   Package the entire sandbox into a <kbd>.zip</kbd> for archiving,
                   sharing with collaborators, or your lab notebook.
                 </>
               }
             >
-              <button onClick={onDownloadAll} aria-label="Download all as zip" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <button onClick={onDownloadAll} aria-label={t("Download all as zip")} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <ArchiveIcon className="size-3.5" />
               </button>
             </InfoTooltip>
@@ -682,14 +683,12 @@ export const FileTreePanel = memo(function FileTreePanel({
           <InfoTooltip
             content={
               <>
-                <b>New folder</b>
+                <b>{t("New folder")}</b>
                 <br />
-                Create a subdirectory at the sandbox root. You can also drag
-                files between folders to organize them.
-              </>
+                {t("Create a subdirectory at the sandbox root. You can also drag files between folders to organize them.")}</>
             }
           >
-            <button onClick={() => setCreatingDirIn("")} aria-label="New folder" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <button onClick={() => setCreatingDirIn("")} aria-label={t("New folder")} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <FolderPlusIcon className="size-3.5" />
             </button>
           </InfoTooltip>
@@ -697,15 +696,13 @@ export const FileTreePanel = memo(function FileTreePanel({
             <InfoTooltip
               content={
                 <>
-                  <b>Upload files or folder</b>
+                  <b>{t("Upload files or folder")}</b>
                   <br />
-                  Add data to the sandbox. Folders preserve their structure.
-                  Drag-and-drop anywhere in this panel also works.
-                </>
+                  {t("Add data to the sandbox. Folders preserve their structure. Drag-and-drop anywhere in this panel also works.")}</>
               }
             >
               <DropdownMenuTrigger asChild>
-                <button disabled={uploading} aria-label="Upload files or folder" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50">
+                <button disabled={uploading} aria-label={t("Upload files or folder")} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50">
                   {uploading ? <LoaderIcon className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />}
                 </button>
               </DropdownMenuTrigger>
@@ -713,30 +710,34 @@ export const FileTreePanel = memo(function FileTreePanel({
             <DropdownMenuContent align="end" className="min-w-[140px]">
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                 <UploadIcon className="mr-2 size-3.5" />
-                Upload files
-              </DropdownMenuItem>
+                {t("Upload files")}</DropdownMenuItem>
               <DropdownMenuItem onClick={() => dirInputRef.current?.click()}>
                 <FolderUpIcon className="mr-2 size-3.5" />
-                Upload folder
-              </DropdownMenuItem>
+                {t("Upload folder")}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <InfoTooltip
             content={
               <>
-                <b>Refresh</b>
+                <b>{t("Refresh")}</b>
                 <br />
-                Reload the file tree from disk. Useful if you edited files
-                outside of AI Scientist.
-              </>
+                {t("Reload the file tree from disk. Useful if you edited files outside of AI Scientist.")}</>
             }
           >
-            <button onClick={onRefresh} aria-label="Refresh" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <button onClick={onRefresh} aria-label={t("Refresh")} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <RefreshCwIcon className="size-3.5" />
             </button>
           </InfoTooltip>
-          <InfoTooltip content="Hide file list">
-            <button onClick={onClose} aria-label="Hide file list" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <InfoTooltip
+            content={
+              <>
+                <b>{t("Hide file list")}</b>
+                <br />
+                {t("Give the preview more space. Reopen the file list from the right edge.")}
+              </>
+            }
+          >
+            <button onClick={onClose} aria-label={t("Hide file list")} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <PanelRightCloseIcon className="size-3.5" />
             </button>
           </InfoTooltip>
@@ -748,7 +749,7 @@ export const FileTreePanel = memo(function FileTreePanel({
         ref={treeViewportRef}
         className="flex-1 overflow-y-auto p-2"
         role="tree"
-        aria-label="Project files"
+        aria-label={t("Project files")}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         {!displayTree || ((displayTree.children ?? []).length === 0 && creatingDirIn === null) ? (
@@ -757,8 +758,8 @@ export const FileTreePanel = memo(function FileTreePanel({
               <FolderOpenIcon className="size-5 text-muted-foreground/50" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-medium text-muted-foreground">No files yet</p>
-              <p className="text-[11px] text-muted-foreground/60">Drop files or folders here, or use the upload button</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("No files yet")}</p>
+              <p className="text-[11px] text-muted-foreground/60">{t("Drop files or folders here, or use the upload button")}</p>
             </div>
           </div>
         ) : (
@@ -805,24 +806,22 @@ export const FileTreePanel = memo(function FileTreePanel({
  * an explicit confirm.
  */
 function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <InfoTooltip
         content={
           <>
-            <b>Auto-organize files</b>
+            <b>{t("Auto-organize files")}</b>
             <br />
-            Ask the agent to tidy the sandbox — group related files into
-            folders (raw data, figures, notebooks, results). Does not
-            delete anything.
-          </>
+            {t("Ask the agent to tidy the sandbox — group related files into folders (raw data, figures, notebooks, results). Does not delete anything.")}</>
         }
       >
         <PopoverTrigger asChild>
           <button
             type="button"
-            aria-label="Auto-organize files"
+            aria-label={t("Auto-organize files")}
             className={cn(
               "rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
               open && "bg-muted text-foreground",
@@ -836,13 +835,9 @@ function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
         <div className="flex items-start gap-2.5">
           <WandSparklesIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold leading-tight">Organize the sandbox with AI Scientist?</p>
+            <p className="text-sm font-semibold leading-tight">{t("Organize the sandbox with AI Scientist?")}</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Starts a run in the active chat with its current model. AI Scientist
-              proposes a folder layout, moves files into it (nothing is
-              deleted), and updates paths in scripts and notebooks that
-              referenced the moved files.
-            </p>
+              {t("Starts a run in the active chat with its current model. AI Scientist proposes a folder layout, moves files into it (nothing is deleted), and updates paths in scripts and notebooks that referenced the moved files.")}</p>
           </div>
         </div>
         <div className="mt-3 flex justify-end gap-2">
@@ -851,8 +846,7 @@ function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
             onClick={() => setOpen(false)}
             className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            Cancel
-          </button>
+            {t("Cancel")}</button>
           <button
             type="button"
             onClick={() => {
@@ -861,8 +855,7 @@ function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
             }}
             className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Organize files
-          </button>
+            {t("Organize files")}</button>
         </div>
       </PopoverContent>
     </Popover>

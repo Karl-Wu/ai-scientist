@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useState } from "react";
 import { BrainIcon, CheckIcon, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,7 @@ export function ThinkingSelector({
   disabled?: boolean;
   disabledReason?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const current = THINKING_LEVELS.find((l) => l.id === selected) ?? THINKING_LEVELS[0];
 
@@ -55,7 +58,7 @@ export function ThinkingSelector({
           disabled ? "text-muted-foreground" : "font-medium text-foreground",
         )}
       >
-        {disabled ? "Off" : current.label}
+        {disabled ? t("Off") : t(current.label)}
       </span>
       {!disabled && (
         <ChevronDownIcon
@@ -74,7 +77,7 @@ export function ThinkingSelector({
         <Tooltip>
           <TooltipTrigger asChild>{chip}</TooltipTrigger>
           <TooltipContent side="top" className="max-w-56">
-            {disabledReason}
+            {t(disabledReason)}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -93,8 +96,7 @@ export function ThinkingSelector({
       >
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Thinking
-          </span>
+            {t("Thinking")}</span>
         </div>
         <div className="max-h-80 overflow-y-auto py-1">
           {THINKING_LEVELS.map((level) => {
@@ -122,9 +124,9 @@ export function ThinkingSelector({
                   {isSelected && <CheckIcon className="size-2" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="font-semibold text-foreground">{level.label}</span>
+                  <span className="font-semibold text-foreground">{t(level.label)}</span>
                   <p className="mt-0.5 text-muted-foreground/80 leading-relaxed">
-                    {level.description}
+                    {t(level.description)}
                   </p>
                 </div>
               </div>

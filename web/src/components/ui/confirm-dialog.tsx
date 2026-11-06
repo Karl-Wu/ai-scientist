@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
 import * as React from "react";
 import {
   Dialog,
@@ -38,6 +39,7 @@ interface PendingConfirm extends ConfirmOptions {
  *   return <>{dialog}…</>;
  */
 export function useConfirm() {
+  const t = useT();
   const [pending, setPending] = React.useState<PendingConfirm | null>(null);
 
   const confirm = React.useCallback(
@@ -78,14 +80,14 @@ export function useConfirm() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => settle(false)}>
-              {pending.cancelLabel ?? "Cancel"}
+              {pending.cancelLabel ?? t("Cancel")}
             </Button>
             <Button
               variant={pending.destructive ? "destructive" : "default"}
               onClick={() => settle(true)}
               autoFocus
             >
-              {pending.confirmLabel ?? "Confirm"}
+              {pending.confirmLabel ?? t("Confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

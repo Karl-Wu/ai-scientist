@@ -1,5 +1,8 @@
 "use client";
 
+import { relativeTime } from "@/lib/locale-time";
+import { useT, useLocale } from "@/components/i18n-provider";
+
 import {
   DownloadIcon,
   FileTextIcon,
@@ -73,22 +76,10 @@ interface SessionListItem {
   firstMessage?: string | null;
 }
 
-function sessionTitle(s: SessionListItem): string {
+function sessionTitle(s: SessionListItem, untitled: string): string {
   const raw = (s.name ?? commandPreview(s.firstMessage ?? "")).replace(/\s+/g, " ").trim();
-  if (!raw) return "Untitled chat";
+  if (!raw) return untitled;
   return raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
-}
-
-function relativeTime(value: string | number): string {
-  const then = new Date(value).getTime();
-  if (!Number.isFinite(then)) return "";
-  const mins = Math.round((Date.now() - then) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return days < 7 ? `${days}d ago` : new Date(then).toLocaleDateString();
 }
 
 /** Unified list of open tabs and saved conversations, ordered by recent activity. */
@@ -111,6 +102,8 @@ function RecentChatsList({
   onRenameTab: (id: string, title: string) => void;
   onOpenSession: (sessionId: string, title: string) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -182,9 +175,9 @@ function RecentChatsList({
   const deleteChat = async (title: string, tab?: ChatTabDescriptor, sessionId = tab?.sessionId) => {
     if (tab?.isStreaming || deletingId) return;
     const ok = await confirm({
-      title: `Delete “${title}”?`,
-      description: "Remove this conversation and its chat history from Recent chats. Project files, notebook entries and cost records are kept.",
-      confirmLabel: "Delete",
+      title: t("Delete “{name}”?", { name: title }),
+      description: t("Remove this conversation and its chat history from Recent chats. Project files, notebook entries and cost records are kept."),
+      confirmLabel: t("Delete"),
       destructive: true,
     });
     if (!ok) return;
@@ -205,24 +198,22 @@ function RecentChatsList({
         onCloseTab(tab.id);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not delete chat. Please try again.");
+      toast.error(error instanceof Error ? error.message : t("Could not delete chat. Please try again."));
     } finally {
       setDeletingId(null);
     }
   };
 
   return (
-    <section className="mt-3 min-w-0" aria-label="Recent chats">
+    <section className="mt-3 min-w-0" aria-label={t("Recent chats")}>
       {dialog}
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Sessions
-      </h2>
+        {t("Sessions")}</h2>
       {sessions === null && tabs.length === 0 ? (
-        <div className="px-2 py-2 text-[11px] text-muted-foreground">Loading chats…</div>
+        <div className="px-2 py-2 text-[11px] text-muted-foreground">{t("Loading chats…")}</div>
       ) : unpersistedTabs.length === 0 && recentSessions.length === 0 ? (
         <div className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          No chats yet.
-        </div>
+          {t("No chats yet.")}</div>
       ) : (
         <div className="flex flex-col gap-0.5">
           {unpersistedTabs.map((tab) => {
@@ -242,10 +233,10 @@ function RecentChatsList({
                   type="button"
                   onClick={() => onSelectTab(tab.id)}
                   onDoubleClick={() => startRename(tab)}
-                  title={`${tab.title} — double-click to rename`}
+                  title={t("{title} — double-click to rename", { title: tab.title })}
                   className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                 >
-                  {tab.isStreaming && <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
+                  {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
                   {isEditing ? (
                     <input
                       ref={inputRef}
@@ -274,8 +265,8 @@ function RecentChatsList({
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          aria-label={`Chat actions for ${tab.title}`}
-                          title="Chat actions"
+                          aria-label={t("Chat actions for {title}", { title: tab.title })}
+                          title={t("Chat actions")}
                           className={CHAT_ACTIONS_CLASS}
                         >
                           <MoreHorizontalIcon className="size-3.5" />
@@ -284,8 +275,7 @@ function RecentChatsList({
                       <DropdownMenuContent align="end" side="right" className="min-w-36">
                         <DropdownMenuItem onSelect={() => startRename(tab)}>
                           <PencilIcon className="size-3.5" />
-                          Rename
-                        </DropdownMenuItem>
+                          {t("Rename")}</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           variant="destructive"
@@ -293,8 +283,7 @@ function RecentChatsList({
                           onSelect={() => void deleteChat(tab.title, tab)}
                         >
                           <Trash2Icon className="size-3.5" />
-                          Delete
-                        </DropdownMenuItem>
+                          {t("Delete")}</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </>
@@ -303,7 +292,7 @@ function RecentChatsList({
             );
           })}
           {recentSessions.map(({ session, tab }) => {
-            const title = sessionTitle(session);
+            const title = sessionTitle(session, t("Untitled chat"));
             const rowTitle = tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
             return (
               <div
@@ -317,13 +306,13 @@ function RecentChatsList({
               >
                 <button
                   type="button"
-                  title={`${rowTitle} · ${tab?.isStreaming ? "Running" : relativeTime(session.modified)}`}
+                  title={`${rowTitle} · ${tab?.isStreaming ? t("Running") : relativeTime(session.modified, locale)}`}
                   onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                   onDoubleClick={() => tab && startRename(tab)}
                   className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                 >
                   {tab?.isStreaming && (
-                    <LoaderCircleIcon role="status" aria-label="Chat is running" aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
+                    <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
                   )}
                   {editingId === tab?.id && tab ? (
                     <input
@@ -347,7 +336,7 @@ function RecentChatsList({
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{rowTitle}</span>
                       <span className="text-[10px] text-muted-foreground/75">
-                        {relativeTime(session.modified)}
+                        {relativeTime(session.modified, locale)}
                       </span>
                     </span>
                   )}
@@ -357,8 +346,8 @@ function RecentChatsList({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        aria-label={`Chat actions for ${rowTitle}`}
-                        title="Chat actions"
+                        aria-label={t("Chat actions for {title}", { title: rowTitle })}
+                        title={t("Chat actions")}
                         className={CHAT_ACTIONS_CLASS}
                       >
                         <MoreHorizontalIcon className="size-3.5" />
@@ -369,8 +358,7 @@ function RecentChatsList({
                         <>
                           <DropdownMenuItem onSelect={() => startRename(tab)}>
                             <PencilIcon className="size-3.5" />
-                            Rename
-                          </DropdownMenuItem>
+                            {t("Rename")}</DropdownMenuItem>
                           <DropdownMenuSeparator />
                         </>
                       )}
@@ -380,8 +368,7 @@ function RecentChatsList({
                         onSelect={() => void deleteChat(rowTitle, tab, session.id)}
                       >
                         <Trash2Icon className="size-3.5" />
-                        Delete
-                      </DropdownMenuItem>
+                        {t("Delete")}</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -430,52 +417,48 @@ function ExportMenu({
   sessionId: string;
   orientation?: "horizontal" | "vertical";
 }) {
+  const t = useT();
   const vertical = orientation === "vertical";
   return (
     <DropdownMenu>
       <InfoTooltip
         content={
           <>
-            <b>Export session</b>
+            <b>{t("Export session")}</b>
             <br />
-            Download a reproducible record of this chat — a runnable shell
-            script of every command the agent ran, or a full lab notebook.
-          </>
+            {t("Download a reproducible record of this chat — a runnable shell script of every command the agent ran, or a full lab notebook.")}</>
         }
       >
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Export session"
+            aria-label={t("Export session")}
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
               vertical && "w-full justify-start",
             )}
           >
             <DownloadIcon className="size-3.5" />
-            Export
-          </button>
+            {t("Export")}</button>
         </DropdownMenuTrigger>
       </InfoTooltip>
       <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel>Reproducibility export</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Reproducibility export")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => downloadExport(projectId, sessionId, "sh")}>
           <TerminalIcon className="size-4" />
           <div className="flex flex-col">
-            <span>Shell script (.sh)</span>
+            <span>{t("Shell script (.sh)")}</span>
             <span className="text-[11px] text-muted-foreground">
-              Every command, in order
-            </span>
+              {t("Every command, in order")}</span>
           </div>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => downloadExport(projectId, sessionId, "md")}>
           <FileTextIcon className="size-4" />
           <div className="flex flex-col">
-            <span>Lab notebook (.md)</span>
+            <span>{t("Lab notebook (.md)")}</span>
             <span className="text-[11px] text-muted-foreground">
-              Prompts, commands & outputs
-            </span>
+              {t("Prompts, commands & outputs")}</span>
           </div>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -498,6 +481,7 @@ export function ChatTabsBar({
   activeSessionId,
   canExport = false,
 }: ChatTabsBarProps) {
+  const t = useT();
   const atLimit = tabs.length >= maxTabs;
 
   return (
@@ -509,17 +493,16 @@ export function ChatTabsBar({
         content={
           atLimit ? (
             <>
-              <b>Tab limit reached</b>
+              <b>{t("Tab limit reached")}</b>
               <br />
               You can have up to {maxTabs} chat tabs running at once. Close
               one to open a new one.
             </>
           ) : (
             <>
-              <b>New chat</b>
+              <b>{t("New chat")}</b>
               <br />
-              Open another chat in this project.
-            </>
+              {t("Open another chat in this project.")}</>
           )
         }
       >
@@ -527,17 +510,17 @@ export function ChatTabsBar({
           onClick={onNew}
           type="button"
           disabled={atLimit}
-          aria-label="New chat tab"
+          aria-label={t("New chat tab")}
           className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-40"
         >
           <PlusIcon className="size-3.5" />
-          <span>New chat</span>
+          <span>{t("New chat")}</span>
         </button>
       </InfoTooltip>
       <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
         {workspaceNavigation && (
-          <section className="mb-5 mt-3 min-w-0" aria-label="Workspace">
-            <h2 className="px-2 pb-2 text-[10px] font-medium text-muted-foreground">Workspace</h2>
+          <section className="mb-5 mt-3 min-w-0" aria-label={t("Workspace")}>
+            <h2 className="px-2 pb-2 text-[10px] font-medium text-muted-foreground">{t("Workspace")}</h2>
             {workspaceNavigation}
           </section>
         )}

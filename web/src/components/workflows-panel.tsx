@@ -16,7 +16,6 @@ import {
   CloudIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ChevronDownIcon,
   CogIcon,
   CpuIcon,
   CrosshairIcon,
@@ -109,7 +108,8 @@ import workflowsData from "@/data/workflows.json";
 import { useAppDefaults } from "@/lib/app-settings";
 import { WorkflowInputs, type WorkflowInputProps } from "@/components/workflow-inputs";
 import { buildWorkflowPrompt } from "@/lib/workflow-inputs";
-import { useI18n } from "@/components/i18n-provider";
+import { LanguageSelector } from "@/components/language-selector";
+import { useI18n, useT } from "@/components/i18n-provider";
 import type { Locale } from "@/lib/i18n";
 import workflowLocaleZh from "@/data/workflow-locales/zh-CN.json";
 
@@ -296,6 +296,7 @@ export function WorkflowLaunchDialog({
   budgetBlocked?: boolean;
   chatRunning?: boolean;
 } & WorkflowInputProps) {
+  const t = useT();
   const { locale } = useI18n();
   const [model, setModel] = useState<Model>(DEFAULT_MODEL);
   const { modelAvailability, models: knownModels } = useModels();
@@ -365,7 +366,7 @@ export function WorkflowLaunchDialog({
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <p className="text-xs font-medium">{workflow.requiresFiles ? "Workflow data" : "Workflow data (optional)"}</p>
+            <p className="text-xs font-medium">{workflow.requiresFiles ? t("Workflow data") : "Workflow data (optional)"}</p>
             <WorkflowInputs
               availableFiles={availableFiles}
               availableFolders={availableFolders}
@@ -406,7 +407,7 @@ export function WorkflowLaunchDialog({
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label className="text-xs font-medium text-muted-foreground">
-                {isEditingPrompt ? "Edit prompt" : "Prompt preview"}
+                {isEditingPrompt ? "Edit prompt" : t("Prompt preview")}
               </label>
               <button
                 type="button"
@@ -419,7 +420,7 @@ export function WorkflowLaunchDialog({
                 className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <PencilIcon className="size-3" />
-                {isEditingPrompt ? "Done" : "Edit"}
+                {isEditingPrompt ? t("Done") : t("Edit")}
               </button>
             </div>
             {isEditingPrompt ? (
@@ -456,8 +457,7 @@ export function WorkflowLaunchDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+            {t("Cancel")}</Button>
           <Button
             onClick={handleLaunch}
             disabled={chatRunning || uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable}
@@ -473,8 +473,7 @@ export function WorkflowLaunchDialog({
             className="gap-1.5"
           >
             <PlayIcon className="size-3.5" />
-            Run workflow
-          </Button>
+            {t("Run workflow")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -495,7 +494,8 @@ export function WorkflowsPanel({
   budgetBlocked?: boolean;
   chatRunning?: boolean;
 } & WorkflowInputProps) {
-  const { locale, setLocale } = useI18n();
+  const t = useT();
+  const { locale } = useI18n();
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -577,30 +577,19 @@ export function WorkflowsPanel({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search workflows..."
+              placeholder={t("Search workflows...")}
               className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary placeholder:text-muted-foreground/50"
             />
           </div>
-          <div className="relative shrink-0">
-          <select
-            aria-label="Workflow language"
-            value={locale}
-            onChange={(event) => setLocale(event.target.value as Locale)}
-            className="h-9 appearance-none rounded-lg border bg-background pl-3 pr-8 text-xs text-muted-foreground outline-none focus:border-primary"
-          >
-            <option value="en">English</option>
-            <option value="zh-CN">简体中文</option>
-          </select>
-          <ChevronDownIcon aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          </div>
+          <LanguageSelector />
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5">
           {(categoryScroll.left || categoryScroll.right) && (
             <button
               type="button"
-              aria-label="Scroll categories left"
-              title="Previous categories"
+              aria-label={t("Scroll categories left")}
+              title={t("Previous categories")}
               disabled={!categoryScroll.left}
               onClick={() => nudgeCategories(-1)}
               className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-30"
@@ -611,7 +600,7 @@ export function WorkflowsPanel({
           <div
             ref={categoryNavRef}
             onScroll={updateCategoryScroll}
-            aria-label="Workflow categories"
+            aria-label={t("Workflow categories")}
             className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 scrollbar-none"
           >
             {visibleCategories.map((cat) => (
@@ -630,8 +619,8 @@ export function WorkflowsPanel({
           {(categoryScroll.left || categoryScroll.right) && (
             <button
               type="button"
-              aria-label="Scroll categories right"
-              title="More categories"
+              aria-label={t("Scroll categories right")}
+              title={t("More categories")}
               disabled={!categoryScroll.right}
               onClick={() => nudgeCategories(1)}
               className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-30"
@@ -676,8 +665,7 @@ export function WorkflowsPanel({
                             {w.requiresFiles && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-px text-[9px] font-medium text-amber-600 dark:text-amber-400 border border-amber-500/20">
                                 <DatabaseIcon className="size-2.5" />
-                                Needs user data
-                              </span>
+                                {t("Needs user data")}</span>
                             )}
                           </div>
                           <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed line-clamp-1">

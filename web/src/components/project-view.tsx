@@ -1,5 +1,9 @@
 "use client";
 
+import type { Translate } from "@/lib/translations";
+import type { Locale } from "@/lib/i18n";
+import { useT, useLocale } from "@/components/i18n-provider";
+
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -76,26 +80,26 @@ interface ProjectViewProps {
 
 type ProjectSort = "recent" | "name" | "status";
 
-function projectActivityLabel(project: Project): string {
+function projectActivityLabel(project: Project, t: Translate, locale: Locale): string {
   const value = project.updatedAt || project.createdAt;
   const date = new Date(value);
-  if (!value || Number.isNaN(date.getTime())) return "No recent activity";
+  if (!value || Number.isNaN(date.getTime())) return t("No recent activity");
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const then = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const dayDifference = Math.round(
     (today.getTime() - then.getTime()) / 86_400_000,
   );
-  if (dayDifference === 0) return "Updated today";
-  if (dayDifference === 1) return "Updated yesterday";
+  if (dayDifference === 0) return t("Updated today");
+  if (dayDifference === 1) return t("Updated yesterday");
   if (dayDifference > 1 && dayDifference < 7) {
-    return `Updated ${dayDifference} days ago`;
+    return t("Updated {count} days ago", { count: dayDifference });
   }
-  return `Updated ${new Intl.DateTimeFormat(undefined, {
+  return t("Updated {date}", { date: new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(date)}`;
+  }).format(date) });
 }
 
 function projectActivityPriority(
@@ -132,12 +136,12 @@ export function sortProjects(
   });
 }
 
-function projectBudgetLabel(limit: number): string {
-  return `${new Intl.NumberFormat(undefined, {
+function projectBudgetLabel(limit: number, t: Translate, locale: Locale): string {
+  return t("{amount} budget", { amount: new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: limit % 1 === 0 ? 0 : 2,
-  }).format(limit)} budget`;
+  }).format(limit) });
 }
 
 export function ProjectView({
@@ -145,6 +149,7 @@ export function ProjectView({
   projectActivities = {},
   isActive = true,
 }: ProjectViewProps) {
+  const t = useT();
   const {
     projects,
     activeProjectId,
@@ -225,11 +230,11 @@ export function ProjectView({
         await update(project.id, { archived: !project.archived });
       } catch (exc) {
         toast.error(
-          exc instanceof Error ? exc.message : "Could not update project",
+          exc instanceof Error ? exc.message : t("Could not update project"),
         );
       }
     },
-    [update],
+    [update, t],
   );
 
   const handleDelete = useCallback(
@@ -238,8 +243,8 @@ export function ProjectView({
       const confirmed = await confirm({
         title: `Delete "${project.name}"?`,
         description:
-          "Its sandbox files and chats will be permanently removed. This cannot be undone.",
-        confirmLabel: "Delete project",
+          t("Its sandbox files and chats will be permanently removed. This cannot be undone."),
+        confirmLabel: t("Delete project"),
         destructive: true,
       });
       if (!confirmed) return;
@@ -251,7 +256,7 @@ export function ProjectView({
         );
       }
     },
-    [confirm, remove],
+    [confirm, remove, t],
   );
 
   return (
@@ -275,7 +280,7 @@ export function ProjectView({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Open settings"
+            aria-label={t("Open settings")}
             onClick={() => {
               setSettingsRequest(null);
               setSettingsOpen(true);
@@ -289,8 +294,8 @@ export function ProjectView({
               size="icon-sm"
               aria-label={
                 resolvedTheme === "dark"
-                  ? "Switch to light mode"
-                  : "Switch to dark mode"
+                  ? t("Switch to light mode")
+                  : t("Switch to dark mode")
               }
               onClick={() =>
                 setTheme(resolvedTheme === "dark" ? "light" : "dark")
@@ -306,17 +311,13 @@ export function ProjectView({
         <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="flex max-w-2xl flex-col gap-2">
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-              Choose a project
-            </h1>
+              {t("Choose a project")}</h1>
             <p className="text-sm leading-relaxed text-muted-foreground md:text-base">
-              Each project keeps its files, chats, notebook, and research
-              settings separate.
-            </p>
+              {t("Each project keeps its files, chats, notebook, and research settings separate.")}</p>
           </div>
           <Button onClick={openCreate}>
             <PlusIcon data-icon="inline-start" />
-            New project
-          </Button>
+            {t("New project")}</Button>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -325,8 +326,8 @@ export function ProjectView({
               <SearchIcon />
             </InputGroupAddon>
             <InputGroupInput
-              aria-label="Search projects"
-              placeholder="Search projects…"
+              aria-label={t("Search projects")}
+              placeholder={t("Search projects…")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -334,7 +335,7 @@ export function ProjectView({
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
                   size="icon-xs"
-                  aria-label="Clear project search"
+                  aria-label={t("Clear project search")}
                   onClick={() => setSearch("")}
                 >
                   <XIcon />
@@ -346,14 +347,14 @@ export function ProjectView({
             value={sort}
             onValueChange={(value) => setSort(value as ProjectSort)}
           >
-            <SelectTrigger className="w-full sm:w-44" aria-label="Sort projects">
+            <SelectTrigger className="w-full sm:w-44" aria-label={t("Sort projects")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="end">
               <SelectGroup>
-                <SelectItem value="recent">Recent activity</SelectItem>
-                <SelectItem value="name">Project name</SelectItem>
-                <SelectItem value="status">Needs attention</SelectItem>
+                <SelectItem value="recent">{t("Recent activity")}</SelectItem>
+                <SelectItem value="name">{t("Project name")}</SelectItem>
+                <SelectItem value="status">{t("Needs attention")}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -361,12 +362,11 @@ export function ProjectView({
 
         {error && (
           <Alert variant="destructive">
-            <AlertTitle>Projects could not be loaded</AlertTitle>
+            <AlertTitle>{t("Projects could not be loaded")}</AlertTitle>
             <AlertDescription>
               <p>{error}</p>
               <Button variant="outline" size="sm" onClick={() => void refresh()}>
-                Try again
-              </Button>
+                {t("Try again")}</Button>
             </AlertDescription>
           </Alert>
         )}
@@ -374,12 +374,11 @@ export function ProjectView({
         {loading ? (
           <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
             <Spinner />
-            Loading projects…
-          </div>
+            {t("Loading projects…")}</div>
         ) : (
           <div className="flex flex-col gap-8">
             <ProjectSection
-              title="Projects"
+              title={t("Projects")}
               projects={visibleProjects}
               projectActivities={projectActivities}
               activeProjectId={activeProjectId}
@@ -389,14 +388,14 @@ export function ProjectView({
               onDelete={handleDelete}
               emptyMessage={
                 search.trim()
-                  ? "No active projects match your search."
-                  : "Create your first project to start researching."
+                  ? t("No active projects match your search.")
+                  : t("Create your first project to start researching.")
               }
             />
 
             {archivedProjects.length > 0 && (
               <ProjectSection
-                title="Archived"
+                title={t("Archived")}
                 projects={archivedProjects}
                 projectActivities={projectActivities}
                 activeProjectId={activeProjectId}
@@ -414,8 +413,7 @@ export function ProjectView({
       </main>
 
       <footer className="border-t px-6 py-4 text-center text-xs text-muted-foreground">
-        All project data stays on this machine.
-      </footer>
+        {t("All project data stays on this machine.")}</footer>
 
       <ProjectCreateDialog
         open={createOpen}
@@ -542,6 +540,8 @@ function ProjectCard({
   onToggleArchive,
   onDelete,
 }: ProjectCardProps) {
+  const t = useT();
+  const locale = useLocale();
   const hasAttention = Boolean(
     activity &&
       (activity.needsInput > 0 || activity.errors > 0 || activity.blocked > 0),
@@ -571,7 +571,7 @@ function ProjectCard({
       <button
         type="button"
         className="absolute inset-0 rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        aria-label={`Open project ${project.name}`}
+        aria-label={t("Open project {name}", { name: project.name })}
         onClick={onOpen}
       />
       <CardHeader className="pointer-events-none gap-1.5 px-4">
@@ -580,10 +580,10 @@ function ProjectCard({
         </div>
         <CardTitle className="flex min-w-0 items-center gap-1.5 text-sm">
           <span className="truncate">{project.name}</span>
-          {active && <Badge variant="secondary">Current</Badge>}
+          {active && <Badge variant="secondary">{t("Current")}</Badge>}
         </CardTitle>
         <CardDescription className="line-clamp-2 min-h-8 text-xs leading-relaxed">
-          {project.description || "No description yet."}
+          {project.description || t("No description yet.")}
         </CardDescription>
         {activity && (
           <ProjectActivityBadges activity={activity} />
@@ -594,7 +594,7 @@ function ProjectCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Project actions for ${project.name}`}
+                aria-label={t("Project actions for {name}", { name: project.name })}
               >
                 <MoreHorizontalIcon />
               </Button>
@@ -603,21 +603,19 @@ function ProjectCard({
               <DropdownMenuGroup>
                 <DropdownMenuItem onSelect={onEdit}>
                   <SettingsIcon />
-                  Project settings…
-                </DropdownMenuItem>
+                  {t("Project settings…")}</DropdownMenuItem>
                 <DropdownMenuItem onSelect={onToggleArchive}>
                   {project.archived ? (
                     <ArchiveRestoreIcon />
                   ) : (
                     <ArchiveIcon />
                   )}
-                  {project.archived ? "Unarchive" : "Archive"}
+                  {project.archived ? t("Unarchive") : t("Archive")}
                 </DropdownMenuItem>
                 {project.id !== DEFAULT_PROJECT_ID && (
                   <DropdownMenuItem variant="destructive" onSelect={onDelete}>
                     <Trash2Icon />
-                    Delete
-                  </DropdownMenuItem>
+                    {t("Delete")}</DropdownMenuItem>
                 )}
               </DropdownMenuGroup>
             </DropdownMenuContent>
@@ -629,7 +627,7 @@ function ProjectCard({
         <CardContent className="pointer-events-none flex min-h-5 flex-wrap gap-1 px-4">
           {project.spendLimitUsd != null && (
             <Badge variant="secondary">
-              {projectBudgetLabel(project.spendLimitUsd)}
+              {projectBudgetLabel(project.spendLimitUsd, t, locale)}
             </Badge>
           )}
           {project.tags.slice(0, visibleTagLimit).map((tag) => (
@@ -647,11 +645,10 @@ function ProjectCard({
 
       <CardFooter className="pointer-events-none mt-auto justify-between gap-3 px-4">
         <span className="truncate text-xs text-muted-foreground">
-          {projectActivityLabel(project)}
+          {projectActivityLabel(project, t, locale)}
         </span>
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover/card:text-foreground">
-          Open
-          <ArrowUpRightIcon className="size-3.5 transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5" />
+          {t("Open")}<ArrowUpRightIcon className="size-3.5 transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5" />
         </span>
       </CardFooter>
     </Card>
@@ -663,6 +660,7 @@ function ProjectActivityBadges({
 }: {
   activity: ProjectActivitySummary;
 }) {
+  const t = useT();
   const activeOrAttention =
     activity.running > 0 ||
     activity.needsInput > 0 ||
@@ -674,8 +672,8 @@ function ProjectActivityBadges({
           key: "input",
           label:
             activity.needsInput === 1
-              ? "Needs your input"
-              : `${activity.needsInput} need your input`,
+              ? t("Needs your input")
+              : t("{count} need your input", { count: activity.needsInput }),
           className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
           dot: "bg-amber-500 animate-pulse",
         }
@@ -683,7 +681,7 @@ function ProjectActivityBadges({
     activity.errors > 0
       ? {
           key: "error",
-          label: activity.errors === 1 ? "Error" : `${activity.errors} errors`,
+          label: activity.errors === 1 ? t("Error") : t("{count} errors", { count: activity.errors }),
           className: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
           dot: "bg-red-500",
         }
@@ -691,7 +689,7 @@ function ProjectActivityBadges({
     activity.blocked > 0
       ? {
           key: "blocked",
-          label: activity.blocked === 1 ? "Blocked" : `${activity.blocked} blocked`,
+          label: activity.blocked === 1 ? t("Blocked") : t("{count} blocked", { count: activity.blocked }),
           className: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
           dot: "bg-orange-500",
         }
@@ -699,7 +697,7 @@ function ProjectActivityBadges({
     activity.running > 0
       ? {
           key: "running",
-          label: activity.running === 1 ? "Running" : `${activity.running} running`,
+          label: activity.running === 1 ? t("Running") : t("{count} running", { count: activity.running }),
           className: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
           dot: "bg-blue-500 animate-pulse",
         }
@@ -707,7 +705,7 @@ function ProjectActivityBadges({
     !activeOrAttention && activity.done > 0
       ? {
           key: "done",
-          label: "Done",
+          label: t("Done"),
           className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
           dot: "bg-emerald-500",
         }

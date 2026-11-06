@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useId, useMemo, useRef, useState } from "react";
 import { FileIcon, FolderIcon, FolderUpIcon, LoaderIcon, RefreshCwIcon, UploadIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,7 @@ export function WorkflowInputs({
   uploading: boolean;
   onUploadingChange: (uploading: boolean) => void;
 }) {
+  const t = useT();
   const id = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -67,17 +70,17 @@ export function WorkflowInputs({
 
   return <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
     <fieldset className="min-w-0 space-y-2">
-      <legend className="text-xs font-medium">Project sandbox</legend>
-      <p className="text-xs text-muted-foreground">Choose files or folders already in this project, including results from earlier chats. These are on the machine running AI Scientist.</p>
+      <legend className="text-xs font-medium">{t("Project sandbox")}</legend>
+      <p className="text-xs text-muted-foreground">{t("Choose files or folders already in this project, including results from earlier chats. These are on the machine running AI Scientist.")}</p>
       <div className="flex gap-2">
-        <input aria-label="Search sandbox files and folders" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or path" className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs" />
+        <input aria-label="Search sandbox files and folders" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Search by name or path")} className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs" />
         {onRefreshFiles && <Button type="button" size="xs" variant="outline" disabled={refreshing} aria-label="Refresh sandbox files and folders" onClick={async () => {
           setRefreshing(true);
           setError(null);
           try { await onRefreshFiles(); }
           catch { setError("Could not refresh project files. Try again."); }
           finally { setRefreshing(false); }
-        }}><RefreshCwIcon className={refreshing ? "size-3 animate-spin" : "size-3"} /> Refresh</Button>}
+        }}><RefreshCwIcon className={refreshing ? "size-3 animate-spin" : "size-3"} /> {t("Refresh")}</Button>}
       </div>
       {!filesReady ? <p className="text-xs text-muted-foreground">Project file list is not available yet. Refresh to try again, or specify a data location below.</p> : !matches.length ? <p className="text-xs text-muted-foreground">{entries.length ? "No matching files or folders." : "No project files or folders yet. Upload files or specify a data location below."}</p> : <div className="max-h-40 overflow-y-auto rounded border bg-background p-2">
         {matches.slice(0, 100).map(({ path, folder }) => <label key={`${folder}:${path}`} className="flex items-start gap-2 py-1 text-xs">
@@ -98,21 +101,19 @@ export function WorkflowInputs({
       </ul>
       <p className="text-[11px] text-muted-foreground">Removing a selection keeps the data in the project.</p>
     </div>}
-    <p className="text-xs text-muted-foreground">You can also upload from this device or add a host path or data URL. Sources can be combined.</p>
+    <p className="text-xs text-muted-foreground">{t("You can also upload from this device or add a host path or data URL. Sources can be combined.")}</p>
     {onUploadFiles && <div className="flex flex-wrap gap-2">
       <input ref={fileInput} aria-label="Upload workflow files" type="file" multiple className="hidden" onChange={upload} />
       {/* @ts-expect-error -- webkitdirectory is supported in all major browsers */}
       <input ref={folderInput} aria-label="Upload workflow folder" type="file" webkitdirectory="" className="hidden" onChange={upload} />
       <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => fileInput.current?.click()}>
-        {uploading ? <LoaderIcon className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />} Upload files from this device
-      </Button>
+        {uploading ? <LoaderIcon className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />} {t("Upload files from this device")}</Button>
       <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => folderInput.current?.click()}>
-        <FolderUpIcon className="size-3.5" /> Upload folder
-      </Button>
+        <FolderUpIcon className="size-3.5" /> {t("Upload folder")}</Button>
     </div>}
     <details>
-      <summary className="cursor-pointer text-xs font-medium">Use a host path or data URL</summary>
-      <label htmlFor={`${id}-sources`} className="mb-1 mt-2 block text-xs font-medium">Data locations (one per line)</label>
+      <summary className="cursor-pointer text-xs font-medium">{t("Use a host path or data URL")}</summary>
+      <label htmlFor={`${id}-sources`} className="mb-1 mt-2 block text-xs font-medium">{t("Data locations (one per line)")}</label>
       <textarea id={`${id}-sources`} value={sources} onChange={(e) => onSourcesChange(e.target.value)} rows={3}
         placeholder={"/mnt/study/counts.csv\nuser_data/study/\ns3://bucket/study/\nhttps://example.org/data.csv"}
         className="w-full resize-y rounded-md border bg-background px-2 py-1 text-xs" aria-describedby={`${id}-help`} />

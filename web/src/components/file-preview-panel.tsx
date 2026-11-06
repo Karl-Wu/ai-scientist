@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { CsvViewer } from "./csv-viewer";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { PdfViewer } from "@/components/pdf-viewer/pdf-viewer";
@@ -150,6 +152,7 @@ function TabBar({
   showAutomation?: boolean;
   onSelectAutomation?: () => void;
 }) {
+  const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll active tab into view when it changes
@@ -182,7 +185,7 @@ function TabBar({
         type="button"
         data-active={showNotebook}
         onClick={onSelectNotebook}
-        title="Journal"
+        title={t("Journal")}
         className={cn(
           "group relative flex shrink-0 cursor-pointer select-none lg:hidden",
           "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
@@ -192,7 +195,7 @@ function TabBar({
         )}
       >
         <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
-        <span className="whitespace-nowrap font-medium">Journal</span>
+        <span className="whitespace-nowrap font-medium">{t("Journal")}</span>
       </button>
 
       {/* Pinned Compute tab — project job history, never closable */}
@@ -219,7 +222,7 @@ function TabBar({
           type="button"
           data-active={showAutomation}
           onClick={onSelectAutomation}
-          title="Scheduled tasks and ongoing missions"
+          title={t("Scheduled tasks and ongoing missions")}
           className={cn(
             "group relative flex shrink-0 select-none lg:hidden",
             "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
@@ -229,7 +232,7 @@ function TabBar({
           )}
         >
           <AlarmClockIcon className="size-3.5 shrink-0 text-emerald-500" />
-          <span className="whitespace-nowrap font-medium">Tasks</span>
+          <span className="whitespace-nowrap font-medium">{t("Tasks")}</span>
         </button>
       )}
 
@@ -279,7 +282,7 @@ function TabBar({
 
             {/* Unsaved / annotating indicator */}
             {isEditing && (
-              <div className="size-1.5 shrink-0 rounded-full bg-amber-500" title="In edit mode" />
+              <div className="size-1.5 shrink-0 rounded-full bg-amber-500" title={t("In edit mode")} />
             )}
 
             {/* Close button */}
@@ -290,7 +293,7 @@ function TabBar({
                 "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-muted-foreground/20",
                 isActive && "opacity-40"
               )}
-              title="Close tab"
+              title={t("Close tab")}
             >
               <XIcon className="size-3" />
             </button>
@@ -334,13 +337,14 @@ function FileLoadError({
   message: string;
   onRetry?: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-amber-500/10">
         <AlertCircleIcon className="size-5 text-amber-600" />
       </div>
       <div className="space-y-1">
-        <p className="text-sm font-medium">Could not load file</p>
+        <p className="text-sm font-medium">{t("Could not load file")}</p>
         <p className="max-w-md text-xs text-muted-foreground">{message}</p>
       </div>
       {onRetry && (
@@ -349,8 +353,7 @@ function FileLoadError({
           className="mt-1 inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
         >
           <RefreshCcwIcon className="size-3.5" />
-          Retry
-        </button>
+          {t("Retry")}</button>
       )}
     </div>
   );
@@ -1052,6 +1055,7 @@ function ImageAnnotator({
   onDiscard: () => void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
+  const t = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const strokesRef = useRef<Point[][]>([]);
@@ -1216,18 +1220,16 @@ function ImageAnnotator({
             className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
             title="Clear all annotations"
           >
-            <Trash2Icon className="size-3" /> Clear
-          </button>
+            <Trash2Icon className="size-3" /> {t("Clear")}</button>
           <button onClick={onDiscard}
             className="rounded px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            Cancel
-          </button>
+            {t("Cancel")}</button>
           <button onClick={handleSave} disabled={strokeCount === 0 || saving}
             className="flex items-center gap-1.5 rounded bg-red-500 px-2.5 py-1 text-xs text-white transition-opacity disabled:opacity-40"
           >
             {saved ? <CheckIcon className="size-3" /> : null}
-            {saving ? "Saving…" : saved ? "Saved!" : "Save"}
+            {saving ? "Saving…" : saved ? "Saved!" : t("Save")}
           </button>
         </div>
       </div>
@@ -1239,15 +1241,13 @@ function ImageAnnotator({
               onClick={onDiscard}
               className="rounded border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
             >
-              Back to preview
-            </button>
+              {t("Back to preview")}</button>
           </div>
         )}
         {!loaded && !loadError && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="size-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-            Loading…
-          </div>
+            {t("Loading…")}</div>
         )}
         <canvas
           ref={canvasRef}
@@ -1787,6 +1787,7 @@ export function FilePreviewPanel({
   onNotebookJumpToChat,
   onOpenNotebookEntry,
 }: FilePreviewPanelProps) {
+  const t = useT();
   // Per-tab mode tracking
   const [tabModes, setTabModes] = useState<Record<string, PanelMode>>({});
   const dirtyPaths = useRef(new Set<string>());
@@ -1859,19 +1860,17 @@ export function FilePreviewPanel({
               ? "bg-muted text-foreground"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
-          title="Where this file came from"
+          title={t("Where this file came from")}
         >
-          <GitBranchIcon className="size-3" /> Provenance
-        </button>
+          <GitBranchIcon className="size-3" /> {t("Provenance")}</button>
       )}
       {canEdit && mode === "view" && (
         <button
           onClick={() => setMode(selectedPath, "edit")}
           className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="Edit file"
+          title={t("Edit file")}
         >
-          <PencilIcon className="size-3" /> Edit
-        </button>
+          <PencilIcon className="size-3" /> {t("Edit")}</button>
       )}
       {canAnnotate && mode === "view" && (
         <button
@@ -1885,7 +1884,7 @@ export function FilePreviewPanel({
       <button
         onClick={() => onDownload(selectedPath)}
         className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        title="Download"
+        title={t("Download")}
       >
         <DownloadIcon className="size-3.5" />
       </button>
@@ -1981,21 +1980,20 @@ export function FilePreviewPanel({
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium text-muted-foreground">
-              {fileTreeVisible ? "No file selected" : "File list is hidden"}
+              {fileTreeVisible ? t("No file selected") : t("File list is hidden")}
             </p>
             {fileTreeVisible ? (
-              <p className="text-xs text-muted-foreground/60">Select a file from the file list to preview it</p>
+              <p className="text-xs text-muted-foreground/60">{t("Select a file from the file list to preview it")}</p>
             ) : (
               <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-muted-foreground/60">Show the file list to browse project files</p>
+                <p className="text-xs text-muted-foreground/60">{t("Show the file list to browse project files")}</p>
                 {onShowFileTree && (
                   <button
                     type="button"
                     onClick={onShowFileTree}
                     className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
                   >
-                    Show file list
-                  </button>
+                    {t("Show file list")}</button>
                 )}
               </div>
             )}

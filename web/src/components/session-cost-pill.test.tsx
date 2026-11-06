@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { I18nProvider } from "./i18n-provider";
+import { LOCALE_STORAGE_KEY } from "@/lib/i18n";
 import { SessionCostPill } from "./session-cost-pill";
 import type {
   CostEntry,
@@ -70,7 +72,27 @@ function makeProjectSummary(
   };
 }
 
+afterEach(() => window.localStorage.removeItem(LOCALE_STORAGE_KEY));
+
 describe("SessionCostPill", () => {
+  it("localizes the cost trigger, budget warning, reservations and subscription details", async () => {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, "zh-CN");
+    const user = userEvent.setup();
+    render(<I18nProvider><SessionCostPill
+      summary={makeSummary({ totalUsd: 1, totalTokens: 150, agentUsd: 1, subscriptionTokens: 100, entries: [makeEntry({ billingMode: "subscription" })] })}
+      projectSummary={makeProjectSummary({ totalUsd: 2, totalTokens: 500, subscriptionTokens: 100, budget: { state: "exceeded", totalUsd: 5, spentUsd: 2, committedUsd: 5, reservedUsd: 2, inFlightUsd: 1, limitUsd: 4, ratio: 1.25 } })}
+    /></I18nProvider>);
+    const trigger = screen.getByRole("button", { name: /项目计费金额/ });
+    expect(trigger).toHaveTextContent("会话");
+    await user.hover(trigger);
+    expect(await screen.findByText("项目计费支出")).toBeInTheDocument();
+    expect(screen.getByText(/为计算任务预留/)).toBeInTheDocument();
+    expect(screen.getByText(/已达到支出上限。/)).toBeInTheDocument();
+    expect(screen.getByText("订阅用量")).toBeInTheDocument();
+    expect(screen.getByText("anthropic/claude-opus")).toBeInTheDocument();
+    expect(screen.queryByText("Project billable spend")).not.toBeInTheDocument();
+  });
+
   it("renders nothing when the summary is empty", () => {
     const { container } = render(<SessionCostPill summary={makeSummary()} />);
     expect(container.firstChild).toBeNull();

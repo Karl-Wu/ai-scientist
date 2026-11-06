@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileTreePanel } from "@/components/sandbox-panel";
 import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/lazy-surfaces";
@@ -93,21 +95,22 @@ function ProjectNavigation({
   onSelect: (destination: ProjectDestination) => void;
   orientation?: "vertical" | "horizontal" | "sidebar";
 }) {
+  const t = useT();
   const horizontal = orientation === "horizontal";
   const sidebar = orientation === "sidebar";
   const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
-    { id: "files", label: "Files", hint: "Browse and manage project files", Icon: FilesIcon, color: "text-blue-500" },
-    { id: "workflows", label: "Workflows", hint: "Browse and launch scientific workflows", Icon: WorkflowIcon, color: "text-violet-500" },
-    { id: "notebook", label: "Journal", hint: "One shared research journal for this project", Icon: BookOpenIcon, color: "text-blue-500" },
-    { id: "automation", label: "Tasks", hint: "Manage scheduled tasks and ongoing missions", Icon: AlarmClockIcon, color: "text-emerald-500" },
+    { id: "files", label: t("Files"), hint: t("Browse and manage project files"), Icon: FilesIcon, color: "text-blue-500" },
+    { id: "workflows", label: t("Workflows"), hint: t("Browse and launch scientific workflows"), Icon: WorkflowIcon, color: "text-violet-500" },
+    { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-blue-500" },
+    { id: "automation", label: t("Tasks"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
 
 
   return (
     <nav
-      aria-label="Project navigation"
+      aria-label={t("Project navigation")}
       className={cn(
-        sidebar ? "flex min-w-0 shrink-0 flex-col gap-1" : "flex shrink-0 bg-muted/20",
+        sidebar ? "flex min-w-0 shrink-0 flex-col gap-0.5" : "flex shrink-0 bg-muted/20",
         sidebar ? "w-full" : horizontal
           ? "box-border min-h-12 w-full min-w-0 max-w-full flex-wrap items-center gap-1 overflow-x-hidden border-b px-2 py-1.5"
           : "w-[72px] flex-col gap-1 border-r p-1.5",
@@ -124,7 +127,7 @@ function ProjectNavigation({
           onClick={() => onSelect(id)}
           className={cn(
             "shrink-0 font-medium transition-colors",
-            sidebar ? "flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-xs" : horizontal
+            sidebar ? "flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-xs" : horizontal
               ? "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs"
               : "flex h-[54px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-[8px] leading-none",
             active === id
@@ -384,6 +387,7 @@ function WorkspacePage({
   ) => void;
   onOpenProjectView: () => void;
 }) {
+  const t = useT();
   const [sandboxWorkspace, setSandboxWorkspace] = useState<SandboxWorkspaceState>(
     () => initialState?.sandbox ?? { openPaths: [], activePath: null },
   );
@@ -1121,7 +1125,7 @@ function WorkspacePage({
           <button
             type="button"
             onClick={onOpenProjectView}
-            aria-label="Back to projects"
+            aria-label={t("Back to projects")}
             className="flex items-start gap-2"
           >
             {/* Plain <img> to avoid Next/Image's aspect-ratio warning when we
@@ -1176,15 +1180,14 @@ function WorkspacePage({
             <InfoTooltip
               content={
                 <>
-                  <b>{chatNavigationOpen ? "Hide" : "Show"} left navigation</b>
+                  <b>{t(chatNavigationOpen ? "Hide left navigation" : "Show left navigation")}</b>
                   <br />
-                  Show or hide New chat, Recent chats, and Workflows.
-                </>
+                  {t("Show or hide New chat, Recent chats, and Workflows.")}</>
               }
             >
               <button
                 onClick={toggleChatNavigation}
-                aria-label={chatNavigationOpen ? "Hide left navigation" : "Show left navigation"}
+                aria-label={chatNavigationOpen ? t("Hide left navigation") : t("Show left navigation")}
                 aria-pressed={chatNavigationOpen}
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
@@ -1199,15 +1202,14 @@ function WorkspacePage({
             <InfoTooltip
               content={
                 <>
-                  <b>{rightPanelOpen ? "Hide" : "Show"} right panel</b>
+                  <b>{t(rightPanelOpen ? "Hide right panel" : "Show right panel")}</b>
                   <br />
-                  Show or hide Files, Workflows, Journal, and Tasks.
-                </>
+                  {t("Show or hide Files, Workflows, Journal, and Tasks.")}</>
               }
             >
               <button
                 onClick={toggleRightPanel}
-                aria-label={rightPanelOpen ? "Hide right panel" : "Show right panel"}
+                aria-label={rightPanelOpen ? t("Hide right panel") : t("Show right panel")}
                 aria-pressed={rightPanelOpen}
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
@@ -1223,7 +1225,7 @@ function WorkspacePage({
           <InfoTooltip
             content={
               <>
-                <b>Settings</b>
+                <b>{t("Settings")}</b>
                 <br />
                 Model providers and defaults, this project&apos;s budget, skills and
                 specialists, and services like web search and Modal.
@@ -1235,7 +1237,7 @@ function WorkspacePage({
                 setSettingsRequest(null);
                 setSettingsOpen(true);
               }}
-              aria-label="Open settings"
+              aria-label={t("Open settings")}
               className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <SettingsIcon className="size-4" />
@@ -1245,16 +1247,16 @@ function WorkspacePage({
             <InfoTooltip
               content={
                 resolvedTheme === "dark"
-                  ? "Switch to light mode"
-                  : "Switch to dark mode"
+                  ? t("Switch to light mode")
+                  : t("Switch to dark mode")
               }
             >
               <button
                 onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
                 aria-label={
                   resolvedTheme === "dark"
-                    ? "Switch to light mode"
-                    : "Switch to dark mode"
+                    ? t("Switch to light mode")
+                    : t("Switch to dark mode")
                 }
                 className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
@@ -1344,9 +1346,9 @@ function WorkspacePage({
                 <button
                   type="button"
                   onClick={openFileList}
-                  aria-label="Show file list"
+                  aria-label={t("Show file list")}
                   aria-expanded={false}
-                  title="Show file list"
+                  title={t("Show file list")}
                   className="flex flex-col items-center gap-1 rounded-l-md border border-r-0 bg-background px-1 py-2 text-blue-500 shadow-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <FolderIcon className="size-4" />
@@ -1374,7 +1376,7 @@ function WorkspacePage({
                   aria-describedby={undefined}
                   className="inset-y-0 left-auto right-0 top-0 flex h-dvh w-[360px] max-w-[90vw] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-r-0 p-0 sm:max-w-[90vw]"
                 >
-                  <DialogTitle className="sr-only">Project files</DialogTitle>
+                  <DialogTitle className="sr-only">{t("Project files")}</DialogTitle>
                   {projectFilesPanel}
                 </DialogContent>
               </Dialog>

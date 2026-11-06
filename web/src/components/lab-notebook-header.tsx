@@ -1,5 +1,8 @@
 "use client";
 
+import { relativeTime } from "@/lib/locale-time";
+import { useT, useLocale } from "@/components/i18n-provider";
+
 import { useState, type ReactNode } from "react";
 import {
   ActivityIcon,
@@ -62,16 +65,6 @@ const ALL_TYPES: NotebookEntryType[] = [
   "note",
 ];
 
-function relativeUpdate(timestamp?: number): string {
-  if (!timestamp) return "no activity yet";
-  const minutes = Math.floor(Math.max(0, Date.now() - timestamp) / 60_000);
-  if (minutes < 1) return "updated just now";
-  if (minutes < 60) return `updated ${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `updated ${hours}h ago`;
-  return `updated ${Math.floor(hours / 24)}d ago`;
-}
-
 /**
  * Two-state (or three-state) switch. Mirrors the scope switch in
  * `modal-jobs-panel.tsx` so the two pinned panels read as one family.
@@ -125,6 +118,7 @@ function Highlight({
   title: string;
   onClick: () => void;
 }) {
+  const t = useT();
   const Icon = kind === "direction" ? SignpostIcon : ActivityIcon;
   return (
     <button
@@ -145,7 +139,7 @@ function Highlight({
           shadow the entry card's own title in text queries. */}
       <span className="min-w-0 truncate">
         <span className="font-medium text-foreground/70">
-          {kind === "direction" ? "Direction" : "Signal"}
+          {kind === "direction" ? t("Direction") : t("Signal")}
         </span>{" "}
         · {title}
       </span>
@@ -198,6 +192,8 @@ export function LabNotebookHeader({
   memory?: ReactNode;
   packageControl?: ReactNode;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [methodsOpen, setMethodsOpen] = useState(false);
 
   function toggleType(type: NotebookEntryType) {
@@ -219,18 +215,18 @@ export function LabNotebookHeader({
   // same "one muted line under the panel title" slot every panel header uses.
   const subtitle = hasEntries
     ? [
-        `${totalCount} ${totalCount === 1 ? "entry" : "entries"}`,
+        t(totalCount === 1 ? t("{count} entry") : t("{count} entries"), { count: totalCount }),
         overview.collaboratorCount > 1
-          ? `${overview.collaboratorCount} contributors`
+          ? t("{count} contributors", { count: overview.collaboratorCount })
           : null,
         overview.artifactCount > 0
-          ? `${overview.artifactCount} artifact${overview.artifactCount === 1 ? "" : "s"}`
+          ? t(overview.artifactCount === 1 ? t("{count} artifact") : t("{count} artifacts"), { count: overview.artifactCount })
           : null,
-        relativeUpdate(overview.updatedAt),
+        overview.updatedAt ? t("updated {time}", { time: relativeTime(overview.updatedAt, locale) }) : t("no activity yet"),
       ]
         .filter(Boolean)
         .join(" · ")
-    : "Ideas, evidence, and decisions as the research unfolds";
+    : t("Ideas, evidence, and decisions as the research unfolds");
 
   return (
     <header className="@container/notebook shrink-0">
@@ -238,7 +234,7 @@ export function LabNotebookHeader({
         <div className="flex min-w-0 items-center gap-2">
           <BookOpenIcon className="size-4 shrink-0 text-blue-500" />
           <div className="min-w-0">
-            <h1 className="text-xs font-semibold">Journal</h1>
+            <h1 className="text-xs font-semibold">{t("Journal")}</h1>
             <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p>
           </div>
         </div>
@@ -246,8 +242,7 @@ export function LabNotebookHeader({
         {streaming && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
             <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-            Recording
-          </span>
+            {t("Recording")}</span>
         )}
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -267,16 +262,13 @@ export function LabNotebookHeader({
                   ) : (
                     <SparklesIcon data-icon="inline-start" />
                   )}
-                  Methods draft
-                </Button>
+                  {t("Methods draft")}</Button>
               </PopoverTrigger>
               <PopoverContent className="w-80" align="end">
                 <div className="flex flex-col gap-1">
-                  <p className="text-sm font-medium">Turn the trail into a Methods section</p>
+                  <p className="text-sm font-medium">{t("Turn the trail into a Methods section")}</p>
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    AI Scientist synthesizes the recorded methods, decisions, and observations in one
-                    budgeted AI call, then saves an editable draft to the sandbox.
-                  </p>
+                    {t("AI Scientist synthesizes the recorded methods, decisions, and observations in one budgeted AI call, then saves an editable draft to the sandbox.")}</p>
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
                   <Button
@@ -285,8 +277,7 @@ export function LabNotebookHeader({
                     size="xs"
                     onClick={() => setMethodsOpen(false)}
                   >
-                    Cancel
-                  </Button>
+                    {t("Cancel")}</Button>
                   <Button
                     type="button"
                     size="xs"
@@ -296,8 +287,7 @@ export function LabNotebookHeader({
                     }}
                   >
                     <SparklesIcon data-icon="inline-start" />
-                    Generate
-                  </Button>
+                    {t("Generate")}</Button>
                 </div>
               </PopoverContent>
             </Popover>
@@ -313,24 +303,20 @@ export function LabNotebookHeader({
                   title={
                     canExport
                       ? undefined
-                      : "Start a chat before exporting its journal"
+                      : t("Start a chat before exporting its journal")
                   }
                 >
                   <DownloadIcon data-icon="inline-start" />
-                  Export
-                </Button>
+                  {t("Export")}</Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={() => onExport("md")}>
-                    <FileTextIcon /> Markdown (.md)
-                  </DropdownMenuItem>
+                    <FileTextIcon /> {t("Markdown (.md)")}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onExport("zip")}>
-                    <DownloadIcon /> Bundle with artifacts (.zip)
-                  </DropdownMenuItem>
+                    <DownloadIcon /> {t("Bundle with artifacts (.zip)")}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onExport("json")}>
-                    <FileTextIcon /> JSON (.json)
-                  </DropdownMenuItem>
+                    <FileTextIcon /> {t("JSON (.json)")}</DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -341,8 +327,8 @@ export function LabNotebookHeader({
               variant="outline"
               size="icon-xs"
               onClick={onPrint}
-              aria-label="Save journal as PDF"
-              title="Export as PDF"
+              aria-label={t("Save journal as PDF")}
+              title={t("Export as PDF")}
             >
               <PrinterIcon />
             </Button>
@@ -352,29 +338,29 @@ export function LabNotebookHeader({
 
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-1.5">
         <SegmentedToggle
-          label="Journal scope"
+          label={t("Journal scope")}
           value={scope}
           onChange={onScopeChange}
           options={[
-            { value: "session", label: "This chat" },
-            { value: "project", label: "All chats" },
+            { value: "session", label: t("This chat") },
+            { value: "project", label: t("All chats") },
           ]}
         />
         {scope === "session" && hasEntries && (
           <SegmentedToggle
-            label="Journal layout"
+            label={t("Journal layout")}
             value={viewMode}
             onChange={onViewModeChange}
             options={[
-              { value: "story", label: "Research story", Icon: MapIcon },
-              { value: "agents", label: "By agent", Icon: UsersIcon },
-              { value: "chrono", label: "Timeline", Icon: ListIcon },
+              { value: "story", label: t("Research story"), Icon: MapIcon },
+              { value: "agents", label: t("By agent"), Icon: UsersIcon },
+              { value: "chrono", label: t("Timeline"), Icon: ListIcon },
             ]}
           />
         )}
         {hasEntries && filteredCount !== totalCount && (
           <span className="text-[10px] tabular-nums text-muted-foreground">
-            {filteredCount} of {totalCount} shown
+            {t("{count} of {total} shown", { count: filteredCount, total: totalCount })}
           </span>
         )}
         {hasEntries && (
@@ -397,7 +383,7 @@ export function LabNotebookHeader({
                 )}
               >
                 <meta.Icon className={cn("size-3", meta.chip)} />
-                {meta.label}
+                {t(meta.label)}
                 <span className="tabular-nums text-muted-foreground">{count}</span>
               </button>
             );
@@ -410,11 +396,10 @@ export function LabNotebookHeader({
               onClick={() =>
                 onFiltersChange({ ...filters, pinnedOnly: !filters.pinnedOnly })
               }
-              title="Pinned only"
+              title={t("Pinned only")}
               className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[active=true]:border-amber-500/40 data-[active=true]:bg-amber-500/10 data-[active=true]:text-amber-600 dark:data-[active=true]:text-amber-400"
             >
-              <StarIcon className="size-3" /> Pinned
-              {overview.pinnedCount > 0 && (
+              <StarIcon className="size-3" /> {t("Pinned")}{overview.pinnedCount > 0 && (
                 <span className="tabular-nums">{overview.pinnedCount}</span>
               )}
             </button>
@@ -426,8 +411,8 @@ export function LabNotebookHeader({
               onChange={(event) =>
                 onFiltersChange({ ...filters, query: event.target.value })
               }
-              placeholder="Search entries…"
-              aria-label="Search entries"
+              placeholder={t("Search entries…")}
+              aria-label={t("Search entries")}
               className="h-6 rounded-full bg-background pl-8 pr-7 text-[11px] shadow-none"
             />
             {filters.query && (
@@ -435,7 +420,7 @@ export function LabNotebookHeader({
                 type="button"
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Clear search"
+                aria-label={t("Clear search")}
                 onClick={() => onFiltersChange({ ...filters, query: "" })}
                 className="absolute right-0.5 size-5 rounded-full text-muted-foreground"
               >

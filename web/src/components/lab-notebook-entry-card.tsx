@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useState } from "react";
 import {
   BarChart3Icon,
@@ -109,6 +111,7 @@ const CONFIDENCE_META = {
 } as const;
 
 function ConfidenceMeter({ level }: { level: "low" | "medium" | "high" }) {
+  const t = useT();
   const meta = CONFIDENCE_META[level];
   return (
     <Tooltip>
@@ -130,7 +133,7 @@ function ConfidenceMeter({ level }: { level: "low" | "medium" | "high" }) {
           ))}
         </span>
       </TooltipTrigger>
-      <TooltipContent>Author confidence: {level} (self-reported, not a calibrated probability)</TooltipContent>
+      <TooltipContent>{t("Author confidence:")}{level} (self-reported, not a calibrated probability)</TooltipContent>
     </Tooltip>
   );
 }
@@ -202,6 +205,7 @@ export function LabNotebookEntryCard({
   onJumpToEntry?: (entryId: string) => void;
   onTagClick?: (tag: string) => void;
 }) {
+  const t = useT();
   const contextProjectId = useProjectScopeId();
   const projectId = explicitProjectId ?? contextProjectId;
   const meta = TYPE_META[entry.type];
@@ -248,7 +252,7 @@ export function LabNotebookEntryCard({
               className={cn("h-5 gap-1 px-1.5 text-[10px] font-medium", meta.surface, meta.chip)}
             >
               <meta.Icon data-icon="inline-start" />
-              {meta.label}
+              {t(meta.label)}
             </Badge>
             {agentBadge !== undefined && (
               <Badge
@@ -284,8 +288,8 @@ export function LabNotebookEntryCard({
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => onTogglePin(entry.id)}
-                  title={pinned ? "Unpin entry" : "Pin entry"}
-                  aria-label={pinned ? "Unpin entry" : "Pin entry"}
+                  title={pinned ? t("Unpin entry") : t("Pin entry")}
+                  aria-label={pinned ? t("Unpin entry") : t("Pin entry")}
                   className="rounded-full text-muted-foreground"
                 >
                   <StarIcon className={cn(pinned && "fill-amber-400 text-amber-500")} />
@@ -297,8 +301,8 @@ export function LabNotebookEntryCard({
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => onJumpToChat(entry.id)}
-                  title="View in chat"
-                  aria-label="View in chat"
+                  title={t("View in chat")}
+                  aria-label={t("View in chat")}
                   className="rounded-full text-muted-foreground"
                 >
                   <MessageSquareTextIcon />
@@ -416,7 +420,7 @@ export function LabNotebookEntryCard({
                     data-icon="inline-start"
                     className={cn("transition-transform", detailsOpen && "rotate-90")}
                   />
-                  {detailsOpen ? "Collapse entry" : "Read full entry"}
+                  {detailsOpen ? "Collapse entry" : t("Read full entry")}
                 </Button>
               )}
             </div>
@@ -548,7 +552,7 @@ export function LabNotebookEntryCard({
               <MessageSquareIcon data-icon="inline-start" />
               {comments?.length
                 ? `${comments.length} comment${comments.length === 1 ? "" : "s"}`
-                : "Comment"}
+                : t("Comment")}
               <ChevronRightIcon
                 data-icon="inline-end"
                 className={cn("transition-transform", commentsOpen && "rotate-90")}
@@ -559,7 +563,7 @@ export function LabNotebookEntryCard({
                 {(comments ?? []).map((comment) => (
                   <div key={comment.id} className="text-[11px]">
                     <div className="flex items-baseline gap-1.5">
-                      <span className="font-medium text-amber-600 dark:text-amber-400">You</span>
+                      <span className="font-medium text-amber-600 dark:text-amber-400">{t("You")}</span>
                       <time className="text-[10px] text-muted-foreground">
                         {new Date(comment.createdAt).toLocaleString()}
                       </time>
@@ -574,7 +578,7 @@ export function LabNotebookEntryCard({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") submitComment();
                     }}
-                    placeholder="Add a comment…"
+                    placeholder={t("Add a comment…")}
                     aria-label="Add a comment"
                     className="h-7 bg-background text-[11px] shadow-none"
                   />

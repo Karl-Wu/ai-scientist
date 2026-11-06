@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkflowLaunchDialog, WorkflowsPanel, type Workflow } from "./workflows-panel";
 import type { WorkflowInputProps } from "./workflow-inputs";
 
-vi.mock("@/components/i18n-provider", () => ({ useI18n: () => ({ locale: "en", setLocale: vi.fn() }) }));
+vi.mock("@/components/i18n-provider", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/i18n-provider")>(),
+  useI18n: () => ({ locale: "en", setLocale: vi.fn() }),
+}));
 
 const modelState = vi.hoisted(() => ({ availability: "available", billable: true }));
 vi.mock("@/components/model-selector", () => ({

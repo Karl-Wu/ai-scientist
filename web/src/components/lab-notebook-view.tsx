@@ -1,4 +1,6 @@
 "use client";
+
+import { useT } from "@/components/i18n-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpIcon, BookOpenIcon, StickyNoteIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -85,6 +87,7 @@ export function LabNotebookView({
   /** Deep-link target from the chat side; token forces re-focus on repeat. */
   focusEntry?: { id: string; token: number } | null;
 }) {
+  const t = useT();
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
   const [scope, setScope] = useState<NotebookScope>("project");
@@ -343,7 +346,7 @@ export function LabNotebookView({
           ? { path: `/sessions/${encodeURIComponent(sessionId)}/notebook/export`, name: sessionId }
           : null;
     if (!target) {
-      toast.error("Start a chat before exporting its journal.");
+      toast.error(t("Start a chat before exporting its journal."));
       return;
     }
     try {
@@ -408,7 +411,7 @@ export function LabNotebookView({
       };
       if (res.status === 402) {
         toast.error("Project spend limit reached — raise it in project settings.", {
-          action: { label: "Project settings", onClick: () => openSettings({ tab: "project", section: "budget" }) },
+          action: { label: t("Project settings"), onClick: () => openSettings({ tab: "project", section: "budget" }) },
         });
         return;
       }
@@ -480,8 +483,8 @@ export function LabNotebookView({
       />
       {displayedData.error && (
         <div role="alert" className="flex items-center gap-2 border-b bg-amber-500/10 px-4 py-2 text-xs">
-          <span>Journal refresh failed. Displayed evidence checks may be out of date.</span>
-          <Button variant="outline" size="xs" onClick={displayedData.refresh}>Retry</Button>
+          <span>{t("Journal refresh failed. Displayed evidence checks may be out of date.")}</span>
+          <Button variant="outline" size="xs" onClick={displayedData.refresh}>{t("Retry")}</Button>
         </div>
       )}
       {displayEntries.length === 0 ? (
@@ -491,11 +494,11 @@ export function LabNotebookView({
           </div>
           <div className="flex max-w-xs flex-col gap-1">
             <p className="text-xs font-medium">
-              {scope === "project" ? "No entries in this project" : "Nothing recorded yet"}
+              {scope === "project" ? t("No entries in this project") : t("Nothing recorded yet")}
             </p>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {scope === "project"
-                ? "Findings from every chat in this project collect here."
+                ? t("Findings from every chat in this project collect here.")
                 : "AI Scientist’s journal — entries appear here as it works, linking hypotheses to evidence and decisions."}
             </p>
           </div>
@@ -508,7 +511,7 @@ export function LabNotebookView({
                   className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
                 >
                   <meta.Icon className={cn("size-3", meta.chip)} />
-                  {meta.label}
+                  {t(meta.label)}
                 </span>
               );
             })}
@@ -559,8 +562,8 @@ export function LabNotebookView({
                   submitNote();
                 }
               }}
-              placeholder="Capture your own observation…"
-              aria-label="Add a note"
+              placeholder={t("Capture your own observation…")}
+              aria-label={t("Add a note")}
               className="h-7 bg-background pl-8 text-[11px] shadow-none"
             />
           </div>
@@ -569,8 +572,8 @@ export function LabNotebookView({
             variant="outline"
             size="icon-xs"
             disabled={!noteDraft.trim()}
-            aria-label="Save note"
-            title="Save note"
+            aria-label={t("Save note")}
+            title={t("Save note")}
             onClick={submitNote}
           >
             <ArrowUpIcon />

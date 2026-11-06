@@ -1,4 +1,6 @@
 "use client";
+
+import { useT, useLocale } from "@/components/i18n-provider";
 import { SubagentFleetPanel } from "./subagent-fleet-panel";
 
 /**
@@ -28,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   closeMission,
-  describeTrigger,
   getMissions,
   getSchedules,
   scheduleAction,
@@ -59,6 +60,8 @@ function missionLabel(m: MissionView): string {
 }
 
 export function AutomationPanel({ projectId }: { projectId: string }) {
+  const t = useT();
+  const locale = useLocale();
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
   const [missions, setMissions] = useState<MissionView[]>([]);
   const [heldByBudget, setHeldByBudget] = useState<string[]>([]);
@@ -98,9 +101,9 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
     async (schedule: ScheduleView, action: ScheduleAction) => {
       if (action === "delete") {
         const ok = await confirm({
-          title: `Delete schedule "${schedule.name}"?`,
-          description: "Its definition and run history are removed. Runs already in progress finish normally.",
-          confirmLabel: "Delete",
+          title: t('Delete schedule "{name}"?', { name: schedule.name }),
+          description: t("Its definition and run history are removed. Runs already in progress finish normally."),
+          confirmLabel: t("Delete"),
           destructive: true,
         });
         if (!ok) return;
@@ -119,15 +122,15 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         setBusy(null);
       }
     },
-    [confirm, projectId],
+    [confirm, projectId, t],
   );
 
   const close = useCallback(
     async (mission: MissionView) => {
       const ok = await confirm({
-        title: `Close mission "${missionLabel(mission)}"?`,
-        description: "Marks it cancelled. Linked runs are not stopped.",
-        confirmLabel: "Close mission",
+        title: t('Close mission "{name}"?', { name: missionLabel(mission) }),
+        description: t("Marks it cancelled. Linked runs are not stopped."),
+        confirmLabel: t("Close mission"),
       });
       if (!ok) return;
       setBusy(`close:${mission.id}`);
@@ -139,7 +142,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         setBusy(null);
       }
     },
-    [confirm, projectId],
+    [confirm, projectId, t],
   );
 
   // "Run started" goes stale as soon as the row's own state catches up.
@@ -148,6 +151,17 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
     const timer = setTimeout(() => setNotice(null), 10_000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  function describeSchedule(trigger: ScheduleView["trigger"], paused: boolean) {
+    const date = (value: string) => new Date(value).toLocaleString(locale);
+    const next = trigger.nextRunAt && !paused ? ` · ${t("next {time}", { time: date(trigger.nextRunAt) })}` : "";
+    if (trigger.kind === "interval") return t("every {interval}", { interval: trigger.every }) + next;
+    if (trigger.kind === "calendar") return t("every {interval} at {time} {zone}", {
+      interval: trigger.every + (trigger.on?.length ? ` (${trigger.on.join(", ")})` : ""),
+      time: trigger.at, zone: trigger.timezone,
+    }) + next;
+    return t("once at {time}", { time: date(trigger.nextRunAt ?? trigger.at) });
+  }
 
   const openMissions = useMemo(() => missions.filter((m) => !["completed", "failed", "cancelled"].includes(m.status)), [missions]);
   const closedMissions = useMemo(() => missions.filter((m) => ["completed", "failed", "cancelled"].includes(m.status)), [missions]);
@@ -158,14 +172,11 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
       {dialog}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Tasks</h3>
+          <h3 className="text-sm font-medium">{t("Tasks")}</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one
-            (&ldquo;re-run the QC report every 6 hours&rdquo;); they fire from a resident session even with no
-            chat open and pause automatically when the project spend limit is reached.
-          </p>
+            {t("Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one (“re-run the QC report every 6 hours”); they fire from a resident session even with no chat open and pause automatically when the project spend limit is reached.")}</p>
         </div>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} aria-label="Refresh tasks">
+        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} aria-label={t("Refresh tasks")}>
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -173,27 +184,22 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
       {notice && <p role="status" className="text-xs text-muted-foreground">{notice}</p>}
       {heldByBudget.length > 0 && (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-          {heldByBudget.length} schedule{heldByBudget.length === 1 ? " is" : "s are"} held because the project
-          reached its spend limit.{" "}
+          {t(heldByBudget.length === 1 ? "{count} schedule is held because the project reached its spend limit." : "{count} schedules are held because the project reached its spend limit.", { count: heldByBudget.length })}{" "}
           <SettingsLink tab="project" section="budget">
-            Raise the limit in project settings
-          </SettingsLink>{" "}
-          and they resume on their own.
+            {t("Raise the limit in project settings")}</SettingsLink>{" "}
+          {t("and they resume on their own.")}
         </p>
       )}
 
-      <section aria-label="Scheduled tasks" className="flex flex-col gap-2">
+      <section aria-label={t("Scheduled tasks")} className="flex flex-col gap-2">
         <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <AlarmClockIcon className="size-3.5" /> Scheduled tasks
-        </h4>
-        <p className="text-xs text-muted-foreground">Tasks that run once at a set time or repeat on a schedule.</p>
+          <AlarmClockIcon className="size-3.5" /> {t("Scheduled tasks")}</h4>
+        <p className="text-xs text-muted-foreground">{t("Tasks that run once at a set time or repeat on a schedule.")}</p>
         {!loaded ? (
-          <p className="text-xs text-muted-foreground">Loading…</p>
+          <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
         ) : schedules.length === 0 ? (
           <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            No scheduled tasks yet. In a chat: &ldquo;every night at 2am, have the data validator re-check user_data
-            and log a notebook entry&rdquo;.
-          </p>
+            {t("No scheduled tasks yet. In a chat: “every night at 2am, have the data validator re-check user_data and log a notebook entry”.")}</p>
         ) : (
           schedules.map((s) => {
             const expanded = open[s.id] ?? false;
@@ -206,40 +212,40 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     onClick={() => setOpen((o) => ({ ...o, [s.id]: !expanded }))}
                     aria-expanded={expanded}
-                    aria-label={`${expanded ? "Collapse" : "Expand"} ${s.name}`}
+                    aria-label={t(expanded ? "Collapse {name}" : "Expand {name}", { name: s.name })}
                   >
                     {expanded ? <ChevronDownIcon className="size-3.5 shrink-0" /> : <ChevronRightIcon className="size-3.5 shrink-0" />}
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
                         <span>{s.name}</span>
                         {s.heldByBudget ? (
-                          <Badge variant="outline" className="h-5 text-[10px] text-amber-600">Held: spend limit</Badge>
+                          <Badge variant="outline" className="h-5 text-[10px] text-amber-600">{t("Held: spend limit")}</Badge>
                         ) : s.paused ? (
-                          <Badge variant="outline" className="h-5 text-[10px]">Paused</Badge>
+                          <Badge variant="outline" className="h-5 text-[10px]">{t("Paused")}</Badge>
                         ) : s.activeRunId ? (
-                          <Badge variant="secondary" className="h-5 text-[10px]">Running</Badge>
+                          <Badge variant="secondary" className="h-5 text-[10px]">{t("Running")}</Badge>
                         ) : null}
                       </div>
                       <div className="truncate text-[11px] text-muted-foreground">
-                        {describeTrigger(s.trigger, s.paused)}
-                        {s.lastRun ? ` · last ${RUN_STATE_LABEL[s.lastRun.state]}` : ""}
-                        {s.spendUsd > 0 ? ` · ${formatUsd(s.spendUsd)} spent` : ""}
+                        {describeSchedule(s.trigger, s.paused)}
+                        {s.lastRun ? ` · ${t("last {state}", { state: t(RUN_STATE_LABEL[s.lastRun.state]) })}` : ""}
+                        {s.spendUsd > 0 ? ` · ${t("{amount} spent", { amount: formatUsd(s.spendUsd) })}` : ""}
                       </div>
                     </div>
                   </button>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={`Run ${s.name} now`} title={s.heldByBudget ? "Held until the spend limit is raised" : `Run ${s.name} now`} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "run")}>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Run {name} now", { name: s.name })} title={s.heldByBudget ? t("Held until the spend limit is raised") : t("Run {name} now", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "run")}>
                     {busy === `run:${s.id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : <ZapIcon className="size-3.5" />}
                   </Button>
                   {s.paused ? (
-                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={`Resume ${s.name}`} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "resume")}>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Resume {name}", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "resume")}>
                       <PlayIcon className="size-3.5" />
                     </Button>
                   ) : (
-                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={`Pause ${s.name}`} disabled={rowBusy} onClick={() => void act(s, "pause")}>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Pause {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "pause")}>
                       <PauseIcon className="size-3.5" />
                     </Button>
                   )}
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label={`Delete ${s.name}`} disabled={rowBusy} onClick={() => void act(s, "delete")}>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label={t("Delete {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "delete")}>
                     <Trash2Icon className="size-3.5" />
                   </Button>
                 </div>
@@ -258,8 +264,8 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
                       <ul className="mt-2 flex flex-col gap-0.5">
                         {s.runs.map((r) => (
                           <li key={r.id} className={cn("flex flex-wrap items-center gap-x-2", r.state.startsWith("failed") && "text-destructive")}>
-                            <span className="font-mono text-[10px] text-muted-foreground">{new Date(r.plannedAt).toLocaleString()}</span>
-                            <span>{RUN_STATE_LABEL[r.state]}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">{new Date(r.plannedAt).toLocaleString(locale)}</span>
+                            <span>{t(RUN_STATE_LABEL[r.state])}</span>
                             <span className="text-muted-foreground">({r.dueReason})</span>
                             {r.error && <span className="w-full break-words">{r.error}</span>}
                             {r.summary && !r.error && (
@@ -277,16 +283,13 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         )}
       </section>
 
-      <section aria-label="Missions" className="flex flex-col gap-2">
+      <section aria-label={t("Missions")} className="flex flex-col gap-2">
         <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <FlagIcon className="size-3.5" /> Missions
-        </h4>
-        <p className="text-xs text-muted-foreground">Ongoing, multi-step tasks with saved progress, decisions, and results.</p>
+          <FlagIcon className="size-3.5" /> {t("Missions")}</h4>
+        <p className="text-xs text-muted-foreground">{t("Ongoing, multi-step tasks with saved progress, decisions, and results.")}</p>
         {loaded && missions.length === 0 && (
           <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive
-            restarts and hold decisions, artifacts and receipts.
-          </p>
+            {t("No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive restarts and hold decisions, artifacts and receipts.")}</p>
         )}
         {[...openMissions, ...closedMissions].map((m) => (
           <div key={m.id} className={cn("rounded-lg border px-3 py-2", ["completed", "failed", "cancelled"].includes(m.status) && "opacity-70")} data-mission={m.id}>
@@ -294,22 +297,21 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
                   <span>{missionLabel(m)}</span>
-                  <Badge variant={m.status === "needs_decision" ? "destructive" : "outline"} className="h-5 text-[10px]">{m.status.replace("_", " ")}</Badge>
+                  <Badge variant={m.status === "needs_decision" ? "destructive" : "outline"} className="h-5 text-[10px]">{t(m.status.replaceAll("_", " "))}</Badge>
                   {m.goal && <Badge variant="secondary" className="h-5 text-[10px]">goal · {m.goal.status}</Badge>}
                 </div>
                 {m.objective && m.objective !== REDACTED && <div className="truncate text-[11px] text-muted-foreground">{m.objective}</div>}
                 <div className="text-[10px] text-muted-foreground">
-                  {m.runs.length} run{m.runs.length === 1 ? "" : "s"}
-                  {m.decisions.some((d) => d.status === "open") ? ` · ${m.decisions.filter((d) => d.status === "open").length} open decision(s)` : ""}
+                  {t(m.runs.length === 1 ? "{count} run" : "{count} runs", { count: m.runs.length })}
+                  {m.decisions.some((d) => d.status === "open") ? ` · ${t("{count} open decision(s)", { count: m.decisions.filter((d) => d.status === "open").length })}` : ""}
                   {m.usage?.tokens ? ` · ${m.usage.tokens.toLocaleString()} tokens` : ""}
                   {m.budget?.tokens ? ` / ${m.budget.tokens.toLocaleString()} budget` : ""}
-                  {` · updated ${new Date(m.updatedAt).toLocaleString()}`}
+                  {` · ${t("updated {time}", { time: new Date(m.updatedAt).toLocaleString(locale) })}`}
                 </div>
               </div>
               {!["completed", "failed", "cancelled"].includes(m.status) && (
                 <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" aria-label={`Close mission ${missionLabel(m)}`} disabled={busy === `close:${m.id}`} onClick={() => void close(m)}>
-                  Close
-                </Button>
+                  {t("Close")}</Button>
               )}
             </div>
           </div>

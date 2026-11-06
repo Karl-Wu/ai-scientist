@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { CpuIcon, GpuIcon, HardDriveIcon, MemoryStickIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -44,6 +46,7 @@ const BAR_TONE = {
  * nothing until the first stats fetch succeeds.
  */
 export function ResourceMonitor({ className }: { className?: string }) {
+  const t = useT();
   const stats = useSystemResources();
   if (!stats) return null;
 
@@ -83,9 +86,10 @@ export function ResourceMonitor({ className }: { className?: string }) {
             "h-auto gap-2.5 px-2.5 py-1.5 font-mono text-[11px] tabular-nums",
             className,
           )}
-          aria-label={`System resources: CPU ${cpuPct}%, memory ${memPct}%${
-            gpuPct !== null ? `, GPU ${gpuPct}%` : ""
-          }`}
+          aria-label={[
+            t("System resources: CPU {cpu}%, memory {memory}%", { cpu: cpuPct, memory: memPct }),
+            gpuPct !== null ? t("GPU {gpu}%", { gpu: gpuPct }) : "",
+          ].filter(Boolean).join(", ")}
         >
           <PillSegment icon={CpuIcon} pct={cpuPct} />
           <PillSegment icon={MemoryStickIcon} pct={memPct} />
@@ -94,22 +98,23 @@ export function ResourceMonitor({ className }: { className?: string }) {
       </HoverCardTrigger>
       <HoverCardContent align="end" className="w-80 p-4">
         <div className="text-muted-foreground text-xs uppercase tracking-wide">
-          System resources
+          {t("System resources")}
         </div>
         <div className="mt-3 space-y-3">
           <MeterRow
             icon={CpuIcon}
             label="CPU"
             pct={cpuPct}
-            detail={`${stats.cpu.cores} cores · app ${stats.cpu.processPct.toFixed(1)}%`}
+            detail={t("{cores} cores · app {usage}%", { cores: stats.cpu.cores, usage: stats.cpu.processPct.toFixed(1) })}
           />
           <MeterRow
             icon={MemoryStickIcon}
-            label="Memory"
+            label={t("Memory")}
             pct={memPct}
-            detail={`${formatBytes(stats.memory.usedBytes)} / ${formatBytes(
-              stats.memory.totalBytes,
-            )} · app ${formatBytes(stats.memory.processRssBytes)}`}
+            detail={t("{used} / {total} · app {app}", {
+              used: formatBytes(stats.memory.usedBytes), total: formatBytes(stats.memory.totalBytes),
+              app: formatBytes(stats.memory.processRssBytes),
+            })}
           />
           {stats.gpu && (gpuPct !== null || gpuVramPct !== null) && (
             <MeterRow
@@ -118,27 +123,26 @@ export function ResourceMonitor({ className }: { className?: string }) {
               pct={gpuPct ?? gpuVramPct ?? 0}
               detail={
                 stats.gpu.memUsedBytes !== null && stats.gpu.memTotalBytes !== null
-                  ? `${formatBytes(stats.gpu.memUsedBytes)} / ${formatBytes(
-                      stats.gpu.memTotalBytes,
-                    )} VRAM${gpuPct === null ? " · no utilization counter" : ""}`
-                  : "utilization"
+                  ? t("{used} / {total} VRAM", {
+                      used: formatBytes(stats.gpu.memUsedBytes), total: formatBytes(stats.gpu.memTotalBytes),
+                    }) + (gpuPct === null ? ` · ${t("no utilization counter")}` : "")
+                  : t("utilization")
               }
             />
           )}
           {stats.disk && diskPct !== null && (
             <MeterRow
               icon={HardDriveIcon}
-              label="Disk"
+              label={t("Disk")}
               pct={diskPct}
-              detail={`${formatBytes(stats.disk.freeBytes)} free of ${formatBytes(
-                stats.disk.totalBytes,
-              )}`}
+              detail={t("{free} free of {total}", {
+                free: formatBytes(stats.disk.freeBytes), total: formatBytes(stats.disk.totalBytes),
+              })}
             />
           )}
         </div>
         <div className="text-muted-foreground/70 mt-3 text-[11px]">
-          Machine-wide usage, sampled every few seconds. &ldquo;app&rdquo; is the
-          AI Scientist backend process.
+          {t("Machine-wide usage, sampled every few seconds. “app” is the AI Scientist backend process.")}
         </div>
       </HoverCardContent>
     </HoverCard>

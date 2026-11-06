@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -35,22 +37,21 @@ import { cn } from "@/lib/utils";
 import { AppearancePanel } from "./settings/appearance-panel";
 import { useResizableDialog } from "./settings/use-resizable-dialog";
 
-const panelLoading = () => (
-  <div className="p-4 text-xs text-muted-foreground" role="status">
-    Loading settings…
-  </div>
-);
-const ProvidersPanel = dynamic(() => import("./settings/providers-panel").then((m) => m.ProvidersPanel), { loading: panelLoading });
-const DefaultsPanel = dynamic(() => import("./settings/defaults-panel").then((m) => m.DefaultsPanel), { loading: panelLoading });
-const ServicesPanel = dynamic(() => import("./settings/services-panel").then((m) => m.ServicesPanel), { loading: panelLoading });
+function PanelLoading() {
+  const t = useT();
+  return <div className="p-4 text-xs text-muted-foreground" role="status">{t("Loading settings…")}</div>;
+}
+const ProvidersPanel = dynamic(() => import("./settings/providers-panel").then((m) => m.ProvidersPanel), { loading: PanelLoading });
+const DefaultsPanel = dynamic(() => import("./settings/defaults-panel").then((m) => m.DefaultsPanel), { loading: PanelLoading });
+const ServicesPanel = dynamic(() => import("./settings/services-panel").then((m) => m.ServicesPanel), { loading: PanelLoading });
 const ProjectSettingsPanel = dynamic(
   () => import("./settings/project-settings-panel").then((m) => m.ProjectSettingsPanel),
-  { loading: panelLoading },
+  { loading: PanelLoading },
 );
-const SkillsPanel = dynamic(() => import("./skills-panel").then((m) => m.SkillsPanel), { loading: panelLoading });
-const PromptsPanel = dynamic(() => import("./prompts-panel").then((m) => m.PromptsPanel), { loading: panelLoading });
-const SubagentsPanel = dynamic(() => import("./subagents-panel").then((m) => m.SubagentsPanel), { loading: panelLoading });
-const ConnectorsPanel = dynamic(() => import("./connectors-panel").then((m) => m.ConnectorsPanel), { loading: panelLoading });
+const SkillsPanel = dynamic(() => import("./skills-panel").then((m) => m.SkillsPanel), { loading: PanelLoading });
+const PromptsPanel = dynamic(() => import("./prompts-panel").then((m) => m.PromptsPanel), { loading: PanelLoading });
+const SubagentsPanel = dynamic(() => import("./subagents-panel").then((m) => m.SubagentsPanel), { loading: PanelLoading });
+const ConnectorsPanel = dynamic(() => import("./connectors-panel").then((m) => m.ConnectorsPanel), { loading: PanelLoading });
 
 interface TabDef {
   id: SettingsTab;
@@ -80,20 +81,21 @@ const ACTIVE_PROJECT_TABS = new Set<SettingsTab>(["skills", "prompts", "speciali
 const DEFAULT_TAB: SettingsTab = "providers";
 
 function TabGroup({ label, detail, tabs }: { label: string; detail?: string; tabs: TabDef[] }) {
+  const t = useT();
   return (
     <>
       <div
         role="presentation"
         className="w-full truncate px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground first:pt-0"
-        title={detail ? `${label} · ${detail}` : label}
+        title={detail ? `${t(label)} · ${detail}` : t(label)}
       >
-        {label}
+        {t(label)}
         {detail ? <span className="normal-case tracking-normal"> · {detail}</span> : null}
       </div>
       {tabs.map(({ id, label: tabLabel, icon: Icon }) => (
         <TabsTrigger key={id} value={id} className="w-full justify-start gap-2 px-3 text-xs">
           <Icon className="size-3.5" />
-          {tabLabel}
+          {t(tabLabel)}
         </TabsTrigger>
       ))}
     </>
@@ -135,6 +137,7 @@ export interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogProps) {
+  const t = useT();
   // Skills / prompt templates edited here feed the composer's pickers, which
   // fetch once per project — announce a change when the dialog closes.
   const handleOpenChange = useCallback(
@@ -193,10 +196,9 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
         data-testid="settings-dialog"
       >
         <DialogHeader className="border-b px-6 pb-4 pt-6">
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle>{t("Settings")}</DialogTitle>
           <DialogDescription className="text-xs">
-            Models, this project, and the services AI Scientist connects to.
-          </DialogDescription>
+            {t("Models, this project, and the services AI Scientist connects to.")}</DialogDescription>
         </DialogHeader>
 
         <Tabs
@@ -215,16 +217,15 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
             variant="line"
             className="w-48 shrink-0 items-start justify-start overflow-y-auto rounded-none border-r px-2 py-3"
           >
-            <TabGroup label="Models" tabs={MODEL_TABS} />
-            <TabGroup label="Project" detail={projectName(projectId)} tabs={PROJECT_TABS} />
-            <TabGroup label="Workspace" tabs={WORKSPACE_TABS} />
+            <TabGroup label={t("Models")} tabs={MODEL_TABS} />
+            <TabGroup label={t("Project")} detail={projectName(projectId)} tabs={PROJECT_TABS} />
+            <TabGroup label={t("Workspace")} tabs={WORKSPACE_TABS} />
           </TabsList>
 
           <div ref={contentRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
             {showsOtherProject ? (
               <div className="mx-5 mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px]" role="note">
-                Showing the current project, <b>{projectName(activeProjectId)}</b>. Open{" "}
-                <b>{projectName(projectId)}</b> to edit its skills, prompt templates, specialists and connectors.
+                {t("Showing the current project, {current}. Open {target} to edit its skills, prompt templates, specialists and connectors.", { current: projectName(activeProjectId), target: projectName(projectId) })}
               </div>
             ) : null}
             <TabsContent value="providers" className="min-w-0 p-5">
@@ -259,7 +260,7 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
         <div
           {...handleProps}
           role="separator"
-          aria-label="Resize settings"
+          aria-label={t("Resize settings")}
           aria-orientation="horizontal"
           tabIndex={0}
           title="Drag to resize · double-click to reset"

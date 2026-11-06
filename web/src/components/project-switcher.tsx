@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -48,6 +50,7 @@ interface ProjectSwitcherProps {
 }
 
 export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
+  const t = useT();
   const {
     projects,
     activeProjectId,
@@ -97,10 +100,10 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
     async (project: Project) => {
       if (project.id === DEFAULT_PROJECT_ID) return;
       const confirmed = await confirm({
-        title: `Delete "${project.name}"?`,
+        title: t('Delete "{name}"?', { name: project.name }),
         description:
-          "Its sandbox files and chats will be permanently removed. This cannot be undone.",
-        confirmLabel: "Delete project",
+          t("Its sandbox files and chats will be permanently removed. This cannot be undone."),
+        confirmLabel: t("Delete project"),
         destructive: true,
       });
       if (!confirmed) return;
@@ -110,7 +113,7 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
         // swallow
       }
     },
-    [confirm, remove]
+    [confirm, remove, t]
   );
 
   useEffect(() => {
@@ -136,7 +139,7 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
             <Button
               variant="ghost"
               size="sm"
-              aria-label="Switch project"
+              aria-label={t("Switch project")}
               className="h-7 gap-1.5 px-2 text-xs font-medium text-foreground/80 hover:text-foreground"
             >
               <FolderIcon className="size-3.5" />
@@ -150,14 +153,14 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
         <PopoverContent align="start" className="w-[320px] p-0">
           <Command>
             <CommandInput
-              placeholder="Search or name a new project…"
+              placeholder={t("Search or name a new project…")}
               value={search}
               onValueChange={setSearch}
             />
             <CommandList>
               {/* The create row below always matches (its value tracks the
                   query), so the empty state is just a never-shown fallback. */}
-              <CommandEmpty>No projects found.</CommandEmpty>
+              <CommandEmpty>{t("No projects found.")}</CommandEmpty>
               {visibleProjects.length > 0 && (
                 <CommandGroup heading="Projects">
                   {visibleProjects.map((project) => (
@@ -210,8 +213,7 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
                     className="gap-2 text-foreground"
                   >
                     <LayoutGridIcon className="size-4" />
-                    View all projects
-                  </CommandItem>
+                    {t("View all projects")}</CommandItem>
                 )}
                 <CommandItem
                   // Value tracks the live query so cmdk never filters this row
@@ -267,6 +269,7 @@ function ProjectRow({
   onArchive,
   onDelete,
 }: ProjectRowProps) {
+  const t = useT();
   return (
     <CommandItem
       // cmdk filters by `value`; we include the name, id, tags, and
@@ -293,7 +296,7 @@ function ProjectRow({
         <button
           type="button"
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Project settings"
+          title={t("Project settings")}
           aria-label={`Settings for ${project.name}`}
           onClick={(ev) => {
             ev.stopPropagation();
@@ -305,7 +308,7 @@ function ProjectRow({
         <button
           type="button"
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={project.archived ? "Unarchive" : "Archive"}
+          title={project.archived ? t("Unarchive") : t("Archive")}
           onClick={(ev) => {
             ev.stopPropagation();
             onArchive();
@@ -321,7 +324,7 @@ function ProjectRow({
           <button
             type="button"
             className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Delete project"
+            title={t("Delete project")}
             onClick={(ev) => {
               ev.stopPropagation();
               onDelete();

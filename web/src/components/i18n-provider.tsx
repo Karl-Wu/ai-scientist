@@ -3,7 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isLocale, LOCALE_STORAGE_KEY, localeFromLanguage, type Locale } from "@/lib/i18n";
 
+import { english, translate, type Translate } from "@/lib/translations";
+
 type I18nContextValue = {
+  t: Translate;
   locale: Locale;
   setLocale: (locale: Locale) => void;
 };
@@ -36,7 +39,18 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ locale, setLocale }), [locale, setLocale]);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === LOCALE_STORAGE_KEY) {
+        setLocaleState(isLocale(event.newValue) ? event.newValue : localeFromLanguage(navigator.language));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const t: Translate = useCallback((message, params) => translate(locale, message, params), [locale]);
+  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
@@ -44,4 +58,13 @@ export function useI18n() {
   const context = useContext(I18nContext);
   if (!context) throw new Error("useI18n must be used within I18nProvider");
   return context;
+}
+
+/** Standalone UI primitives default to English when rendered outside the app shell. */
+export function useT(): Translate {
+  return useContext(I18nContext)?.t ?? english;
+}
+
+export function useLocale(): Locale {
+  return useContext(I18nContext)?.locale ?? "en";
 }

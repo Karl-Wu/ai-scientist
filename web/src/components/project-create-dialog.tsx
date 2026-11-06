@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 /**
  * "New project" dialog shared by the project switcher and the Projects view.
  * Editing an existing project happens in Settings → Project instead.
@@ -42,6 +44,7 @@ export function ProjectCreateDialog({
   initialName?: string;
   onCreated: (project: Project) => void;
 }) {
+  const t = useT();
   const { create } = useProjects();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +92,7 @@ export function ProjectCreateDialog({
       onOpenChange(false);
       onCreated(project);
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "Create failed");
+      setError(exc instanceof Error ? exc.message : t("Create failed"));
     } finally {
       setSubmitting(false);
     }
@@ -99,11 +102,9 @@ export function ProjectCreateDialog({
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>New project</DialogTitle>
+          <DialogTitle>{t("New project")}</DialogTitle>
           <DialogDescription>
-            Each project has its own sandbox, chat history and settings. You can change everything
-            later in Settings → Project.
-          </DialogDescription>
+            {t("Each project has its own sandbox, chat history and settings. You can change everything later in Settings → Project.")}</DialogDescription>
         </DialogHeader>
         <form
           className="flex flex-col gap-3"
@@ -113,34 +114,32 @@ export function ProjectCreateDialog({
           }}
         >
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Name
-            <Input
+            {t("Name")}<Input
               autoFocus
               aria-invalid={Boolean(error && !form.name.trim())}
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="RNA-seq pilot"
+              placeholder={t("RNA-seq pilot")}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Description
-            <Textarea
+            {t("Description")}<Textarea
               rows={3}
               value={form.description}
               onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              placeholder="Optional one-line summary."
+              placeholder={t("Optional one-line summary.")}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Tags <span className="opacity-60">(comma separated)</span>
+            {t("Tags")}<span className="opacity-60">{t("(comma separated)")}</span>
             <Input
               value={form.tags}
               onChange={(event) => setForm((current) => ({ ...current, tags: event.target.value }))}
-              placeholder="genomics, proteomics"
+              placeholder={t("genomics, proteomics")}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Spend limit <span className="opacity-60">(USD, optional)</span>
+            {t("Spend limit")}<span className="opacity-60">{t("(USD, optional)")}</span>
             <Input
               type="number"
               inputMode="decimal"
@@ -148,21 +147,20 @@ export function ProjectCreateDialog({
               step="0.01"
               value={form.spendLimit}
               onChange={(event) => setForm((current) => ({ ...current, spendLimit: event.target.value }))}
-              placeholder="Leave empty for no limit"
+              placeholder={t("Leave empty for no limit")}
             />
           </label>
           {error && (
             <p role="alert" className="text-xs text-destructive">
-              {error}
+              {t(error)}
             </p>
           )}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close} disabled={submitting}>
-              Cancel
-            </Button>
+              {t("Cancel")}</Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Spinner data-icon="inline-start" />}
-              {submitting ? "Creating…" : "Create project"}
+              {submitting ? t("Creating…") : t("Create project")}
             </Button>
           </DialogFooter>
         </form>

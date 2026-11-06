@@ -1,4 +1,6 @@
 "use client";
+
+import { useT } from "@/components/i18n-provider";
 import { useEffect, useRef, useState } from "react";
 import { PackageIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -14,10 +16,11 @@ const bytes = (n: number) => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 102
 const field = "w-full rounded-md border bg-background px-2 py-1.5 text-xs";
 export function EvidencePackageDialog(props: Props) { return <PackageDialog key={props.projectId + (props.initialRoot ? key(props.initialRoot) : "")} {...props} />; }
 function PackageDialog({ projectId, candidates, initialRoot }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"select" | "review" | "storage">("select");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialRoot ? [key(initialRoot)] : []));
-  const [title, setTitle] = useState("Reviewer evidence package");
+  const [title, setTitle] = useState(t("Reviewer evidence package"));
   const [filter, setFilter] = useState("");
   const [includeArtifacts, setIncludeArtifacts] = useState(true);
   const [includeCurrent, setIncludeCurrent] = useState(false);
@@ -64,10 +67,10 @@ function PackageDialog({ projectId, candidates, initialRoot }: Props) {
     finally { clearTimeout(timer); if (version === generation.current) setBusy(false); }
   }
   return <>
-    <Button type="button" variant="outline" size="xs" onClick={() => setOpen(true)}><PackageIcon data-icon="inline-start" />Evidence package</Button>
+    <Button type="button" variant="outline" size="xs" onClick={() => setOpen(true)}><PackageIcon data-icon="inline-start" />{t("Evidence package")}</Button>
     <Dialog open={open} onOpenChange={(v) => { if (!busy) setOpen(v); }}><DialogContent className="min-w-0 max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto [overflow-wrap:anywhere] sm:max-w-4xl">
-      <DialogHeader><DialogTitle>Reviewer evidence package</DialogTitle><DialogDescription>{EVIDENCE_PACKAGE_NOTICE}</DialogDescription></DialogHeader>
-      <div className="flex flex-wrap gap-2"><Button size="xs" variant="outline" disabled={busy} onClick={() => setMode("select")}>Select evidence</Button><Button size="xs" variant="outline" disabled={busy} onClick={refreshStorage}>Saved packages / storage</Button>{busy && <span role="status" className="text-xs">Working locally…</span>}</div>
+      <DialogHeader><DialogTitle>{t("Reviewer evidence package")}</DialogTitle><DialogDescription>{EVIDENCE_PACKAGE_NOTICE}</DialogDescription></DialogHeader>
+      <div className="flex flex-wrap gap-2"><Button size="xs" variant="outline" disabled={busy} onClick={() => setMode("select")}>{t("Select evidence")}</Button><Button size="xs" variant="outline" disabled={busy} onClick={refreshStorage}>{t("Saved packages / storage")}</Button>{busy && <span role="status" className="text-xs">Working locally…</span>}</div>
       {error && <p role="alert" className="rounded border border-destructive/30 p-2 text-sm text-destructive">{error}</p>}
       {mode === "select" && <form className="space-y-3" onSubmit={async (event) => {
         event.preventDefault();
@@ -97,7 +100,7 @@ function PackageDialog({ projectId, candidates, initialRoot }: Props) {
         <div className="overflow-x-auto rounded border"><table className="w-full min-w-[680px] text-left text-xs"><thead><tr className="border-b bg-muted/30"><th className="p-2">Artifact / version basis</th><th className="p-2">Package status</th><th className="p-2">Identity / origin</th></tr></thead><tbody>{preview.manifest.artifacts.map((a) => <tr key={a.id} className="border-b align-top last:border-0"><td className="max-w-64 p-2 break-all">{a.path}<p className="text-muted-foreground">{a.basis}</p></td><td className="max-w-64 p-2">{a.status}<p>{a.reason}</p></td><td className="max-w-72 p-2 break-all"><p>Expected: {a.expectedSha256 ?? "not recorded"}</p><p>Packaged: {a.sha256 ?? "none"}</p>{a.origin && <p>{a.origin} · {bytes(a.size ?? 0)}</p>}</td></tr>)}</tbody></table></div>
         <p className="text-[10px] text-muted-foreground">The version table scrolls horizontally on narrow screens. Current-unverified copies are not silently substituted for historical evidence.</p>
         <details open className="rounded border p-2"><summary className="cursor-pointer text-xs font-semibold">Missing / unverified information ({preview.manifest.issues.length})</summary><ul className="mt-2 max-h-52 list-disc overflow-y-auto pl-4 text-xs">{preview.manifest.issues.map((i, n) => <li key={n}><strong>{i.code}</strong>{i.subject ? ` (${i.subject})` : ""}: {i.message}</li>)}</ul></details>
-        <details><summary className="cursor-pointer text-xs">Checksum inventory</summary><pre className="max-h-52 overflow-auto whitespace-pre-wrap break-all p-2 text-[10px]">{preview.files.map((f) => `${f.sha256}  ${f.path}`).join("\n")}</pre></details>
+        <details><summary className="cursor-pointer text-xs">{t("Checksum inventory")}</summary><pre className="max-h-52 overflow-auto whitespace-pre-wrap break-all p-2 text-[10px]">{preview.files.map((f) => `${f.sha256}  ${f.path}`).join("\n")}</pre></details>
         <p className="break-all text-[10px]">ZIP sha256: {preview.zipSha256}</p>
         <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={sensitive} onChange={(e) => setSensitive(e.target.checked)} />I reviewed the selected contents and will check sensitive data and redistribution rights before sharing.</label>
         <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={limits} onChange={(e) => setLimits(e.target.checked)} />I understand the listed gaps, unverified versions and that packaging does not reproduce or validate the science.</label>

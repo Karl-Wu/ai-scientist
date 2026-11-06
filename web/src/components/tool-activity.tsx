@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import {
   BookOpenIcon,
   BrainIcon,
@@ -191,6 +193,7 @@ function fullArgs(args: unknown): string {
 }
 
 const ToolCard = memo(function ToolCard({ item }: { item: ActivityItem }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // A read of a SKILL.md is Pi's skill activation — surface the skill's name
   // instead of a generic file read (the path stays visible under Input). The
@@ -260,7 +263,7 @@ const ToolCard = memo(function ToolCard({ item }: { item: ActivityItem }) {
             {item.result && (
               <div>
                 <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {item.status === "error" ? "Error" : "Output"}
+                  {item.status === "error" ? t("Error") : "Output"}
                 </div>
                 <pre
                   className={cn(
@@ -352,6 +355,7 @@ export function NotebookEntryChip({
   item: ActivityItem;
   onView?: (entryId: string) => void;
 }) {
+  const t = useT();
   const args = (item.args ?? {}) as Record<string, unknown>;
   const typeLabel =
     typeof args.type === "string"
@@ -364,7 +368,7 @@ export function NotebookEntryChip({
       className="my-1 flex w-full items-center gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10 px-2.5 py-1.5 text-xs"
     >
       <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
-      <span className="font-medium text-foreground">Journal · {typeLabel}</span>
+      <span className="font-medium text-foreground">{t("Journal")} · {t(typeLabel)}</span>
       {title && (
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{title}</span>
       )}
@@ -375,8 +379,7 @@ export function NotebookEntryChip({
           onClick={() => onView(item.id)}
           className="shrink-0 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         >
-          View in journal
-        </button>
+          {t("View in journal")}</button>
       )}
     </div>
   );

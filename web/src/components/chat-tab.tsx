@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import {
   Conversation,
   ConversationContent,
@@ -181,6 +183,7 @@ function BudgetBanner({
   totalUsd: number;
   limitUsd: number | null;
 }) {
+  const t = useT();
   const blocked = state === "exceeded";
   return (
     <div
@@ -195,17 +198,16 @@ function BudgetBanner({
       <span className="flex-1">
         {blocked ? (
           <>
-            <b>Project spend limit reached</b> ({formatUsd(totalUsd)}
+            <b>{t("Project spend limit reached")}</b> ({formatUsd(totalUsd)}
             {limitUsd !== null ? ` / ${formatUsd(limitUsd)}` : ""}). New runs
             are blocked.{" "}
             <SettingsLink tab="project" section="budget">
-              Raise the limit in project settings
-            </SettingsLink>{" "}
+              {t("Raise the limit in project settings")}</SettingsLink>{" "}
             to continue.
           </>
         ) : (
           <>
-            <b>Approaching spend limit</b> ({formatUsd(totalUsd)}
+            <b>{t("Approaching spend limit")}</b> ({formatUsd(totalUsd)}
             {limitUsd !== null ? ` / ${formatUsd(limitUsd)}` : ""}). You&apos;re
             over 80% of the project&apos;s cap.
           </>
@@ -229,6 +231,7 @@ function PromptDropZone({
   onFileDrop?: (path: string) => void;
   onFilesUpload?: (files: FileList | File[], paths?: string[]) => void;
 }) {
+  const t = useT();
   const controller = usePromptInputController();
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounter = useRef(0);
@@ -407,6 +410,7 @@ function QueuedMessageEditor({
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState(initialText);
   const ref = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
@@ -436,7 +440,7 @@ function QueuedMessageEditor({
         }}
         rows={Math.min(8, Math.max(2, draft.split("\n").length))}
         className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        aria-label="Edit queued message"
+        aria-label={t("Edit queued message")}
       />
       <div className="flex items-center gap-1.5">
         <button
@@ -445,16 +449,14 @@ function QueuedMessageEditor({
           disabled={!canSave}
           className="rounded bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
-          Save
-        </button>
+          {t("Save")}</button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded px-2 py-0.5 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-muted"
         >
-          Cancel
-        </button>
-        <span className="ml-auto text-[10px] text-muted-foreground">⌘⏎ save · Esc cancel</span>
+          {t("Cancel")}</button>
+        <span className="ml-auto text-[10px] text-muted-foreground">{t("⌘⏎ save · Esc cancel")}</span>
       </div>
     </div>
   );
@@ -486,6 +488,7 @@ function MessageQueueDisplay({
   paused?: boolean;
   onResume?: () => void;
 }) {
+  const t = useT();
   if (queue.length === 0 && steering.length === 0 && followUp.length === 0) return null;
 
   return (
@@ -496,8 +499,7 @@ function MessageQueueDisplay({
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
               <ZapIcon className="size-3.5 text-muted-foreground" />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Steering — delivers mid-run
-              </span>
+                {t("Steering — delivers mid-run")}</span>
               <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
                 {steering.length}
               </span>
@@ -519,8 +521,7 @@ function MessageQueueDisplay({
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
               <ListOrderedIcon className="size-3.5 text-muted-foreground" />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                After this turn — AI Scientist continues
-              </span>
+                {t("After this turn — AI Scientist continues")}</span>
               <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
                 {followUp.length}
               </span>
@@ -550,8 +551,7 @@ function MessageQueueDisplay({
                   onClick={onResume}
                   className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/10"
                 >
-                  Resume
-                </button>
+                  {t("Resume")}</button>
               )}
               <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
                 {queue.length}/{MAX_QUEUE}
@@ -803,6 +803,7 @@ function ChatInput({
   delegation: DelegationChoice;
   onDelegationChange: (next: DelegationChoice) => void;
 }) {
+  const t = useT();
   const modelAvailable = modelAvailability === "available";
   const budgetBlocked =
     budgetState === "exceeded" && modelUsesBillableBudget(selectedModel);
@@ -1099,7 +1100,7 @@ function ChatInput({
             data-testid="slash-menu"
           >
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Commands</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("Commands")}</span>
               {slashQuery && <span className="font-mono text-[11px] text-primary">/{slashQuery}</span>}
               <span className="ml-auto text-[10px] text-muted-foreground">
                 {slashItems.length} match{slashItems.length !== 1 ? "es" : ""}
@@ -1136,7 +1137,7 @@ function ChatInput({
             onMouseDown={(e) => e.preventDefault()}
           >
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Files</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{t("Files")}</span>
               {mentionQuery && (
                 <span className="font-mono text-[11px] text-primary">@{mentionQuery}</span>
               )}
@@ -1254,11 +1255,11 @@ function ChatInput({
             placeholder={
               isStreaming
                 ? pendingSteers.length + pendingFollowUps.length > 0
-                  ? `Steer the run… (${pendingSteers.length + pendingFollowUps.length} pending · ⌥↵ to run after this turn)`
-                  : "Steer the run… (⌥↵ to run after this turn)"
+                  ? t("Steer the run… ({count} pending · ⌥↵ to run after this turn)", { count: pendingSteers.length + pendingFollowUps.length })
+                  : t("Steer the run… (⌥↵ to run after this turn)")
                 : queuedMessages.length >= MAX_QUEUE
-                  ? `Queue full (${MAX_QUEUE}/${MAX_QUEUE})`
-                  : "Ask AI Scientist anything… (@ for files, / for commands, + to add context)"
+                  ? t("Queue full ({count}/{count})", { count: MAX_QUEUE })
+                  : t("Ask AI Scientist anything… (@ for files, / for commands, + to add context)")
             }
             onChange={handleChange}
             onKeyDown={handleKeyDown}
@@ -1303,7 +1304,7 @@ function ChatInput({
               <InfoTooltip
                 content={
                   <>
-                    <b>Dictate</b>
+                    <b>{t("Dictate")}</b>
                     <br />
                     {speechMode === "detecting"
                       ? "Checking dictation support…"
@@ -1342,7 +1343,7 @@ function ChatInput({
                     </>
                   ) : budgetBlocked ? (
                     <>
-                      <b>Spend limit reached</b>
+                      <b>{t("Spend limit reached")}</b>
                       <br />
                       Project has hit its spend limit (
                       {formatUsd(budgetTotalUsd)}
@@ -1353,7 +1354,7 @@ function ChatInput({
                     </>
                   ) : isStreaming ? (
                     <>
-                      <b>Stop</b>
+                      <b>{t("Stop")}</b>
                       <br />
                       Cancel the current turn (⏎ steers it instead). Undelivered
                       steering messages return to the composer, queued prompts
@@ -1362,13 +1363,12 @@ function ChatInput({
                     </>
                   ) : queuedMessages.length >= MAX_QUEUE ? (
                     <>
-                      <b>Queue is full</b>
+                      <b>{t("Queue is full")}</b>
                       <br />
-                      Wait for the agent to finish before adding more prompts.
-                    </>
+                      {t("Wait for the agent to finish before adding more prompts.")}</>
                   ) : (
                     <>
-                      <b>Send message</b>
+                      <b>{t("Send message")}</b>
                       <br />
                       Press <kbd>↵</kbd> to send, <kbd>⇧</kbd>+<kbd>↵</kbd> for
                       a new line. Prompts sent while the agent is busy steer
@@ -1410,6 +1410,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   onViewCompute?: (jobId?: string) => void;
   onOpenFile?: (path: string) => void;
 }) {
+  const t = useT();
   const activities = message.activities ?? [];
   const hasReasoning = Boolean(message.reasoning?.trim());
   const hasAnything =
@@ -1519,13 +1520,10 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       {orderedBlocks}
       {isStreaming && !hasAnything ? (
         <Shimmer className="text-sm" duration={1.5}>
-          Thinking...
-        </Shimmer>
+          {t("Thinking...")}</Shimmer>
       ) : endedWithoutReply ? (
         <p className="text-xs italic text-muted-foreground">
-          This turn ended without a closing message. Review the tool results
-          above before continuing, or ask a follow-up for a summary.
-        </p>
+          {t("This turn ended without a closing message. Review the tool results above before continuing, or ask a follow-up for a summary.")}</p>
       ) : null}
       {message.citations && (
         <div className="flex flex-wrap items-center gap-2">
@@ -1765,6 +1763,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   },
   ref,
 ) {
+  const t = useT();
   const {
     messages,
     contextUsage,
@@ -2414,8 +2413,8 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
               </div>
             ) : (
               <ConversationEmptyState
-                title="What can I help you with?"
-                description="I can research topics, write code, and analyze data."
+                title={t("What can I help you with?")}
+                description={t("I can research topics, write code, and analyze data.")}
               />
             )
           ) : (

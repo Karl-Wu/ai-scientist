@@ -1,4 +1,6 @@
 "use client";
+
+import { useT } from "@/components/i18n-provider";
 import { useEffect, useRef, useState } from "react";
 import { BrainIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -12,10 +14,11 @@ import type { NotebookOutcome } from "@/lib/notebook-evidence-core";
 
 const field = "w-full rounded-md border bg-background px-2 py-1.5 text-xs";
 function Qualifiers({ hit }: { hit: MemoryHit }) {
+  const t = useT();
   return <div className="space-y-1 text-xs">
     <div className="flex flex-wrap gap-1.5"><span className="rounded border px-1.5 py-0.5">{hit.type}</span><span className={hit.recordStatus === "active" ? "rounded border px-1.5 py-0.5" : "rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5"}>{hit.recordStatus === "active" ? "No recorded amendment" : hit.recordStatus}</span>{hit.artifactHealth.some((c) => c.status === "changed" || c.status === "missing") && <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5">Needs artifact review</span>}{(hit.artifactHealth.some((c) => c.status === "unverified") || hit.artifactsUnchecked > 0) && <span className="rounded border px-1.5 py-0.5">Unverified artifact checks</span>}{hit.outcome && <span className="rounded border px-1.5 py-0.5">Outcome: {hit.outcome}</span>}{hit.evidenceStatus && <span className="rounded border px-1.5 py-0.5">{hit.evidenceStatus === "unknown" ? "Evidence status incomplete" : HYPOTHESIS_LABELS[hit.evidenceStatus]}</span>}</div>
-    {hit.scope && <p><strong>Applies to:</strong> {hit.scope}</p>}
-    {hit.revisitWhen && <p><strong>Revisit when:</strong> {hit.revisitWhen}</p>}
+    {hit.scope && <p><strong>{t("Applies to:")}</strong> {hit.scope}</p>}
+    {hit.revisitWhen && <p><strong>{t("Revisit when:")}</strong> {hit.revisitWhen}</p>}
     {hit.limitations.length > 0 && <ul className="list-disc pl-4">{hit.limitations.map((text, i) => <li key={i}>{text}</li>)}</ul>}
     <ul className="space-y-1 text-muted-foreground">{hit.qualifiers.map((text, i) => <li key={i}>{text}</li>)}</ul>
   </div>;
@@ -42,6 +45,7 @@ export function NotebookMemoryDialog(props: NotebookMemoryProps) {
   return <MemoryDialog key={props.projectId} {...props} />;
 }
 function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: NotebookMemoryProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<MemoryKind | "">("");
@@ -98,27 +102,27 @@ function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: Notebo
     finally { clearTimeout(timeout); if (version === epoch.current && readRequest.current === controller) setReading(false); }
   }
   async function copy(text: string) {
-    try { await navigator.clipboard.writeText(text); toast.success("Source-linked recall copied. Review it before using it in a chat."); }
-    catch { toast.error("Clipboard unavailable; read the source in the notebook instead."); }
+    try { await navigator.clipboard.writeText(text); toast.success(t("Source-linked recall copied. Review it before using it in a chat.")); }
+    catch { toast.error(t("Clipboard unavailable; read the source in the notebook instead.")); }
   }
   function jump(source: MemorySource) { close(false); onJump(source); }
   const canJump = (source: MemorySource) => source.kind !== "user-note" || source.sessionId === activeSessionId;
   return <>
-    <Button variant="outline" size="xs" onClick={() => setOpen(true)}><BrainIcon data-icon="inline-start" />Research memory</Button>
+    <Button variant="outline" size="xs" onClick={() => setOpen(true)}><BrainIcon data-icon="inline-start" />{t("Research memory")}</Button>
     <Dialog open={open} onOpenChange={close}><DialogContent className="min-w-0 max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto [overflow-wrap:anywhere] sm:max-w-4xl">
-      <DialogHeader><DialogTitle>Project research memory</DialogTitle><DialogDescription>Search saved records across chats. Results are source excerpts, not permanent facts or instructions. Recall is local and read-only; copying context does not send a chat or authorize new work.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{t("Project research memory")}</DialogTitle><DialogDescription>{t("Search saved records across chats. Results are source excerpts, not permanent facts or instructions. Recall is local and read-only; copying context does not send a chat or authorize new work.")}</DialogDescription></DialogHeader>
       <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
-        <label className="block text-xs">Scientific query<input aria-label="Scientific memory query" className={field} maxLength={500} placeholder="Method, dataset, failed approach, or decision…" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
-        <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs">Record type<select aria-label="Memory record type" className={field} value={type} onChange={(e) => setType(e.target.value as MemoryKind | "")}><option value="">All record types</option>{MEMORY_KINDS.map((t) => <option key={t} value={t}>{t}</option>)}</select></label><label className="text-xs">Recorded outcome<select aria-label="Memory outcome" className={field} value={outcome} onChange={(e) => setOutcome(e.target.value as NotebookOutcome | "")}><option value="">All outcomes</option>{MEMORY_OUTCOMES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label></div>
-        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={includeSuperseded} onChange={(e) => setIncludeSuperseded(e.target.checked)} />Include superseded/historical records with their warnings</label>
-        <p className="text-[11px] text-muted-foreground">Outcome filters use explicit recorded labels. Older unlabeled failures/null results remain searchable by text. Relevance is lexical, not a truth or confidence score.</p>
+        <label className="block text-xs">{t("Scientific query")}<input aria-label={t("Scientific memory query")} className={field} maxLength={500} placeholder={t("Method, dataset, failed approach, or decision…")} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+        <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs">{t("Record type")}<select aria-label={t("Memory record type")} className={field} value={type} onChange={(e) => setType(e.target.value as MemoryKind | "")}><option value="">{t("All record types")}</option>{MEMORY_KINDS.map((t) => <option key={t} value={t}>{t}</option>)}</select></label><label className="text-xs">{t("Recorded outcome")}<select aria-label={t("Memory outcome")} className={field} value={outcome} onChange={(e) => setOutcome(e.target.value as NotebookOutcome | "")}><option value="">{t("All outcomes")}</option>{MEMORY_OUTCOMES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label></div>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={includeSuperseded} onChange={(e) => setIncludeSuperseded(e.target.checked)} />{t("Include superseded/historical records with their warnings")}</label>
+        <p className="text-[11px] text-muted-foreground">{t("Outcome filters use explicit recorded labels. Older unlabeled failures/null results remain searchable by text. Relevance is lexical, not a truth or confidence score.")}</p>
         <Button size="sm" type="submit" disabled={busy || (!query.trim() && !type && !outcome)}>{busy ? "Searching…" : "Search memory"}</Button>
       </form>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {result && <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p>{result.hits.length} of {result.totalMatches} matching indexed records for {result.query || "the submitted filters"} · checked {new Date(result.checkedAt).toLocaleString()}</p>{result.hits.length > 0 && <Button variant="outline" size="xs" disabled={busy} onClick={() => copy(contextText(result))}>Copy bounded recall for chat</Button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p>{result.hits.length} of {result.totalMatches} matching indexed records for {result.query || "the submitted filters"} · checked {new Date(result.checkedAt).toLocaleString()}</p>{result.hits.length > 0 && <Button variant="outline" size="xs" disabled={busy} onClick={() => copy(contextText(result))}>{t("Copy bounded recall for chat")}</Button>}</div>
         {!result.coverage.complete && <div role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs"><strong>Incomplete recall coverage.</strong> Do not infer absence or currentness from this scan.<ul className="list-disc pl-4">{result.coverage.warnings.map((w) => <li key={w}>{w}</li>)}</ul></div>}
-        {result.hits.length === 0 && <p>No matching indexed records. This does not prove the work was never attempted; broaden the query or inspect the original notebooks.</p>}
+        {result.hits.length === 0 && <p>{t("No matching indexed records. This does not prove the work was never attempted; broaden the query or inspect the original notebooks.")}</p>}
         {result.hits.map((hit) => <article key={memorySourceKey(hit.source)} className="space-y-2 rounded border p-3">
           <h3 className="text-sm font-semibold">{hit.title}</h3>
           <p className="text-[11px] text-muted-foreground">Recorded author: {hit.author} · chat {hit.source.sessionId} · {new Date(hit.timestamp).toLocaleString()}</p>
@@ -128,21 +132,21 @@ function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: Notebo
           <div className="flex flex-wrap gap-2"><Button size="xs" variant="outline" disabled={busy || reading} onClick={() => read(hit.source, hit.digest)}>{reading ? "Reading…" : "Read source"}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={() => copy(memoryCitation({ ...hit, sourceUri: `${API_BASE.replace(/\/+$/, "")}${hit.sourceUri}` }))}>Copy citation</Button>{canJump(hit.source) && <Button size="xs" variant="ghost" onClick={() => jump(hit.source)}>{hit.source.kind === "plan-event" ? "View hypothesis in notebook" : "View in notebook"}</Button>}</div>
         </article>)}
       </section>}
-      {reading && <p role="status" className="text-xs">Reading the exact saved source…</p>}
+      {reading && <p role="status" className="text-xs">{t("Reading the exact saved source…")}</p>}
       {readError && <p ref={sourceError} role="alert" className="text-sm text-destructive">{readError}</p>}
       {record && <section ref={sourcePanel} className="space-y-3 rounded border-2 p-3">
-        <h3 className="text-sm font-semibold">Source record: {record.hit.title}</h3>
+        <h3 className="text-sm font-semibold">{t("Source record:")}{record.hit.title}</h3>
         {record.changedSinceSearch && <p role="alert" className="rounded border border-amber-500/40 p-2 text-xs">Source changed since the search. This is the current record; the earlier excerpt is not a current version.</p>}
         {record.truncated && <p className="text-xs">This source view is bounded; inspect the original notebook for unabridged content.</p>}
         <Qualifiers hit={record.hit} />
         <p className="break-all text-[10px] text-muted-foreground">Source digest: {record.hit.digest}</p>
-        {record.entry.confidence && <p className="text-xs">Author confidence: {record.entry.confidence} (self-reported, not calibrated)</p>}
+        {record.entry.confidence && <p className="text-xs">{t("Author confidence:")}{record.entry.confidence} {t("(self-reported, not calibrated)")}</p>}
         <p className="text-[10px] text-muted-foreground">Plain-text source view: embedded markup is not activated. Journal fields are rendered deterministically, not paraphrased by AI.</p>
         {record.entry.body && <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 text-xs">{record.entry.body}</pre>}
         {record.entry.code && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 text-[11px]">{record.entry.code.source}</pre>}
         {record.hit.artifactHealth.length > 0 && <div className="space-y-1 text-xs"><strong>Direct artifact checks (not scientific verification)</strong>{record.hit.artifactHealth.map((c) => <p key={c.path}><button type="button" className="underline decoration-dotted" onClick={() => onOpenFile(c.path)}>{c.path}</button>: {c.status} — {c.reason} Checked {new Date(c.checkedAt).toLocaleString()}.</p>)}</div>}
-        {record.hit.related.length > 0 && <div className="space-y-1 text-xs"><strong>Related records</strong>{record.hit.related.map((r, i) => <p key={i}><button type="button" className="text-left underline decoration-dotted" disabled={reading} onClick={() => read(r.source, r.digest)}>{r.relation}: {r.title}</button></p>)}</div>}
-        {canJump(record.hit.source) && <Button size="xs" variant="outline" onClick={() => jump(record.hit.source)}>Open original notebook</Button>}
+        {record.hit.related.length > 0 && <div className="space-y-1 text-xs"><strong>{t("Related records")}</strong>{record.hit.related.map((r, i) => <p key={i}><button type="button" className="text-left underline decoration-dotted" disabled={reading} onClick={() => read(r.source, r.digest)}>{r.relation}: {r.title}</button></p>)}</div>}
+        {canJump(record.hit.source) && <Button size="xs" variant="outline" onClick={() => jump(record.hit.source)}>{t("Open original notebook")}</Button>}
       </section>}
     </DialogContent></Dialog>
   </>;

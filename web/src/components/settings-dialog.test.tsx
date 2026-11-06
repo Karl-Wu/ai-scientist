@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderUI, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +20,10 @@ vi.mock("@/lib/use-projects", () => ({
     ],
   }),
 }));
+
+import type { ReactElement } from "react";
+import { I18nProvider } from "@/components/i18n-provider";
+function render(ui: ReactElement) { return renderUI(<I18nProvider>{ui}</I18nProvider>); }
 
 import { SettingsDialog } from "@/components/settings-dialog";
 
@@ -63,7 +67,6 @@ describe("SettingsDialog", () => {
     for (const name of [
       "Providers",
       "Defaults",
-      "Fusion",
       "General",
       "Skills",
       "Prompt templates",
@@ -107,66 +110,24 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("saves Modal credentials as a tested pair and broadcasts the change", async () => {
+  it("saves the available Exa service key and updates its status", async () => {
     const user = userEvent.setup();
-    const changed = vi.fn();
-    window.addEventListener("kady:credentials-changed", changed);
-    routeFetch(() =>
-      json({
-        modalConfigured: true,
-        modalTokenId: { set: true, masked: "ak-…1234" },
-        modalTokenSecret: { set: true, masked: "as-…5678" },
-      }),
-    );
-
+    routeFetch(() => json({ exa: { set: true, masked: "exa-…1234" } }));
     render(<SettingsDialog open onOpenChange={() => {}} request={{ tab: "services" }} />);
-    await screen.findByText("Not connected");
-    await user.type(screen.getByLabelText("Token ID"), "ak-test");
-    await user.type(screen.getByLabelText("Token Secret"), "as-test");
-    await user.click(screen.getByRole("button", { name: /save & test/i }));
-
-    expect(await screen.findByText(/Connected — Modal compute is ready/i)).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledWith(
-      "/credentials",
-      expect.objectContaining({
-        method: "PUT",
-        body: JSON.stringify({
-          modalTokenId: "ak-test",
-          modalTokenSecret: "as-test",
-        }),
-      }),
-    );
-    expect(changed).toHaveBeenCalledOnce();
-    window.removeEventListener("kady:credentials-changed", changed);
+    const input = await screen.findByLabelText("Exa API key");
+    await user.type(input, "exa-test-key");
+    await user.click(within(input.parentElement!).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("exa-…1234")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/credentials", expect.objectContaining({ method: "PUT", body: JSON.stringify({ exaApiKey: "exa-test-key" }) }));
+    expect(screen.queryByLabelText("Token ID")).not.toBeInTheDocument();
   });
 
-  it("shows Testing and handles backend pair-validation errors", async () => {
-    let resolveSave!: (response: Response) => void;
-    routeFetch(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveSave = resolve;
-        }),
-    );
+  it("shows service key save errors from the backend", async () => {
+    routeFetch(() => json({ detail: "Invalid Exa key" }, 400));
     render(<SettingsDialog open onOpenChange={() => {}} request={{ tab: "services" }} />);
-    await screen.findByText("Not connected");
-    fireEvent.change(screen.getByLabelText("Token ID"), { target: { value: "ak-bad" } });
-    fireEvent.change(screen.getByLabelText("Token Secret"), { target: { value: "as-bad" } });
-    fireEvent.click(screen.getByRole("button", { name: /save & test/i }));
-    expect(screen.getByText(/Testing Modal connection/i)).toBeInTheDocument();
-
-    resolveSave(
-      new Response(
-        JSON.stringify({
-          detail: {
-            message: "Modal token pair could not be authenticated",
-          },
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Modal token pair could not be authenticated"),
-    );
+    const input = await screen.findByLabelText("Exa API key");
+    fireEvent.change(input, { target: { value: "exa-bad-key" } });
+    fireEvent.click(within(input.parentElement!).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Invalid Exa key"));
   });
 });

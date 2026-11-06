@@ -11,3 +11,6 @@ export function isLocale(value: string | null | undefined): value is Locale {
 export function localeFromLanguage(language: string | null | undefined): Locale {
   return language?.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
+
+/** English source messages are stable keys; unknown messages fall back to the source. */
+export type TranslationParams = Record<string, string | number>;
