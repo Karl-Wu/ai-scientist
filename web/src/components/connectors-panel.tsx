@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * Settings → Project → Connectors: MCP servers for Pi's built-in MCP support.
  *
@@ -285,20 +287,21 @@ function ExposureSelect({
   label: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <Select value={value} onValueChange={(v) => onChange(v as McpExposure)} disabled={disabled}>
-      <SelectTrigger size="sm" className={cn("h-7 text-[11px]", className)} aria-label={label}>
+      <SelectTrigger size="sm" className={cn("h-7 text-[11px]", className)} aria-label={t(label)}>
         {/* Explicit children: the items carry a description the trigger must not mirror. */}
-        <SelectValue>{MCP_EXPOSURE_OPTIONS.find((opt) => opt.value === value)?.label}</SelectValue>
+        <SelectValue>{t(MCP_EXPOSURE_OPTIONS.find((opt) => opt.value === value)?.label ?? "")}</SelectValue>
       </SelectTrigger>
       <SelectContent align="end">
         <SelectGroup>
           {MCP_EXPOSURE_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value} className="text-xs">
               <div className="flex flex-col">
-                <span>{opt.label}</span>
+                <span>{t(opt.label)}</span>
                 <span className="max-w-64 whitespace-normal text-[10px] text-muted-foreground">
-                  {opt.description}
+                  {t(opt.description)}
                 </span>
               </div>
             </SelectItem>
@@ -310,6 +313,7 @@ function ExposureSelect({
 }
 
 export function ConnectorsPanel() {
+  const t = useT();
   const { activeProject, activeProjectId } = useProjects();
   const [scope, setScope] = useState<McpScope>("project");
   const [servers, setServers] = useState<McpServers>({});
@@ -409,13 +413,13 @@ export function ConnectorsPanel() {
       const report = await getMcpStatus();
       setStatus(report.servers);
       setCheckedAt(new Date());
-      setStatusNotes([...report.errors.map((e) => `Config: ${e}`), ...(report.note ? [report.note] : [])]);
+      setStatusNotes([...report.errors.map((e) => t("Config: {v0}", { v0: e })), ...(report.note ? [report.note] : [])]);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Status check failed");
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [t]);
 
   const persist = useCallback(
     async (next: McpServers) => {
@@ -452,7 +456,7 @@ export function ConnectorsPanel() {
     }
     const clash = namespaceClash(name, Object.keys(next));
     if (clash) {
-      setError(`“${name}” would share tool names with “${clash}” (Pi treats - and _ alike)`);
+      setError(t("“{v0}” would share tool names with “{v1}” (Pi treats - and _ alike)", { v0: name, v1: clash }));
       return;
     }
     if (form.type === "http" && form.authMode === "provider" && !form.authProvider.trim()) {
@@ -461,7 +465,7 @@ export function ConnectorsPanel() {
     }
     next[name] = configFromForm(form);
     await persist(next);
-  }, [form, servers, persist]);
+  }, [form, servers, persist, t]);
 
   const addRadius = useCallback(async () => {
     setAddingRadius(true);
@@ -483,7 +487,7 @@ export function ConnectorsPanel() {
   const handleDelete = useCallback(
     async (name: string) => {
       const ok = await confirm({
-        title: `Remove the ${name} connector?`,
+        title: t("Remove the {v0} connector?", { v0: name }),
         description:
           scope === "project"
             ? "Its entry is deleted from this project's .pi/mcp.json. To keep the configuration, switch it off instead."
@@ -496,7 +500,7 @@ export function ConnectorsPanel() {
       delete next[name];
       await persist(next);
     },
-    [confirm, persist, scope, servers],
+    [confirm, persist, scope, servers, t],
   );
 
   const handleTest = useCallback(async () => {
@@ -511,19 +515,19 @@ export function ConnectorsPanel() {
         result.ok
           ? {
               ok: true,
-              text: `Connected — ${tools.length} tool${tools.length === 1 ? "" : "s"}: ${tools.slice(0, 8).join(", ")}${tools.length > 8 ? ", …" : ""}`,
+              text: ((tools.length === 1 ? "" : "s") === "" ? t("Connected — {v0} tool: {v2}{v3}", {v0: tools.length, v2: tools.slice(0, 8).join(", "), v3: tools.length > 8 ? ", …" : ""}) : t("Connected — {v0} tools: {v2}{v3}", {v0: tools.length, v2: tools.slice(0, 8).join(", "), v3: tools.length > 8 ? ", …" : ""})),
             }
-          : { ok: false, text: `Connection failed: ${result.detail ?? "unknown error"}` },
+          : { ok: false, text: t("Connection failed: {v0}", { v0: result.detail ?? "unknown error" }) },
       );
     } catch (exc) {
       setTestResult({
         ok: false,
-        text: `Connection failed: ${exc instanceof Error ? exc.message : "unknown error"}`,
+        text: t("Connection failed: {v0}", { v0: exc instanceof Error ? exc.message : "unknown error" }),
       });
     } finally {
       setTesting(false);
     }
-  }, [form]);
+  }, [form, t]);
 
   const toggle = useCallback(
     async (name: string, next: boolean) => {
@@ -608,8 +612,8 @@ export function ConnectorsPanel() {
     async (value: McpScope) => {
       if (form) {
         const ok = await confirm({
-          title: "Discard the connector you are editing?",
-          description: "Switching scope closes the form without saving.",
+          title: t("Discard the connector you are editing?"),
+          description: t("Switching scope closes the form without saving."),
           confirmLabel: "Discard",
         });
         if (!ok) return;
@@ -618,7 +622,7 @@ export function ConnectorsPanel() {
       setTestResult(null);
       setScope(value);
     },
-    [confirm, form],
+    [confirm, form, t],
   );
 
   const providerName = (id: string) => authProviders?.find((p) => p.id === id)?.name ?? id;
@@ -631,8 +635,8 @@ export function ConnectorsPanel() {
     <div className="flex flex-col gap-4">
       {dialog}
       <SettingsHeader
-        title="Connectors"
-        description="Connect Model Context Protocol servers to give the agent extra tools, through Pi's built-in MCP support. Tokens stay on this machine."
+        title={t("Connectors")}
+        description={t("Connect Model Context Protocol servers to give the agent extra tools, through Pi's built-in MCP support. Tokens stay on this machine.")}
         appliesTo="new-chats"
       />
 
@@ -646,11 +650,9 @@ export function ConnectorsPanel() {
         <div className="flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
           <PlugZapIcon className="size-3.5 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">You&apos;re signed in to Radius.</div>
+            <div className="font-medium">{t("You're signed in to Radius.")}</div>
             <p className="text-[11px] text-muted-foreground">
-              Add its MCP server so the agent can use Radius tools. It is added for all
-              projects and authenticates with your Radius sign-in.
-            </p>
+              {t("Add its MCP server so the agent can use Radius tools. It is added for all projects and authenticates with your Radius sign-in.")}{" "}</p>
           </div>
           <Button
             size="sm"
@@ -658,29 +660,25 @@ export function ConnectorsPanel() {
             disabled={addingRadius}
             onClick={() => void addRadius()}
           >
-            {addingRadius ? "Adding…" : "Add Radius connector"}
+            {addingRadius ? t("Adding…") : t("Add Radius connector")}
           </Button>
         </div>
       )}
       {radiusAdded && scope === "project" && (
         <p className="-mt-2 text-[11px] text-muted-foreground">
-          Added the Radius connector for all projects.{" "}
+          {t("Added the Radius connector for all projects.")}{" "}
           <button
             type="button"
             className="font-medium underline underline-offset-2 hover:no-underline"
             onClick={() => void changeScope("global")}
           >
-            Show it
-          </button>
+            {t("Show it")}{" "}</button>
         </p>
       )}
 
       {scope === "global" && (
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Stored in your AI Scientist Pi agent directory and used by every project. Pi recommends
-          this scope for personal servers and servers with credentials. A project connector
-          with the same name replaces the global one.
-        </p>
+          {t("Stored in your AI Scientist Pi agent directory and used by every project. Pi recommends this scope for personal servers and servers with credentials. A project connector with the same name replaces the global one.")}{" "}</p>
       )}
 
       <SettingsError>{error}</SettingsError>
@@ -692,13 +690,11 @@ export function ConnectorsPanel() {
             login.flow.status === "error" && "border-destructive/50 bg-destructive/10 text-destructive",
           )}
         >
-          <div className="font-medium">Sign in to {login.name}</div>
+          <div className="font-medium">{t("Sign in to")}{" "}{login.name}</div>
           {login.flow.status === "running" && (
             <>
               <p className="text-muted-foreground">
-                Approve access in the browser window Pi opened. AI Scientist picks up the sign-in
-                automatically; running chats reconnect on their next turn.
-              </p>
+                {t("Approve access in the browser window Pi opened. AI Scientist picks up the sign-in automatically; running chats reconnect on their next turn.")}{" "}</p>
               {login.flow.authorizationUrl && (
                 <a
                   href={login.flow.authorizationUrl}
@@ -707,8 +703,7 @@ export function ConnectorsPanel() {
                   className="inline-flex items-center gap-1 self-start text-primary underline-offset-2 hover:underline"
                 >
                   <ExternalLinkIcon className="size-3" />
-                  Open the sign-in page
-                </a>
+                  {t("Open the sign-in page")}{" "}</a>
               )}
             </>
           )}
@@ -723,20 +718,20 @@ export function ConnectorsPanel() {
               setLogin(null);
             }}
           >
-            {login.flow.status === "running" ? "Cancel" : "Dismiss"}
+            {login.flow.status === "running" ? t("Cancel") : t("Dismiss")}
           </Button>
         </div>
       )}
 
       {loading ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
       ) : (
         <>
           {allNames.length === 0 && !form && (
             <div className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
               {scope === "project"
-                ? "No connectors configured for this project yet."
-                : "No connectors shared across projects yet."}
+                ? t("No connectors configured for this project yet.")
+                : t("No connectors shared across projects yet.")}
             </div>
           )}
 
@@ -747,15 +742,15 @@ export function ConnectorsPanel() {
                   <SettingsSearch
                     value={query}
                     onChange={setQuery}
-                    placeholder="Search connectors…"
-                    label="Search connectors"
+                    placeholder={t("Search connectors…")}
+                    label={t("Search connectors")}
                     className="flex-1"
                   />
                 ) : (
                   <span className="flex-1" />
                 )}
                 <span className="text-[10px] text-muted-foreground">
-                  {checkedAt ? `Checked ${checkedAt.toLocaleTimeString()}` : "Starts each server to check it"}
+                  {checkedAt ? t("Checked {v0}", { v0: checkedAt.toLocaleTimeString() }) : t("Starts each server to check it")}
                 </span>
                 <Button
                   variant="ghost"
@@ -765,11 +760,11 @@ export function ConnectorsPanel() {
                   onClick={() => void checkStatus()}
                 >
                   <RefreshCwIcon className={cn("size-3", checking && "animate-spin")} />
-                  {checking ? "Connecting…" : "Check status"}
+                  {checking ? t("Connecting…") : t("Check status")}
                 </Button>
               </div>
               {names.length === 0 ? (
-                <p className="px-1 text-[11px] text-muted-foreground">No connector matches.</p>
+                <p className="px-1 text-[11px] text-muted-foreground">{t("No connector matches.")}</p>
               ) : null}
               {names.map((name) => {
                 const config = servers[name];
@@ -801,17 +796,17 @@ export function ConnectorsPanel() {
                         <div className="text-xs font-medium">{name}</div>
                         <div className="truncate text-[11px] text-muted-foreground">
                           {summarizeConfig(config)}
-                          {viaProvider && <span> · via {providerName(viaProvider)}</span>}
+                          {viaProvider && <span> {" "}{t("· via")}{" "}{providerName(viaProvider)}</span>}
                         </div>
                       </div>
                       <ExposureSelect
                         value={exposureOf(config)}
                         onChange={(value) => void changeExposure(name, value)}
-                        label={`Exposure of ${name}`}
+                        label={t("Exposure of {v0}", { v0: name })}
                         className="w-32"
                       />
                       <Switch
-                        aria-label={`Toggle ${name}`}
+                        aria-label={t("Toggle {v0}", { v0: name })}
                         checked={enabled}
                         onCheckedChange={(next) => void toggle(name, next)}
                       />
@@ -819,7 +814,7 @@ export function ConnectorsPanel() {
                         variant="ghost"
                         size="sm"
                         className="size-7 p-0"
-                        aria-label={`Edit ${name}`}
+                        aria-label={t("Edit {v0}", { v0: name })}
                         onClick={() => {
                           setTestResult(null);
                           setForm(formFromConfig(name, config));
@@ -831,7 +826,7 @@ export function ConnectorsPanel() {
                         variant="ghost"
                         size="sm"
                         className="size-7 p-0 text-destructive hover:text-destructive"
-                        aria-label={`Remove ${name}`}
+                        aria-label={t("Remove {v0}", { v0: name })}
                         disabled={saving}
                         onClick={() => void handleDelete(name)}
                       >
@@ -851,16 +846,16 @@ export function ConnectorsPanel() {
                             )}
                             title={live?.error}
                           >
-                            {label.text}
+                            {t(label.text)}
                           </span>
                         )}
                         {note && !label && (
-                          <span className="min-w-0 flex-1 text-muted-foreground">{note}</span>
+                          <span className="min-w-0 flex-1 text-muted-foreground">{t(note)}</span>
                         )}
                         {live?.state === "needs-auth" && viaProvider && (
                           <span className="shrink-0 text-muted-foreground">
-                            Sign in to {providerName(viaProvider)} in{" "}
-                            <SettingsLink tab="providers">Providers</SettingsLink>
+                            {t("Sign in to")}{" "}{providerName(viaProvider)} {" "}{t("in")}{" "}
+                            <SettingsLink tab="providers">{t("Providers")}</SettingsLink>
                           </span>
                         )}
                         {live?.state === "needs-auth" && !viaProvider && (
@@ -871,8 +866,7 @@ export function ConnectorsPanel() {
                             onClick={() => void signIn(name)}
                           >
                             <KeyRoundIcon className="size-3" />
-                            Sign in
-                          </Button>
+                            {t("Sign in")}{" "}</Button>
                         )}
                         {live?.state === "connected" && live.signedIn && usesOAuth(config) && (
                           <Button
@@ -882,12 +876,11 @@ export function ConnectorsPanel() {
                             onClick={() => void signOut(name)}
                           >
                             <LogOutIcon className="size-3" />
-                            Sign out
-                          </Button>
+                            {t("Sign out")}{" "}</Button>
                         )}
                       </div>
                     )}
-                    {label && note && <div className="pl-5.5 text-[11px] text-muted-foreground">{note}</div>}
+                    {label && note && <div className="pl-5.5 text-[11px] text-muted-foreground">{t(note)}</div>}
                   </div>
                 );
               })}
@@ -902,10 +895,10 @@ export function ConnectorsPanel() {
           {form ? (
             <div className="flex flex-col gap-3 rounded-lg border p-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium">Name</label>
+                <label className="text-xs font-medium">{t("Name")}</label>
                 <Input
                   value={form.name}
-                  placeholder="e.g. linear"
+                  placeholder={t("e.g. linear")}
                   className="h-8 text-xs"
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
@@ -913,20 +906,18 @@ export function ConnectorsPanel() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium" htmlFor="mcp-description">
-                  Description{" "}
-                  <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("Description")}{" "}
+                  <span className="font-normal text-muted-foreground">{t("(optional)")}</span>
                 </label>
                 <Input
                   id="mcp-description"
                   value={form.description}
-                  placeholder="e.g. Issue tracker for the lab's projects"
+                  placeholder={t("e.g. Issue tracker for the lab's projects")}
                   className="h-8 text-xs"
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  What the server offers, in a sentence. Pi lists it in the agent&apos;s prompt and
-                  uses it to rank the server&apos;s tools in search.
-                </p>
+                  {t("What the server offers, in a sentence. Pi lists it in the agent's prompt and uses it to rank the server's tools in search.")}{" "}</p>
               </div>
 
               <div className="flex gap-2">
@@ -944,7 +935,7 @@ export function ConnectorsPanel() {
                     onClick={() => setForm({ ...form, type: opt.value })}
                   >
                     <opt.icon className="size-3.5" />
-                    {opt.label}
+                    {t(opt.label)}
                   </Button>
                 ))}
               </div>
@@ -952,7 +943,7 @@ export function ConnectorsPanel() {
               {form.type === "http" ? (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium">Server URL</label>
+                    <label className="text-xs font-medium">{t("Server URL")}</label>
                     <Input
                       value={form.url}
                       placeholder="https://mcp.example.com/mcp"
@@ -961,12 +952,12 @@ export function ConnectorsPanel() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium">Authentication</label>
+                    <label className="text-xs font-medium">{t("Authentication")}</label>
                     <Select
                       value={form.authMode}
                       onValueChange={(v) => setForm({ ...form, authMode: v as McpAuthMode })}
                     >
-                      <SelectTrigger size="sm" className="h-8 w-full text-xs" aria-label="Authentication">
+                      <SelectTrigger size="sm" className="h-8 w-full text-xs" aria-label={t("Authentication")}>
                         <SelectValue>{AUTH_MODE_LABELS[form.authMode]}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -990,13 +981,12 @@ export function ConnectorsPanel() {
                   {form.authMode === "bearer" && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-xs font-medium" htmlFor="mcp-bearer">
-                        Bearer token
-                      </label>
+                        {t("Bearer token")}{" "}</label>
                       <Input
                         id="mcp-bearer"
                         type="password"
                         value={form.bearerToken}
-                        placeholder="Sent as Authorization: Bearer … — or ${ENV_VAR}"
+                        placeholder={t("Sent as Authorization: Bearer … — or ${ENV_VAR}")}
                         className="h-8 text-xs"
                         autoComplete="off"
                         onChange={(e) => setForm({ ...form, bearerToken: e.target.value })}
@@ -1007,9 +997,7 @@ export function ConnectorsPanel() {
                   {form.authMode === "oauth" && (
                     <div className="flex flex-col gap-1.5">
                       <p className="text-[11px] text-muted-foreground">
-                        For servers that sign in with OAuth (e.g. Sentry, Linear): save, then use
-                        Sign in. Servers that need no sign-in work the same way.
-                      </p>
+                        {t("For servers that sign in with OAuth (e.g. Sentry, Linear): save, then use Sign in. Servers that need no sign-in work the same way.")}{" "}</p>
                       <button
                         type="button"
                         aria-expanded={Boolean(form.advancedOAuth)}
@@ -1019,14 +1007,12 @@ export function ConnectorsPanel() {
                         <ChevronRightIcon
                           className={cn("size-3 transition-transform", form.advancedOAuth && "rotate-90")}
                         />
-                        Advanced OAuth
-                      </button>
+                        {t("Advanced OAuth")}{" "}</button>
                       {form.advancedOAuth && (
                         <div className="flex flex-col gap-2.5 border-l pl-3">
                           <div className="flex flex-col gap-1">
                             <label className="text-xs font-medium" htmlFor="mcp-oauth-client-name">
-                              Client name
-                            </label>
+                              {t("Client name")}{" "}</label>
                             <Input
                               id="mcp-oauth-client-name"
                               value={form.oauthClientName}
@@ -1035,14 +1021,11 @@ export function ConnectorsPanel() {
                               onChange={(e) => setForm({ ...form, oauthClientName: e.target.value })}
                             />
                             <p className="text-[11px] text-muted-foreground">
-                              Sent when Pi registers itself, for servers that only accept known
-                              OAuth clients.
-                            </p>
+                              {t("Sent when Pi registers itself, for servers that only accept known OAuth clients.")}{" "}</p>
                           </div>
                           <div className="flex flex-col gap-1">
                             <label className="text-xs font-medium" htmlFor="mcp-oauth-metadata">
-                              Authorization server metadata URL
-                            </label>
+                              {t("Authorization server metadata URL")}{" "}</label>
                             <Input
                               id="mcp-oauth-metadata"
                               value={form.oauthMetadataUrl}
@@ -1051,9 +1034,7 @@ export function ConnectorsPanel() {
                               onChange={(e) => setForm({ ...form, oauthMetadataUrl: e.target.value })}
                             />
                             <p className="text-[11px] text-muted-foreground">
-                              For servers that advertise a wrong authorization server or none.
-                              Must use https (http only on localhost).
-                            </p>
+                              {t("For servers that advertise a wrong authorization server or none. Must use https (http only on localhost).")}{" "}</p>
                           </div>
                         </div>
                       )}
@@ -1062,13 +1043,13 @@ export function ConnectorsPanel() {
 
                   {form.authMode === "provider" && (
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-medium">Provider</label>
+                      <label className="text-xs font-medium">{t("Provider")}</label>
                       <Select
                         value={form.authProvider || undefined}
                         onValueChange={(v) => setForm({ ...form, authProvider: v })}
                       >
-                        <SelectTrigger size="sm" className="h-8 w-full text-xs" aria-label="Provider">
-                          <SelectValue placeholder="Choose a signed-in provider">
+                        <SelectTrigger size="sm" className="h-8 w-full text-xs" aria-label={t("Provider")}>
+                          <SelectValue placeholder={t("Choose a signed-in provider")}>
                             {form.authProvider ? providerName(form.authProvider) : undefined}
                           </SelectValue>
                         </SelectTrigger>
@@ -1078,7 +1059,7 @@ export function ConnectorsPanel() {
                               <SelectItem key={provider.id} value={provider.id} className="text-xs">
                                 {provider.name}
                                 {!provider.connected && (
-                                  <span className="text-muted-foreground"> (not signed in)</span>
+                                  <span className="text-muted-foreground"> {" "}{t("(not signed in)")}</span>
                                 )}
                               </SelectItem>
                             ))}
@@ -1092,15 +1073,11 @@ export function ConnectorsPanel() {
                         </SelectContent>
                       </Select>
                       <p className="text-[11px] text-muted-foreground">
-                        Sends that provider&apos;s sign-in token instead of an MCP OAuth sign-in, and
-                        picks up its refreshes. Sign in under{" "}
-                        <SettingsLink tab="providers">Providers</SettingsLink>. Needs an https URL.
-                      </p>
+                        {t("Sends that provider's sign-in token instead of an MCP OAuth sign-in, and picks up its refreshes. Sign in under")}{" "}
+                        <SettingsLink tab="providers">{t("Providers")}</SettingsLink>{t(". Needs an https URL.")}{" "}</p>
                       {scope === "project" && (
                         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                          Pi allows provider sign-ins only for connectors shared across projects.
-                          Add this connector under All projects instead.
-                        </p>
+                          {t("Pi allows provider sign-ins only for connectors shared across projects. Add this connector under All projects instead.")}{" "}</p>
                       )}
                     </div>
                   )}
@@ -1108,7 +1085,7 @@ export function ConnectorsPanel() {
               ) : (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium">Command</label>
+                    <label className="text-xs font-medium">{t("Command")}</label>
                     <Input
                       value={form.command}
                       placeholder="npx"
@@ -1118,10 +1095,9 @@ export function ConnectorsPanel() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium">
-                      Arguments{" "}
+                      {t("Arguments")}{" "}
                       <span className="font-normal text-muted-foreground">
-                        (space-separated)
-                      </span>
+                        {t("(space-separated)")}{" "}</span>
                     </label>
                     <Input
                       value={form.args}
@@ -1132,9 +1108,9 @@ export function ConnectorsPanel() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium">
-                      Environment variables{" "}
+                      {t("Environment variables")}{" "}
                       <span className="font-normal text-muted-foreground">
-                        (KEY=value, one per line; values may use ${"{"}NAME{"}"})
+                        {t("Environment entries (KEY=value, one per line; supports environment variable references)")}
                       </span>
                     </label>
                     <Textarea
@@ -1148,11 +1124,11 @@ export function ConnectorsPanel() {
               )}
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium">How the agent reaches the tools</label>
+                <label className="text-xs font-medium">{t("How the agent reaches the tools")}</label>
                 <ExposureSelect
                   value={form.exposure}
                   onChange={(exposure) => setForm({ ...form, exposure })}
-                  label="Exposure"
+                  label={t("Exposure")}
                   className="w-full"
                 />
                 <p className="text-[11px] text-muted-foreground">
@@ -1180,7 +1156,7 @@ export function ConnectorsPanel() {
                   disabled={saving}
                   onClick={() => void handleSave()}
                 >
-                  {saving ? "Saving…" : form.originalName ? "Save changes" : "Add connector"}
+                  {saving ? t("Saving…") : form.originalName ? t("Save changes") : t("Add connector")}
                 </Button>
                 <Button
                   variant="outline"
@@ -1189,7 +1165,7 @@ export function ConnectorsPanel() {
                   disabled={testing}
                   onClick={() => void handleTest()}
                 >
-                  {testing ? "Testing…" : "Test connection"}
+                  {testing ? t("Testing…") : t("Test connection")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -1200,8 +1176,7 @@ export function ConnectorsPanel() {
                     setTestResult(null);
                   }}
                 >
-                  Cancel
-                </Button>
+                  {t("Cancel")}{" "}</Button>
               </div>
             </div>
           ) : (
@@ -1215,8 +1190,7 @@ export function ConnectorsPanel() {
               }}
             >
               <PlusIcon className="size-3.5" />
-              Add connector
-            </Button>
+              {t("Add connector")}{" "}</Button>
           )}
         </>
       )}

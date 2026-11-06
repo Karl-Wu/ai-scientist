@@ -263,7 +263,7 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
           aria-label={t("Resize settings")}
           aria-orientation="horizontal"
           tabIndex={0}
-          title="Drag to resize · double-click to reset"
+          title={t("Drag to resize · double-click to reset")}
           className="absolute bottom-0 right-0 size-5 cursor-nwse-resize touch-none select-none rounded-br-lg text-muted-foreground/60 outline-none hover:text-foreground focus-visible:text-foreground"
           data-testid="settings-resize-handle"
         >

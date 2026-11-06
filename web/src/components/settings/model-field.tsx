@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * A model picker for settings forms: the composer's picker list behind a
  * form-styled trigger, storing a canonical `provider/model` ref string.
@@ -36,6 +38,7 @@ export function ModelField({
   disabled?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -53,7 +56,7 @@ export function ModelField({
       <div className={cn("flex items-center gap-2", className)}>
         <Input
           id={id}
-          aria-label={label}
+          aria-label={t(label)}
           autoFocus
           value={draft}
           placeholder="provider/model-id"
@@ -80,17 +83,17 @@ export function ModelField({
             id={id}
             type="button"
             disabled={disabled}
-            aria-label={`${label}: ${value ? (selected?.label ?? value) : (emptyLabel ?? "none")}`}
+            aria-label={`${label}: ${value ? (selected?.label ?? value) : t(emptyLabel ?? "none")}`}
             className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-2.5 text-left text-xs hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className={cn("min-w-0 flex-1 truncate", !value && "text-muted-foreground")}>
-              {value ? (selected?.label ?? <code className="font-mono">{value}</code>) : (emptyLabel ?? "Choose a model")}
+              {value ? (selected?.label ?? <code className="font-mono">{value}</code>) : (emptyLabel ? t(emptyLabel) : t("Choose a model"))}
             </span>
             {value && selected ? (
               <span className="shrink-0 text-[10px] text-muted-foreground">{selected.provider}</span>
             ) : null}
             {availability === "unavailable" ? (
-              <span className="shrink-0 text-[10px] font-medium text-destructive">disconnected</span>
+              <span className="shrink-0 text-[10px] font-medium text-destructive">{t("disconnected")}</span>
             ) : null}
             <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden />
           </button>
@@ -113,7 +116,7 @@ export function ModelField({
                 setOpen(false);
               }}
             >
-              {emptyLabel}
+              {t(emptyLabel)}
             </button>
           ) : null}
           <ModelPickerList
@@ -134,8 +137,8 @@ export function ModelField({
         size="icon"
         className="size-8 shrink-0"
         disabled={disabled}
-        aria-label={`Type a model id for ${label}`}
-        title="Type a model id"
+        aria-label={t("Type a model id for {v0}", { v0: label })}
+        title={t("Type a model id")}
         onClick={() => {
           setDraft(value);
           setManual(true);

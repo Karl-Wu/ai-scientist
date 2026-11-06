@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * Settings → Project → General: everything that belongs to one project,
  * as four independently-saved cards so a failing section never leaves the
@@ -50,20 +52,19 @@ function CardActions({
   onSave: () => void;
   saveLabel?: string;
 }) {
+  const t = useT();
   return (
     <div className="mt-3 flex flex-col gap-2">
       <SettingsError>{error}</SettingsError>
       <div className="flex items-center justify-end gap-2">
         {saved && !dirty ? (
           <span className="mr-auto text-[11px] text-emerald-600 dark:text-emerald-400" role="status">
-            Saved.
-          </span>
+            {t("Saved.")}{" "}</span>
         ) : null}
         <Button type="button" variant="ghost" size="sm" className="text-xs" disabled={!dirty || saving} onClick={onDiscard}>
-          Discard
-        </Button>
+          {t("Discard")}{" "}</Button>
         <Button type="button" size="sm" className="text-xs" disabled={!dirty || saving} onClick={onSave}>
-          {saving ? "Saving…" : saveLabel}
+          {saving ? t("Saving…") : t(saveLabel)}
         </Button>
       </div>
     </div>
@@ -89,6 +90,7 @@ function generalFrom(project: Project): GeneralDraft {
 }
 
 function GeneralCard({ project }: { project: Project }) {
+  const t = useT();
   const { update } = useProjects();
   const { summary } = useProjectCost(0, project.id);
   const [draft, setDraft] = useState(() => generalFrom(project));
@@ -148,41 +150,39 @@ function GeneralCard({ project }: { project: Project }) {
   const budget = summary.budget;
   const committed = budget.committedUsd ?? budget.totalUsd;
   return (
-    <SettingsCard id="general" title="General & budget">
+    <SettingsCard id="general" title={t("General & budget")}>
       <div className="grid gap-3">
         <label className="grid gap-1 text-xs font-medium">
-          Name
-          <Input
+          {t("Name")}{" "}<Input
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            placeholder="RNA-seq pilot"
+            placeholder={t("RNA-seq pilot")}
             className="h-8 text-xs font-normal"
           />
         </label>
         <label className="grid gap-1 text-xs font-medium">
-          Description
-          <Textarea
+          {t("Description")}{" "}<Textarea
             rows={2}
             value={draft.description}
             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            placeholder="Optional one-line summary."
+            placeholder={t("Optional one-line summary.")}
             className="text-xs font-normal"
           />
         </label>
         <label className="grid gap-1 text-xs font-medium">
           <span>
-            Tags <span className="font-normal text-muted-foreground">(comma separated)</span>
+            {t("Tags")}{" "}<span className="font-normal text-muted-foreground">{t("(comma separated)")}</span>
           </span>
           <Input
             value={draft.tags}
             onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
-            placeholder="genomics, proteomics"
+            placeholder={t("genomics, proteomics")}
             className="h-8 text-xs font-normal"
           />
         </label>
         <div id="budget" className="grid scroll-mt-4 gap-1">
           <label htmlFor="project-spend-limit" className="text-xs font-medium">
-            Spend limit <span className="font-normal text-muted-foreground">(USD, optional)</span>
+            {t("Spend limit")}{" "}<span className="font-normal text-muted-foreground">{t("(USD, optional)")}</span>
           </label>
           <Input
             id="project-spend-limit"
@@ -192,17 +192,12 @@ function GeneralCard({ project }: { project: Project }) {
             step="0.01"
             value={draft.spendLimit}
             onChange={(e) => setDraft({ ...draft, spendLimit: e.target.value })}
-            placeholder="Leave empty for no limit"
+            placeholder={t("Leave empty for no limit")}
             className="h-8 text-xs"
           />
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            So far: {formatUsd(budget.spentUsd ?? summary.totalUsd)} spent
-            {(budget.reservedUsd ?? 0) > 0 ? `, ${formatUsd(budget.reservedUsd)} reserved for running compute` : ""}
-            {budget.limitUsd !== null ? ` — ${formatUsd(committed)} of ${formatUsd(budget.limitUsd)}` : ""}.
-            Pay-as-you-go model usage, metered extra usage and Modal compute count toward the cap;
-            subscription and local models don&apos;t. New billable runs are blocked once the total
-            reaches it, with a warning at 80%.
-          </p>
+            {t("So far:")}{" "}{formatUsd(budget.spentUsd ?? summary.totalUsd)} {t("spent")}{" "}{(budget.reservedUsd ?? 0) > 0 ? t(", {v0} reserved for running compute", { v0: formatUsd(budget.reservedUsd) }) : ""}
+            {budget.limitUsd !== null ? t(" — {v0} of {v1}", { v0: formatUsd(committed), v1: formatUsd(budget.limitUsd) }) : ""}{t(". Pay-as-you-go model usage, metered extra usage and Modal compute count toward the cap; subscription and local models don't. New billable runs are blocked once the total reaches it, with a warning at 80%.")}{" "}</p>
         </div>
       </div>
       <CardActions
@@ -229,6 +224,7 @@ const INSTRUCTIONS_TEXT: Record<InstructionsStatus, string> = {
 };
 
 function InstructionsCard({ projectId }: { projectId: string }) {
+  const t = useT();
   const [status, setStatus] = useState<InstructionsStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,9 +248,9 @@ function InstructionsCard({ projectId }: { projectId: string }) {
   const restore = async () => {
     if (status === "edited") {
       const ok = await confirm({
-        title: "Replace the edited AGENTS.md?",
+        title: t("Replace the edited AGENTS.md?"),
         description:
-          "Your changes to this project's AGENTS.md are overwritten with the shipped instructions. Copy anything you want to keep first.",
+          t("Your changes to this project's AGENTS.md are overwritten with the shipped instructions. Copy anything you want to keep first."),
         confirmLabel: "Restore defaults",
         destructive: true,
       });
@@ -274,17 +270,17 @@ function InstructionsCard({ projectId }: { projectId: string }) {
   return (
     <SettingsCard
       id="instructions"
-      title="Agent instructions (AGENTS.md)"
-      description="The sandbox's AGENTS.md tells the agent how to work in this project: ask before assuming, respect raw data, confirm costs before scheduling. To customize it, open this project's sandbox/AGENTS.md in a local text editor. This file is hidden from AI Scientist's file browser."
+      title={t("Agent instructions (AGENTS.md)")}
+      description={t("The sandbox's AGENTS.md tells the agent how to work in this project: ask before assuming, respect raw data, confirm costs before scheduling. To customize it, open this project's sandbox/AGENTS.md in a local text editor. This file is hidden from AI Scientist's file browser.")}
     >
       {dialog}
       <div className="flex items-center gap-3" data-testid="instructions-status">
         <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">
-          {status ? INSTRUCTIONS_TEXT[status] : error ? null : "Loading…"}
+          {status ? t(INSTRUCTIONS_TEXT[status]) : error ? null : t("Loading…")}
         </p>
         {status && status !== "current" ? (
           <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-[11px]" disabled={busy} onClick={() => void restore()}>
-            {busy ? "Restoring…" : "Restore default instructions"}
+            {busy ? t("Restoring…") : t("Restore default instructions")}
           </Button>
         ) : null}
       </div>
@@ -294,6 +290,7 @@ function InstructionsCard({ projectId }: { projectId: string }) {
 }
 
 function GuardCard({ projectId }: { projectId: string }) {
+  const t = useT();
   const [initial, setInitial] = useState<GuardPolicy | null>(null);
   const [paths, setPaths] = useState("");
   const [destructiveConfirm, setDestructiveConfirm] = useState(false);
@@ -349,30 +346,29 @@ function GuardCard({ projectId }: { projectId: string }) {
   return (
     <SettingsCard
       id="safety"
-      title="Raw-data guard"
-      description="Applies to AI Scientist and to background specialists, in open chats too. A heuristic guard, not a security boundary — see docs/data-guard.md."
+      title={t("Raw-data guard")}
+      description={t("Applies to AI Scientist and to background specialists, in open chats too. A heuristic guard, not a security boundary — see docs/data-guard.md.")}
     >
       {!initial ? (
-        error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">Loading…</p>
+        error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>
       ) : (
         <div data-testid="guard-settings">
           <label className="grid gap-1 text-[11px] text-muted-foreground">
-            Protected paths (one glob per line, relative to the sandbox; the agent can read but never modify them)
-            <Textarea
+            {t("Protected paths (one glob per line, relative to the sandbox; the agent can read but never modify them)")}{" "}<Textarea
               rows={3}
               value={paths}
               onChange={(e) => setPaths(e.target.value)}
               placeholder={"user_data/**\nraw/*.csv"}
-              aria-label="Protected paths"
+              aria-label={t("Protected paths")}
               className="font-mono text-xs"
             />
           </label>
           <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-xs">Ask before destructive shell commands elsewhere</span>
+            <span className="text-xs">{t("Ask before destructive shell commands elsewhere")}</span>
             <Switch
               checked={destructiveConfirm}
               onCheckedChange={setDestructiveConfirm}
-              aria-label="Confirm destructive commands"
+              aria-label={t("Confirm destructive commands")}
             />
           </div>
           <CardActions
@@ -393,6 +389,7 @@ function GuardCard({ projectId }: { projectId: string }) {
 }
 
 function CompactionCard({ projectId }: { projectId: string }) {
+  const t = useT();
   const [initial, setInitial] = useState<CompactionSettingsResponse | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [reserve, setReserve] = useState("");
@@ -442,7 +439,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
       ["Keep recent verbatim", keepRecentTokens, bounds.keepRecentTokens],
     ] as const) {
       if (!Number.isInteger(value) || value < range.min || value > range.max) {
-        setError(`${label} must be a whole number between ${range.min.toLocaleString()} and ${range.max.toLocaleString()}.`);
+        setError(t("{v0} must be a whole number between {v1} and {v2}.", { v0: label, v1: range.min.toLocaleString(), v2: range.max.toLocaleString() }));
         return;
       }
     }
@@ -460,21 +457,20 @@ function CompactionCard({ projectId }: { projectId: string }) {
   return (
     <SettingsCard
       id="context"
-      title="Context compaction"
-      description="Compaction summarizes older messages when a conversation nears the model's context window. AI Scientist puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every chat in this project, including open ones; use “Compact now” in a chat to run it by hand."
+      title={t("Context compaction")}
+      description={t("Compaction summarizes older messages when a conversation nears the model's context window. AI Scientist puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every chat in this project, including open ones; use “Compact now” in a chat to run it by hand.")}
     >
       {!initial ? (
-        error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">Loading…</p>
+        error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>
       ) : (
         <div data-testid="compaction-settings">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs">Compact automatically near the context limit</span>
-            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Automatic compaction" />
+            <span className="text-xs">{t("Compact automatically near the context limit")}</span>
+            <Switch checked={enabled} onCheckedChange={setEnabled} aria-label={t("Automatic compaction")} />
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <label className="grid gap-1 text-[11px] text-muted-foreground">
-              Reserve for the reply (tokens)
-              <Input
+              {t("Reserve for the reply (tokens)")}{" "}<Input
                 type="number"
                 inputMode="numeric"
                 min={initial.bounds.reserveTokens.min}
@@ -482,7 +478,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
                 step={1000}
                 value={reserve}
                 onChange={(e) => setReserve(e.target.value)}
-                aria-label="Reserve tokens"
+                aria-label={t("Reserve tokens")}
                 className="h-8 text-xs"
               />
               <span className="text-[10px]">
@@ -490,8 +486,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
               </span>
             </label>
             <label className="grid gap-1 text-[11px] text-muted-foreground">
-              Keep recent verbatim (tokens)
-              <Input
+              {t("Keep recent verbatim (tokens)")}{" "}<Input
                 type="number"
                 inputMode="numeric"
                 min={initial.bounds.keepRecentTokens.min}
@@ -499,7 +494,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
                 step={1000}
                 value={keepRecent}
                 onChange={(e) => setKeepRecent(e.target.value)}
-                aria-label="Keep recent tokens"
+                aria-label={t("Keep recent tokens")}
                 className="h-8 text-xs"
               />
               <span className="text-[10px]">
@@ -525,19 +520,19 @@ function CompactionCard({ projectId }: { projectId: string }) {
 }
 
 export function ProjectSettingsPanel({ projectId }: { projectId: string }) {
+  const t = useT();
   const { projects } = useProjects();
   const project = projects.find((candidate) => candidate.id === projectId) ?? null;
 
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader
-        title={project ? `Project settings · ${project.name}` : "Project settings"}
-        description="Settings that belong to this project only: its name and budget, the agent's instructions, raw-data protection, and context compaction. Each card saves on its own."
+        title={project ? t("Project settings · {v0}", { v0: project.name }) : t("Project settings")}
+        description={t("Settings that belong to this project only: its name and budget, the agent's instructions, raw-data protection, and context compaction. Each card saves on its own.")}
       />
       {!project ? (
         <p className="text-xs text-muted-foreground" role="status">
-          Loading project…
-        </p>
+          {t("Loading project…")}{" "}</p>
       ) : (
         // Remount per project so no card shows the previous project's draft.
         <div key={project.id} className="flex flex-col gap-4">

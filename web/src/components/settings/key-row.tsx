@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 import { useCallback, useEffect, useState } from "react";
 import { ArrowUpRightIcon, KeyRoundIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,14 +56,15 @@ export function GetKeyLink({
   label?: string;
   className?: string;
 }) {
+  const t = useT();
   const host = hostOf(href);
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Opens ${host} in a new tab`}
-      aria-label={`${label}${service ? ` (${service})` : ""} at ${host}, opens in a new tab`}
+      title={t("Opens {v0} in a new tab", { v0: host })}
+      aria-label={t("{v0}{v1} at {v2}, opens in a new tab", { v0: t(label), v1: service ? ` (${t(service)})` : "", v2: host })}
       className={cn(
         "group inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-border/70 px-2 py-0.5 text-[10px] leading-4 text-muted-foreground transition-colors",
         "hover:border-primary/30 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -69,7 +72,7 @@ export function GetKeyLink({
       )}
     >
       <KeyRoundIcon className="size-3 shrink-0 text-primary/70" aria-hidden />
-      <span className="shrink-0 font-medium">{label}</span>
+      <span className="shrink-0 font-medium">{t(label)}</span>
       <span className="truncate text-muted-foreground/70 group-hover:text-muted-foreground">{host}</span>
       <ArrowUpRightIcon
         className="size-3 shrink-0 opacity-60 transition-transform group-hover:-translate-y-px group-hover:translate-x-px group-hover:opacity-100"
@@ -119,6 +122,7 @@ export function KeyRow({
   current: { set: boolean; masked: string | null } | undefined;
   onStatus: (status: CredentialStatus) => void;
 }) {
+  const t = useT();
   const [keyInput, setKeyInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +143,7 @@ export function KeyRow({
         const data = (await res.json().catch(() => null)) as
           | (CredentialStatus & { detail?: string })
           | null;
-        if (!res.ok) throw new Error(data?.detail || `Save failed (${res.status})`);
+        if (!res.ok) throw new Error(data?.detail || t("Save failed ({v0})", { v0: res.status }));
         if (data) onStatus(data as CredentialStatus);
         // Provider keys gate model-picker sections, so re-probe them.
         if (def.notifyProviders) notifyProviderAuthChanged();
@@ -151,7 +155,7 @@ export function KeyRow({
         setSaving(false);
       }
     },
-    [def.bodyField, def.notifyProviders, onStatus],
+    [def.bodyField, def.notifyProviders, onStatus, t],
   );
 
   const secret = def.secret !== false;
@@ -162,8 +166,8 @@ export function KeyRow({
   const clear = async () => {
     if (secret) {
       const ok = await confirm({
-        title: `Remove the ${def.label}?`,
-        description: "New requests that rely on it will fail until you add a key again.",
+        title: t("Remove the {v0}?", { v0: t(def.label) }),
+        description: t("New requests that rely on it will fail until you add a key again."),
         confirmLabel: "Remove",
         destructive: true,
       });
@@ -177,7 +181,7 @@ export function KeyRow({
       {dialog}
       <div className="flex min-w-0 items-center justify-between gap-2">
         <label htmlFor={inputId} className="shrink-0 text-xs font-medium">
-          {def.label}
+          {t(def.label)}
         </label>
         {def.keysUrl ? <GetKeyLink href={def.keysUrl} service={def.service ?? def.label} /> : null}
       </div>
@@ -185,7 +189,7 @@ export function KeyRow({
       {current?.set && (
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
           <span>
-            {secret ? "Key set" : "Set"} —{" "}
+            {secret ? t("Key set") : t("Set")} —{" "}
             <code className="font-mono break-all">{current.masked}</code>
           </span>
           <Button
@@ -193,11 +197,10 @@ export function KeyRow({
             size="sm"
             className="ml-auto h-6 text-[11px] text-destructive hover:text-destructive"
             disabled={saving}
-            aria-label={`Clear ${def.label}`}
+            aria-label={t("Clear {v0}", { v0: t(def.label) })}
             onClick={() => void clear()}
           >
-            Clear
-          </Button>
+            {t("Clear")}{" "}</Button>
         </div>
       )}
       <div className="flex items-center gap-2">
@@ -208,7 +211,7 @@ export function KeyRow({
           autoComplete="off"
           placeholder={
             current?.set
-              ? `Replace ${secret ? "key" : "value"}${def.placeholder ? ` (${def.placeholder})` : ""}`
+              ? t("Replace {v0}{v1}", { v0: secret ? t("key") : t("value"), v1: def.placeholder ? ` (${def.placeholder})` : "" })
               : def.placeholder
           }
           className="h-8 text-xs font-mono"
@@ -228,16 +231,16 @@ export function KeyRow({
           disabled={saving || !keyInput.trim()}
           onClick={() => void submit(keyInput.trim())}
         >
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("Saving…") : t("Save")}
         </Button>
       </div>
       {saved && (
         <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-          {def.savedNote ?? "Saved. New runs use it immediately — no restart needed."}
+          {def.savedNote ? t(def.savedNote) : t("Saved. New runs use it immediately — no restart needed.")}
         </p>
       )}
       {def.hint ? (
-        <p className="text-[11px] text-muted-foreground leading-relaxed">{def.hint}</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{t(def.hint)}</p>
       ) : null}
     </div>
   );

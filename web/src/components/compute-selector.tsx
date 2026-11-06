@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -126,6 +128,7 @@ function PickerOption({
   legacy?: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   const tier = inferredTier(instance);
   const styles = TIER_STYLES[tier] ?? TIER_STYLES.cpu;
   const isLocal = instance.id === "local";
@@ -136,7 +139,7 @@ function PickerOption({
       aria-selected={selected}
       disabled={!enabled}
       onClick={onSelect}
-      title={!enabled ? "Connect Modal in Settings → Services to enable remote compute" : undefined}
+      title={!enabled ? t("Connect Modal in Settings → Services to enable remote compute") : undefined}
       className={cn(
         "flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-xs transition-colors",
         enabled ? "hover:bg-muted/60 focus-visible:bg-muted/60" : "cursor-not-allowed opacity-50",
@@ -163,15 +166,14 @@ function PickerOption({
           <span className="text-muted-foreground">{isLocal ? "Sandbox" : resourceLabel(instance)}</span>
           {legacy ? (
             <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] font-medium uppercase text-amber-700 dark:text-amber-400">
-              saved
-            </span>
+              {t("saved")}{" "}</span>
           ) : null}
           <span className={cn("ml-auto shrink-0 text-[10px] font-medium tabular-nums", styles.badge)}>
-            {priceLabel(instance)}
+            {instance.id === "local" ? t("Free") : Number.isFinite(instance.pricePerHour) ? t("{price}/hr est.", { price: "$" + instance.pricePerHour.toFixed(2) }) : t("Estimate unavailable")}
           </span>
         </span>
         <span className="mt-0.5 block leading-relaxed text-muted-foreground/80">
-          {describeInstance(instance)}
+          {t(describeInstance(instance))}
         </span>
         {!isLocal &&
         (instance.fallback ||
@@ -186,17 +188,17 @@ function PickerOption({
             ) : null}
             {(instance.maxGpuCount ?? 1) > instance.gpuCount ? (
               <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-                up to {instance.maxGpuCount} GPUs
+                {t("up to")}{" "}{instance.maxGpuCount} GPUs
               </span>
             ) : null}
             {instance.fallback ? (
               <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-                fallback {instance.fallback}
+                {t("fallback")}{" "}{instance.fallback}
               </span>
             ) : null}
             {instance.cache ? (
               <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-                cache {instance.cache}
+                {t("cache")}{" "}{instance.cache}
               </span>
             ) : null}
           </span>
@@ -225,6 +227,7 @@ export function ComputePickerBody({
   onRefresh,
   onSelected,
 }: ComputePickerBodyProps) {
+  const t = useT();
   const listRef = useRef<HTMLDivElement>(null);
   const parsedSelected = normalizedSelected(selected);
   const catalogSelected = parsedSelected
@@ -280,11 +283,10 @@ export function ComputePickerBody({
         <div className="flex items-start gap-2.5 border-b bg-amber-500/5 px-3 py-2.5">
           <span className="mt-1 size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
           <div className="min-w-0 text-[11px] leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">Modal is not connected.</span>{" "}
-            Save a token ID and secret together in{" "}
+            <span className="font-medium text-foreground">{t("Modal is not connected.")}</span>{" "}
+            {t("Save a token ID and secret together in")}{" "}
             <SettingsLink tab="services" section="modal">
-              Settings → Services
-            </SettingsLink>
+              {t("Settings → Services")}{" "}</SettingsLink>
             .
             <a
               href="https://modal.com/settings/tokens"
@@ -292,8 +294,7 @@ export function ComputePickerBody({
               rel="noopener noreferrer"
               className="ml-1 inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
             >
-              Create a Modal token
-              <ExternalLinkIcon className="size-2.5" />
+              {t("Create a Modal token")}{" "}<ExternalLinkIcon className="size-2.5" />
             </a>
           </div>
         </div>
@@ -301,7 +302,7 @@ export function ComputePickerBody({
 
       {error ? (
         <div role="alert" className="flex items-center gap-2 border-b bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
-          <span className="min-w-0 flex-1">Could not refresh compute options: {error}</span>
+          <span className="min-w-0 flex-1">{t("Could not refresh compute options:")}{" "}{error}</span>
           {onRefresh ? (
             <button
               type="button"
@@ -309,8 +310,7 @@ export function ComputePickerBody({
               className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 font-medium hover:bg-destructive/10"
             >
               <RefreshCcwIcon className="size-3" />
-              Retry
-            </button>
+              {t("Retry")}{" "}</button>
           ) : null}
         </div>
       ) : null}
@@ -318,7 +318,7 @@ export function ComputePickerBody({
       <div
         ref={listRef}
         role="listbox"
-        aria-label="Compute target"
+        aria-label={t("Compute target")}
         onKeyDown={handleListKeyDown}
         className="max-h-80 overflow-y-auto py-1"
       >
@@ -330,8 +330,7 @@ export function ComputePickerBody({
         />
         <div role="presentation" className="my-1 border-t px-3 pb-0.5 pt-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Modal Compute
-          </span>
+            {t("Modal Compute")}{" "}</span>
         </div>
         {legacy ? (
           <PickerOption
@@ -354,21 +353,18 @@ export function ComputePickerBody({
         {loading && !catalog ? (
           <div className="flex items-center gap-2 px-3 py-5 text-xs text-muted-foreground">
             <LoaderCircleIcon className="size-3.5 animate-spin" />
-            Loading server compute catalog…
-          </div>
+            {t("Loading server compute catalog…")}{" "}</div>
         ) : null}
         {!loading && catalog && catalog.instances.length === 0 ? (
           <p className="px-3 py-4 text-xs text-muted-foreground">
-            The server did not return any Modal compute options.
-          </p>
+            {t("The server did not return any Modal compute options.")}{" "}</p>
         ) : null}
       </div>
       {effective.id !== "local" && modalConfigured ? (
         <div className="grid grid-cols-3 gap-2 border-t bg-muted/10 px-3 py-2.5">
           <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
-            GPU count
-            <select
-              aria-label="GPU count"
+            {t("GPU count")}{" "}<select
+              aria-label={t("GPU count")}
               value={effective.gpuCount}
               disabled={!effective.gpu}
               onChange={(event) =>
@@ -387,9 +383,8 @@ export function ComputePickerBody({
             </select>
           </label>
           <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
-            Fallback
-            <select
-              aria-label="Fallback compute"
+            {t("Fallback")}{" "}<select
+              aria-label={t("Fallback compute")}
               value={effective.fallback ?? ""}
               onChange={(event) =>
                 onChange({
@@ -399,7 +394,7 @@ export function ComputePickerBody({
               }
               className="h-7 w-full rounded border bg-background px-1.5 text-[11px] text-foreground"
             >
-              <option value="">None</option>
+              <option value="">{t("None")}</option>
               {catalog?.instances
                 .filter(
                   (instance) =>
@@ -415,9 +410,8 @@ export function ComputePickerBody({
             </select>
           </label>
           <label className="space-y-1 text-[10px] font-medium text-muted-foreground">
-            Cache
-            <select
-              aria-label="Modal cache"
+            {t("Cache")}{" "}<select
+              aria-label={t("Modal cache")}
               value={effective.cache ?? catalog?.defaults.cache ?? "project"}
               onChange={(event) =>
                 onChange({
@@ -427,8 +421,8 @@ export function ComputePickerBody({
               }
               className="h-7 w-full rounded border bg-background px-1.5 text-[11px] text-foreground"
             >
-              <option value="project">Project</option>
-              <option value="none">None</option>
+              <option value="project">{t("Project")}</option>
+              <option value="none">{t("None")}</option>
             </select>
           </label>
         </div>
@@ -454,6 +448,7 @@ export function ComputeSelector({
   error = null,
   onRefresh,
 }: ComputeSelectorProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const effective = useMemo(() => {
     const parsed = normalizedSelected(selected);
@@ -475,7 +470,7 @@ export function ComputeSelector({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Compute target: ${resourceLabel(effective)}`}
+          aria-label={t("Compute target: {target}", { target: t(resourceLabel(effective)) })}
           className={cn(
             "flex min-w-20 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
             open || selected
@@ -494,7 +489,7 @@ export function ComputeSelector({
           )}
           {effective.id !== "local" ? <TierDot instance={effective} /> : null}
           <span className={cn("min-w-0 truncate", effective.id === "local" ? "text-muted-foreground" : "font-medium text-foreground")}>
-            {effective.id === "local" ? "Local" : effective.label}
+            {effective.id === "local" ? t("Local") : effective.label}
           </span>
           {effective.id !== "local" ? (
             <>
@@ -521,7 +516,7 @@ export function ComputeSelector({
           event.preventDefault();
           requestAnimationFrame(() => {
             const selectedOption = document.querySelector<HTMLButtonElement>(
-              '[role="listbox"][aria-label="Compute target"] [role="option"][aria-selected="true"]',
+              '[role="listbox"] [role="option"][aria-selected="true"]',
             );
             selectedOption?.focus();
           });
@@ -529,11 +524,10 @@ export function ComputeSelector({
       >
         <div className="flex items-center justify-between border-b px-3 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Compute
-          </span>
+            {t("Compute")}{" "}</span>
           {catalog?.defaults.instanceId ? (
             <span className="text-[10px] text-muted-foreground">
-              Server default: {catalog.defaults.instanceId}
+              {t("Server default:")}{" "}{catalog.defaults.instanceId}
             </span>
           ) : null}
         </div>

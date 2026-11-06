@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircleIcon, CheckCircle2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,7 @@ function PaperclipCard({
   status: CredentialStatus | null;
   onStatus: (status: CredentialStatus) => void;
 }) {
+  const t = useT();
   const [connector, setConnector] = useState<PaperclipConnectorStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +87,8 @@ function PaperclipCard({
   return (
     <SettingsCard
       id="paperclip"
-      title="Paperclip literature search"
-      description="Lets the agent search and read papers, preprints, clinical trials, FDA documents and patents. Saving a key adds a Paperclip connector shared by every project."
+      title={t("Paperclip literature search")}
+      description={t("Lets the agent search and read papers, preprints, clinical trials, FDA documents and patents. Saving a key adds a Paperclip connector shared by every project.")}
     >
       <KeyRow
         def={PAPERCLIP_KEY_DEF}
@@ -113,15 +116,15 @@ function PaperclipCard({
           )}
           <span className="min-w-0 flex-1">
             {ready ? (
-              <>Connector {name} is on for every project.</>
+              <>{t("Connector")}{" "}{name} {" "}{t("is on for every project.")}</>
             ) : !keySet ? (
-              <>Connector {name} signs in to Paperclip without a key.</>
+              <>{t("Connector")}{" "}{name} {" "}{t("signs in to Paperclip without a key.")}</>
             ) : !connector.name ? (
-              "Your key is saved, but there is no Paperclip connector."
+              t("Your key is saved, but there is no Paperclip connector.")
             ) : !connector.usesKey ? (
-              <>Connector {name} signs in another way and does not use this key.</>
+              <>{t("Connector")}{" "}{name} {" "}{t("signs in another way and does not use this key.")}</>
             ) : (
-              <>Connector {name} is turned off.</>
+              <>{t("Connector")}{" "}{name} {" "}{t("is turned off.")}</>
             )}
           </span>
           {keySet && !ready ? (
@@ -133,36 +136,33 @@ function PaperclipCard({
               disabled={busy}
               onClick={() => void connect()}
             >
-              {busy ? "Turning on…" : connector.usesKey || !connector.name ? "Turn on" : "Use this key"}
+              {busy ? t("Turning on…") : connector.usesKey || !connector.name ? t("Turn on") : t("Use this key")}
             </Button>
           ) : null}
         </div>
       ) : null}
       {connector && !keySet && !signsInWithoutKey ? (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          No key? Add{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{connector.url}</code> under{" "}
-          <SettingsLink tab="connectors">Connectors</SettingsLink> and sign in with your Paperclip
-          account instead.
-        </p>
+          {t("No key? Add")}{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{connector.url}</code> {" "}{t("under")}{" "}
+          <SettingsLink tab="connectors">{t("Connectors")}</SettingsLink> {t("and sign in with your Paperclip account instead.")}{" "}</p>
       ) : null}
     </SettingsCard>
   );
 }
 
 export function ServicesPanel() {
+  const t = useT();
   const { status, setStatus, loading, error } = useCredentialStatus();
 
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader
-        title="Services"
+        title={t("Services")}
         description={
           <>
-            Keys for the tools AI Scientist uses besides models. They stay on this machine (saved to{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.env</code>) and are used only to
-            connect to the services you choose.
-          </>
+            {t("Keys for the tools AI Scientist uses besides models. They stay on this machine (saved to")}{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.env</code>{t(") and are used only to connect to the services you choose.")}{" "}</>
         }
         appliesTo="immediately"
       />
@@ -170,13 +170,13 @@ export function ServicesPanel() {
       <SettingsError>{error}</SettingsError>
 
       {loading ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
       ) : (
         <>
           <SettingsCard
             id="web-search"
-            title="Web search"
-            description="All optional: web search, page fetching, and GitHub reading work without any of them."
+            title={t("Web search")}
+            description={t("All optional: web search, page fetching, and GitHub reading work without any of them.")}
           >
             <div className="flex flex-col gap-5">
               {SEARCH_KEY_DEFS.map((def) => (
@@ -189,12 +189,9 @@ export function ServicesPanel() {
       )}
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        A few knobs are read from{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env</code> at startup only —
-        e.g. <code className="rounded bg-muted px-1 py-0.5 text-[10px]">GITHUB_TOKEN</code> (update
-        checks) and <code className="rounded bg-muted px-1 py-0.5 text-[10px]">HTTPS_PROXY</code>{" "}
-        (outbound proxy). Restart AI Scientist after changing them.
-      </p>
+        {t("A few knobs are read from")}{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env</code> {t("at startup only — e.g.")}{" "}<code className="rounded bg-muted px-1 py-0.5 text-[10px]">GITHUB_TOKEN</code> {t("(update checks) and")}{" "}<code className="rounded bg-muted px-1 py-0.5 text-[10px]">HTTPS_PROXY</code>{" "}
+        {t("(outbound proxy). Restart AI Scientist after changing them.")}{" "}</p>
     </div>
   );
 }

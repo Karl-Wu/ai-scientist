@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * Settings → Skills.
  *
@@ -73,6 +75,7 @@ const ORIGIN_LABEL: Record<SkillOrigin, string> = {
 type Pane = "none" | "install" | "create" | "edit";
 
 export function SkillsPanel() {
+  const t = useT();
   const { activeProject, activeProjectId } = useProjects();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [scope, setScope] = useState<SkillScope>("project");
@@ -229,13 +232,13 @@ export function SkillsPanel() {
         acknowledged: true,
       });
       closePanes();
-      const parts = [`Installed ${result.installed.length} skill${result.installed.length === 1 ? "" : "s"}`];
+      const parts = [((result.installed.length === 1 ? "" : "s") === "" ? t("Installed {v0} skill", {v0: result.installed.length}) : t("Installed {v0} skills", {v0: result.installed.length}))];
       if (result.conflicts.length > 0) {
-        parts.push(`skipped ${result.conflicts.join(", ")} (already installed)`);
+        parts.push(t("skipped {v0} (already installed)", { v0: result.conflicts.join(", ") }));
       }
-      return `${parts.join("; ")}. New chat tabs pick them up.`;
+      return t("{v0}. New chat tabs pick them up.", { v0: parts.join("; ") });
     });
-  }, [closePanes, picked, preview, run, scope]);
+  }, [closePanes, picked, preview, run, scope, t]);
 
   const doCreate = useCallback(async () => {
     const name = newName.trim().toLowerCase();
@@ -253,9 +256,9 @@ export function SkillsPanel() {
       } finally {
         setEditLoading(false);
       }
-      return `Created ${name}.`;
+      return t("Created {v0}.", { v0: name });
     });
-  }, [closePanes, newDescription, newName, run, scope]);
+  }, [closePanes, newDescription, newName, run, scope, t]);
 
   const openEditor = useCallback(
     async (name: string) => {
@@ -280,17 +283,17 @@ export function SkillsPanel() {
       await saveSkillSource(editing, editContent, scope);
       const name = editing;
       closePanes();
-      return `Saved ${name}.`;
+      return t("Saved {v0}.", { v0: name });
     });
-  }, [closePanes, editContent, editing, run, scope]);
+  }, [closePanes, editContent, editing, run, scope, t]);
 
   const doRemove = useCallback(
     async (row: Row) => {
       const origin = row.origin ?? "catalogue";
       const consequence =
         origin === "catalogue"
-          ? `"${row.name}" will be archived and kept out of future catalogue syncs.`
-          : `"${row.name}" will be deleted.`;
+          ? t("\"{v0}\" will be archived and kept out of future catalogue syncs.", { v0: row.name })
+          : t("\"{v0}\" will be deleted.", { v0: row.name });
       const ok = await confirm({
         title: origin === "catalogue" ? "Archive skill?" : "Delete skill?",
         description: consequence,
@@ -301,11 +304,11 @@ export function SkillsPanel() {
       await run(`remove:${row.name}`, async () => {
         const result = await removeSkill(row.name, scope);
         return result.disposition === "archived"
-          ? `Archived ${result.name} (kept in .pi/skills-archived).`
-          : `Deleted ${result.name}.`;
+          ? t("Archived {v0} (kept in .pi/skills-archived).", { v0: result.name })
+          : t("Deleted {v0}.", { v0: result.name });
       });
     },
-    [confirm, run, scope],
+    [confirm, run, scope, t],
   );
 
   const doCheckUpdate = useCallback(
@@ -313,11 +316,11 @@ export function SkillsPanel() {
       await run(`check:${name}`, async () => {
         const result = await checkSkillUpdate(name, scope);
         return result.updateAvailable
-          ? `${name} has an update available.`
-          : `${name} is up to date.`;
+          ? t("{v0} has an update available.", { v0: name })
+          : t("{v0} is up to date.", { v0: name });
       });
     },
-    [run, scope],
+    [run, scope, t],
   );
 
   const replaceWithUpstream = useCallback(
@@ -325,18 +328,18 @@ export function SkillsPanel() {
       const origin = row.origin ?? "catalogue";
       const where = origin === "catalogue" ? "the current upstream version" : row.source;
       const ok = await confirm({
-        title: `Replace "${row.name}"?`,
-        description: `This replaces the local skill with ${where}. Local edits to this skill will be lost.`,
+        title: t("Replace \"{v0}\"?", { v0: row.name }),
+        description: t("This replaces the local skill with {v0}. Local edits to this skill will be lost.", { v0: where ?? "" }),
         confirmLabel: "Replace",
         destructive: true,
       });
       if (!ok) return;
       await run(`update:${row.name}`, async () => {
         await updateSkillFromUpstream(row.name, scope);
-        return `Updated ${row.name}.`;
+        return t("Updated {v0}.", { v0: row.name });
       });
     },
-    [confirm, run, scope],
+    [confirm, run, scope, t],
   );
 
   const filtered = useMemo(
@@ -348,8 +351,8 @@ export function SkillsPanel() {
     async (next: SkillScope) => {
       if (pane === "edit" && editing) {
         const ok = await confirm({
-          title: `Discard unsaved changes to ${editing}?`,
-          description: "Switching scope closes the editor without saving.",
+          title: t("Discard unsaved changes to {v0}?", { v0: editing }),
+          description: t("Switching scope closes the editor without saving."),
           confirmLabel: "Discard",
         });
         if (!ok) return;
@@ -357,7 +360,7 @@ export function SkillsPanel() {
       closePanes();
       setScope(next);
     },
-    [closePanes, confirm, editing, pane],
+    [closePanes, confirm, editing, pane, t],
   );
 
   const shadowedSet = useMemo(() => new Set(shadowed), [shadowed]);
@@ -366,8 +369,8 @@ export function SkillsPanel() {
     <div className="flex flex-col gap-4">
       {confirmDialog}
       <SettingsHeader
-        title="Skills"
-        description="Skills the agent can activate. The K-Dense catalogue syncs daily without overwriting local edits; skills you install or write are left alone until you ask. Disabling one hides it from the agent."
+        title={t("Skills")}
+        description={t("Skills the agent can activate. The K-Dense catalogue syncs daily without overwriting local edits; skills you install or write are left alone until you ask. Disabling one hides it from the agent.")}
         appliesTo="new-chats"
         actions={
           <>
@@ -382,8 +385,7 @@ export function SkillsPanel() {
             }}
           >
             <PlusIcon className="size-3.5" />
-            Add
-          </Button>
+            {t("Add")}{" "}</Button>
           <Button
             type="button"
             size="sm"
@@ -394,8 +396,7 @@ export function SkillsPanel() {
               setPane(pane === "create" ? "none" : "create");
             }}
           >
-            New skill
-          </Button>
+            {t("New skill")}{" "}</Button>
           <Button
             type="button"
             size="sm"
@@ -404,7 +405,7 @@ export function SkillsPanel() {
             disabled={syncing || scope === "global"}
             title={
               scope === "global"
-                ? "The catalogue is per project; switch to this project to sync it."
+                ? t("The catalogue is per project; switch to this project to sync it.")
                 : undefined
             }
             onClick={() => void refresh()}
@@ -414,8 +415,7 @@ export function SkillsPanel() {
             ) : (
               <RefreshCwIcon className="size-3.5" />
             )}
-            Sync catalogue
-          </Button>
+            {t("Sync catalogue")}{" "}</Button>
           </>
         }
       />
@@ -428,9 +428,7 @@ export function SkillsPanel() {
 
       {scope === "global" && (
         <p className="text-[11px] text-muted-foreground">
-          Stored in your AI Scientist Pi agent directory: available to every project and to
-          subagents. A project skill of the same name takes precedence.
-        </p>
+          {t("Stored in your AI Scientist Pi agent directory: available to every project and to subagents. A project skill of the same name takes precedence.")}{" "}</p>
       )}
 
       <SettingsError>{error}</SettingsError>
@@ -439,17 +437,17 @@ export function SkillsPanel() {
       {/* Install from a source */}
       {pane === "install" && (
         <div className="flex flex-col gap-3 rounded-lg border p-3">
-          <div className="text-xs font-medium">Add skills from a source</div>
+          <div className="text-xs font-medium">{t("Add skills from a source")}</div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               value={source}
-              placeholder="owner/repo, a git URL, or a local path"
+              placeholder={t("owner/repo, a git URL, or a local path")}
               className="h-8 flex-1 text-xs"
               onChange={(e) => setSource(e.target.value)}
             />
             <Input
               value={ref}
-              placeholder="branch / tag (optional)"
+              placeholder={t("branch / tag (optional)")}
               className="h-8 text-xs sm:w-44"
               onChange={(e) => setRef(e.target.value)}
             />
@@ -466,20 +464,18 @@ export function SkillsPanel() {
               ) : (
                 <DownloadIcon className="size-3.5" />
               )}
-              Look up
-            </Button>
+              {t("Look up")}{" "}</Button>
           </div>
 
           {previewing && (
             <p className="text-[11px] text-muted-foreground">
-              Downloading the source to see what it contains…
-            </p>
+              {t("Downloading the source to see what it contains…")}{" "}</p>
           )}
 
           {preview && (
             <>
               <div className="text-[11px] text-muted-foreground">
-                {preview.skills.length} skill{preview.skills.length === 1 ? "" : "s"} in{" "}
+                {t(preview.skills.length === 1 ? "{count} skill in" : "{count} skills in", { count: preview.skills.length })}{" "}
                 <span className="font-medium">{preview.source}</span>
                 {preview.ref ? ` (${preview.ref})` : ""}
               </div>
@@ -493,7 +489,7 @@ export function SkillsPanel() {
                       type="checkbox"
                       className="mt-0.5"
                       checked={picked.has(s.name)}
-                      aria-label={`Select ${s.name}`}
+                      aria-label={t("Select {v0}", { v0: s.name })}
                       onChange={(e) => {
                         setPicked((prev) => {
                           const next = new Set(prev);
@@ -508,13 +504,11 @@ export function SkillsPanel() {
                         {s.name}
                         {s.installed && (
                           <Badge variant="outline" className="h-5 text-[10px]">
-                            Already installed — will be replaced
-                          </Badge>
+                            {t("Already installed — will be replaced")}{" "}</Badge>
                         )}
                         {s.conflictsWith === "project" && (
                           <Badge variant="outline" className="h-5 text-[10px]">
-                            A project skill of this name takes precedence
-                          </Badge>
+                            {t("A project skill of this name takes precedence")}{" "}</Badge>
                         )}
                       </span>
                       <span className="block text-[11px] text-muted-foreground">
@@ -527,24 +521,19 @@ export function SkillsPanel() {
 
               {preview.problems.length > 0 && (
                 <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1.5 text-[11px]">
-                  {preview.problems.length} skill
-                  {preview.problems.length === 1 ? "" : "s"} in this source could not be
-                  parsed and cannot be installed.
-                </div>
+                  {t("{count} skills cannot be installed.", { count: preview.problems.length })}{" "}</div>
               )}
 
               <label className="flex items-start gap-2 text-[11px]">
                 <input
                   type="checkbox"
                   className="mt-0.5"
-                  aria-label="Trust this source"
+                  aria-label={t("Trust this source")}
                   checked={acknowledged}
                   onChange={(e) => setAcknowledged(e.target.checked)}
                 />
                 <span>
-                  I trust <span className="font-medium">{preview.source}</span>. Skills are
-                  instructions the agent follows, and they run with its full permissions.
-                </span>
+                  {t("I trust")}{" "}<span className="font-medium">{preview.source}</span>{t(". Skills are instructions the agent follows, and they run with its full permissions.")}{" "}</span>
               </label>
 
               <div className="flex items-center gap-2">
@@ -558,8 +547,8 @@ export function SkillsPanel() {
                   {busy === "install" && (
                     <Loader2Icon className="size-3.5 animate-spin" />
                   )}
-                  Install {picked.size > 0 ? `${picked.size} ` : ""}
-                  {picked.size === 1 ? "skill" : "skills"}
+                  {t("Install")}{" "}{picked.size > 0 ? `${picked.size} ` : ""}
+                  {t(picked.size === 1 ? "skill" : "skills")}
                 </Button>
                 <Button
                   type="button"
@@ -568,8 +557,7 @@ export function SkillsPanel() {
                   className="h-8 text-xs"
                   onClick={closePanes}
                 >
-                  Cancel
-                </Button>
+                  {t("Cancel")}{" "}</Button>
               </div>
             </>
           )}
@@ -579,25 +567,23 @@ export function SkillsPanel() {
       {/* Author a new skill */}
       {pane === "create" && (
         <div className="flex flex-col gap-2 rounded-lg border p-3">
-          <div className="text-xs font-medium">New skill</div>
+          <div className="text-xs font-medium">{t("New skill")}</div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               value={newName}
-              placeholder="skill-name (lowercase, hyphens)"
+              placeholder={t("skill-name (lowercase, hyphens)")}
               className="h-8 text-xs sm:w-56"
               onChange={(e) => setNewName(e.target.value)}
             />
             <Input
               value={newDescription}
-              placeholder="What it does and when to use it"
+              placeholder={t("What it does and when to use it")}
               className="h-8 flex-1 text-xs"
               onChange={(e) => setNewDescription(e.target.value)}
             />
           </div>
           <p className="text-[11px] text-muted-foreground">
-            The description is what the model matches against when deciding whether to
-            activate a skill, so make it specific.
-          </p>
+            {t("The description is what the model matches against when deciding whether to activate a skill, so make it specific.")}{" "}</p>
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -607,8 +593,7 @@ export function SkillsPanel() {
               onClick={() => void doCreate()}
             >
               {busy === "create" && <Loader2Icon className="size-3.5 animate-spin" />}
-              Create and edit
-            </Button>
+              {t("Create and edit")}{" "}</Button>
             <Button
               type="button"
               size="sm"
@@ -616,8 +601,7 @@ export function SkillsPanel() {
               className="h-8 text-xs"
               onClick={closePanes}
             >
-              Cancel
-            </Button>
+              {t("Cancel")}{" "}</Button>
           </div>
         </div>
       )}
@@ -625,15 +609,15 @@ export function SkillsPanel() {
       {/* Edit SKILL.md */}
       {pane === "edit" && editing && (
         <div className="flex flex-col gap-2 rounded-lg border p-3">
-          <div className="text-xs font-medium">Editing {editing}/SKILL.md</div>
+          <div className="text-xs font-medium">{t("Editing")}{" "}{editing}/SKILL.md</div>
           {editLoading ? (
-            <p className="text-[11px] text-muted-foreground">Loading…</p>
+            <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>
           ) : (
             <Textarea
               value={editContent}
               spellCheck={false}
               className="min-h-64 font-mono text-[11px]"
-              aria-label={`SKILL.md for ${editing}`}
+              aria-label={t("SKILL.md for {v0}", { v0: editing })}
               onChange={(e) => setEditContent(e.target.value)}
             />
           )}
@@ -646,8 +630,7 @@ export function SkillsPanel() {
               onClick={() => void saveEditor()}
             >
               {busy === "save" && <Loader2Icon className="size-3.5 animate-spin" />}
-              Save
-            </Button>
+              {t("Save")}{" "}</Button>
             <Button
               type="button"
               size="sm"
@@ -655,8 +638,7 @@ export function SkillsPanel() {
               className="h-8 text-xs"
               onClick={closePanes}
             >
-              Cancel
-            </Button>
+              {t("Cancel")}{" "}</Button>
           </div>
         </div>
       )}
@@ -667,15 +649,14 @@ export function SkillsPanel() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {syncStatus.lastCheckedAt && (
                 <span className="text-muted-foreground">
-                  Last synced {new Date(syncStatus.lastCheckedAt).toLocaleString()}
+                  {t("Last synced")}{" "}{new Date(syncStatus.lastCheckedAt).toLocaleString()}
                 </span>
               )}
               {syncStatus.updatesAvailable.length > 0 && (
                 <Badge variant="outline" className="text-[10px] text-amber-600">
                   {syncStatus.updatesAvailable.length}{" "}
-                  {syncStatus.updatesAvailable.length === 1 ? "skill needs" : "skills need"}{" "}
-                  review
-                </Badge>
+                  {t(syncStatus.updatesAvailable.length === 1 ? "skill needs" : "skills need")}{" "}
+                  {t("review")}{" "}</Badge>
               )}
             </div>
             {syncStatus.lastResult &&
@@ -683,10 +664,9 @@ export function SkillsPanel() {
                 syncStatus.lastResult.updated > 0 ||
                 syncStatus.lastResult.archived > 0) && (
                 <p className="mt-1 text-muted-foreground">
-                  Last refresh: {syncStatus.lastResult.added} added,{" "}
-                  {syncStatus.lastResult.updated} updated,{" "}
-                  {syncStatus.lastResult.archived} archived.
-                </p>
+                  {t("Last refresh:")}{" "}{syncStatus.lastResult.added} {" "}{t("added,")}{" "}
+                  {syncStatus.lastResult.updated} {" "}{t("updated,")}{" "}
+                  {syncStatus.lastResult.archived} {t("archived.")}{" "}</p>
               )}
           </div>
         )}
@@ -695,13 +675,11 @@ export function SkillsPanel() {
         <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs">
           <div className="font-medium">
             {problems.length === 1
-              ? "1 installed skill could not be loaded"
-              : `${problems.length} installed skills could not be loaded`}
+              ? t("1 installed skill could not be loaded")
+              : t("{v0} installed skills could not be loaded", { v0: problems.length })}
           </div>
           <p className="mt-1 text-muted-foreground">
-            These are on disk but their SKILL.md failed to parse, so they are hidden from the
-            list below and from the agent. Fix the frontmatter and reopen this tab.
-          </p>
+            {t("These are on disk but their SKILL.md failed to parse, so they are hidden from the list below and from the agent. Fix the frontmatter and reopen this tab.")}{" "}</p>
           <ul className="mt-1.5 flex flex-col gap-1">
             {problems.map((p) => (
               <li key={`${p.state}/${p.name}`}>
@@ -713,27 +691,24 @@ export function SkillsPanel() {
         </div>
       )}
 
-      <SettingsSearch value={query} onChange={setQuery} placeholder="Search skills…" label="Search skills" />
+      <SettingsSearch value={query} onChange={setQuery} placeholder={t("Search skills…")} label={t("Search skills")} />
 
       {loading ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
       ) : filtered.length === 0 ? (
         rows.length === 0 && scope === "project" ? (
           <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
             <span className="min-w-0 flex-1">
-              No skills installed for this project yet. The K-Dense catalogue is usually seeded on
-              first launch; sync it now to fetch it.
-            </span>
+              {t("No skills installed for this project yet. The K-Dense catalogue is usually seeded on first launch; sync it now to fetch it.")}{" "}</span>
             <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 text-xs" disabled={syncing} onClick={() => void refresh()}>
               {syncing ? <Loader2Icon className="size-3.5 animate-spin" /> : <RefreshCwIcon className="size-3.5" />}
-              Sync now
-            </Button>
+              {t("Sync now")}{" "}</Button>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
             {rows.length === 0
-              ? "No skills installed for all projects yet. Use Add or New skill above."
-              : "No skills match."}
+              ? t("No skills installed for all projects yet. Use Add or New skill above.")
+              : t("No skills match.")}
           </p>
         )
       ) : (
@@ -758,28 +733,24 @@ export function SkillsPanel() {
                     </Badge>
                     {updateAvailable ? (
                       <Badge variant="outline" className="h-5 text-[10px] text-amber-600">
-                        Update available
-                      </Badge>
+                        {t("Update available")}{" "}</Badge>
                     ) : orphaned ? (
                       <Badge variant="outline" className="h-5 text-[10px]">
-                        Removed upstream
-                      </Badge>
+                        {t("Removed upstream")}{" "}</Badge>
                     ) : origin === "catalogue" && customized ? (
                       <Badge variant="outline" className="h-5 text-[10px]">
-                        Customized
-                      </Badge>
+                        {t("Customized")}{" "}</Badge>
                     ) : null}
                     {shadowedSet.has(r.name) && (
                       <Badge variant="outline" className="h-5 text-[10px]">
                         {scope === "global"
-                          ? "Shadowed by a project skill"
-                          : "Also installed for all projects"}
+                          ? t("Shadowed by a project skill")
+                          : t("Also installed for all projects")}
                       </Badge>
                     )}
                     {r.disableModelInvocation && (
-                      <Badge variant="outline" className="h-5 text-[10px]" title="Hidden from the model's skills index; runs only via /skill:name">
-                        User-invoked only
-                      </Badge>
+                      <Badge variant="outline" className="h-5 text-[10px]" title={t("Hidden from the model's skills index; runs only via /skill:name")}>
+                        {t("User-invoked only")}{" "}</Badge>
                     )}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground">
@@ -799,15 +770,14 @@ export function SkillsPanel() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-[11px]"
-                    aria-label={`Use upstream version of ${r.name}`}
+                    aria-label={t("Use upstream version of {v0}", { v0: r.name })}
                     disabled={rowBusy}
                     onClick={() => void replaceWithUpstream(r)}
                   >
                     {busy === `update:${r.name}` && (
                       <Loader2Icon className="size-3 animate-spin" />
                     )}
-                    Use upstream
-                  </Button>
+                    {t("Use upstream")}{" "}</Button>
                 )}
                 {origin === "registry" && !updateAvailable && (
                   <Button
@@ -815,7 +785,7 @@ export function SkillsPanel() {
                     size="sm"
                     variant="ghost"
                     className="h-7 text-[11px]"
-                    aria-label={`Check ${r.name} for updates`}
+                    aria-label={t("Check {v0} for updates", { v0: r.name })}
                     disabled={rowBusy}
                     onClick={() => void doCheckUpdate(r.name)}
                   >
@@ -831,7 +801,7 @@ export function SkillsPanel() {
                   size="icon"
                   variant="ghost"
                   className="size-7"
-                  aria-label={`Edit ${r.name}`}
+                  aria-label={t("Edit {v0}", { v0: r.name })}
                   onClick={() => void openEditor(r.name)}
                 >
                   <PencilIcon className="size-3.5" />
@@ -841,7 +811,7 @@ export function SkillsPanel() {
                   size="icon"
                   variant="ghost"
                   className="size-7 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${r.name}`}
+                  aria-label={t("Remove {v0}", { v0: r.name })}
                   disabled={rowBusy}
                   onClick={() => void doRemove(r)}
                 >
@@ -858,28 +828,28 @@ export function SkillsPanel() {
                   className="h-7 w-7 p-0"
                   aria-label={
                     r.disableModelInvocation
-                      ? `Let the model invoke ${r.name}`
-                      : `Make ${r.name} user-invoked only`
+                      ? t("Let the model invoke {v0}", { v0: r.name })
+                      : t("Make {v0} user-invoked only", { v0: r.name })
                   }
                   title={
                     r.disableModelInvocation
-                      ? "User-invoked only (/skill:name). Click to let the model activate it."
-                      : "Click to hide from the model; run it yourself with /skill:name."
+                      ? t("User-invoked only (/skill:name). Click to let the model activate it.")
+                      : t("Click to hide from the model; run it yourself with /skill:name.")
                   }
                   disabled={rowBusy}
                   onClick={() =>
                     void run(`invoke:${r.name}`, async () => {
                       const next = await setSkillModelInvocation(r.name, Boolean(r.disableModelInvocation), scope);
                       return next.disableModelInvocation
-                        ? `${r.name} now runs only when you type /skill:${r.name}.`
-                        : `${r.name} can be activated by the model again.`;
+                        ? t("{v0} now runs only when you type /skill:{v1}.", { v0: r.name, v1: r.name })
+                        : t("{v0} can be activated by the model again.", { v0: r.name });
                     })
                   }
                 >
                   <SlashIcon className="size-3.5" />
                 </Button>
                 <Switch
-                  aria-label={`Toggle ${r.name}`}
+                  aria-label={t("Toggle {v0}", { v0: r.name })}
                   checked={r.enabled}
                   onCheckedChange={(v) => void toggle(r.name, v)}
                 />

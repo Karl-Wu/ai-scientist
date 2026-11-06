@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * Shared building blocks for the Settings tabs, so every panel states its
  * scope, reports errors and filters lists the same way.
@@ -30,15 +32,16 @@ export function SettingsHeader({
   appliesTo?: AppliesTo;
   actions?: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-medium">{title}</h3>
+        <h3 className="text-sm font-medium">{typeof title === "string" ? t(title) : title}</h3>
         {description ? (
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{typeof description === "string" ? t(description) : description}</p>
         ) : null}
         {appliesTo ? (
-          <p className="mt-1 text-[11px] text-muted-foreground/80">{APPLIES_TEXT[appliesTo]}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground/80">{t(APPLIES_TEXT[appliesTo])}</p>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
@@ -47,6 +50,7 @@ export function SettingsHeader({
 }
 
 export function SettingsError({ children, className }: { children: ReactNode; className?: string }) {
+  const t = useT();
   if (!children) return null;
   return (
     <div
@@ -57,16 +61,17 @@ export function SettingsError({ children, className }: { children: ReactNode; cl
       )}
     >
       <AlertCircleIcon className="mt-px size-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 break-words">{typeof children === "string" ? t(children) : children}</span>
     </div>
   );
 }
 
 export function SettingsNotice({ children, className }: { children: ReactNode; className?: string }) {
+  const t = useT();
   if (!children) return null;
   return (
     <div role="status" className={cn("rounded-lg border bg-muted/40 px-3 py-2 text-xs", className)}>
-      {children}
+      {typeof children === "string" ? t(children) : children}
     </div>
   );
 }
@@ -85,11 +90,12 @@ export function SettingsCard({
   children: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   return (
     <fieldset id={id} className={cn("scroll-mt-4 rounded-xl border p-3.5", className)}>
-      <legend className="px-1 text-xs font-medium">{title}</legend>
+      <legend className="px-1 text-xs font-medium">{typeof title === "string" ? t(title) : title}</legend>
       {description ? (
-        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">{description}</p>
+        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">{typeof description === "string" ? t(description) : description}</p>
       ) : null}
       {children}
     </fieldset>
@@ -113,12 +119,13 @@ export function ScopeSwitcher({
   projectName: string;
   disabled?: boolean;
 }) {
+  const t = useT();
   const options: { value: SettingsScope; label: string }[] = [
-    { value: "project", label: `This project (${projectName})` },
+    { value: "project", label: t("This project ({v0})", { v0: projectName }) },
     { value: "global", label: "All projects" },
   ];
   return (
-    <div className="flex items-center gap-1 rounded-lg border p-1 text-xs" role="group" aria-label="Scope">
+    <div className="flex items-center gap-1 rounded-lg border p-1 text-xs" role="group" aria-label={t("Scope")}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -135,7 +142,7 @@ export function ScopeSwitcher({
               : "text-muted-foreground hover:bg-muted/60",
           )}
         >
-          {option.label}
+          {t(option.label)}
         </button>
       ))}
     </div>
@@ -162,6 +169,7 @@ export function SettingsSearch({
   label: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <div className={cn("relative", className)}>
       <SearchIcon
@@ -171,8 +179,8 @@ export function SettingsSearch({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={label}
+        placeholder={t(placeholder)}
+        aria-label={t(label)}
         className="h-8 pl-8 text-xs"
       />
     </div>

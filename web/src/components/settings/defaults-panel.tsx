@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ComputeSelector } from "@/components/compute-selector";
@@ -70,6 +72,7 @@ function sameDraft(a: Draft, b: Draft): boolean {
 }
 
 export function DefaultsPanel() {
+  const t = useT();
   const modal = useModalCatalog();
   const [saved, setSaved] = useState<AppDefaults | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -143,14 +146,11 @@ export function DefaultsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader
-        title="Defaults for new chats"
+        title={t("Defaults for new chats")}
         description={
           <>
-            What a project&apos;s first chat tab starts with. A new tab opened next to an existing
-            one copies that tab&apos;s choices instead, and runs AI Scientist starts on its own (schedules,
-            system turns) reuse the project&apos;s latest chat model, falling back to this default.
-            Specialists have their own default under{" "}
-            <SettingsLink tab="specialists">Specialists</SettingsLink>.
+            {t("What a project's first chat tab starts with. A new tab opened next to an existing one copies that tab's choices instead, and runs AI Scientist starts on its own (schedules, system turns) reuse the project's latest chat model, falling back to this default. Specialists have their own default under")}{" "}
+            <SettingsLink tab="specialists">{t("Specialists")}</SettingsLink>.
           </>
         }
       />
@@ -160,29 +160,25 @@ export function DefaultsPanel() {
 
       {!draft ? (
         <p className="text-xs text-muted-foreground" role="status">
-          Loading…
-        </p>
+          {t("Loading…")}{" "}</p>
       ) : (
-        <SettingsCard title="New chat">
+        <SettingsCard title={t("New chat")}>
           <div className="grid gap-4">
             <div className="grid gap-1.5">
               <label htmlFor="default-model" className="text-xs font-medium">
-                Model
-              </label>
+                {t("Model")}{" "}</label>
               <ModelField
                 id="default-model"
-                label="Default model"
+                label={t("Default model")}
                 value={draft.model}
-                emptyLabel={`Not set — AI Scientist's default (${DEFAULT_MODEL.label} unless DEFAULT_MODEL_* is set in .env)`}
+                emptyLabel={t("Not set — AI Scientist's default ({v0} unless DEFAULT_MODEL_* is set in .env)", { v0: DEFAULT_MODEL.label })}
                 onChange={(model) => setDraft({ ...draft, model })}
               />
               <p className="text-[11px] text-muted-foreground">
-                Pick a model you have access to — a disconnected default makes every new project
-                start on a model that cannot run.
-              </p>
+                {t("Pick a model you have access to — a disconnected default makes every new project start on a model that cannot run.")}{" "}</p>
             </div>
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium">Thinking level</span>
+              <span className="text-xs font-medium">{t("Thinking level")}</span>
               <div className="flex">
                 <ThinkingSelector
                   selected={draft.thinkingLevel}
@@ -191,7 +187,7 @@ export function DefaultsPanel() {
               </div>
             </div>
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium">Compute</span>
+              <span className="text-xs font-medium">{t("Compute")}</span>
               <div className="flex">
                 <ComputeSelector
                   selected={draft.compute}
@@ -203,19 +199,17 @@ export function DefaultsPanel() {
                 />
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Remote targets need Modal connected under{" "}
+                {t("Remote targets need Modal connected under")}{" "}
                 <SettingsLink tab="services" section="modal">
-                  Services
-                </SettingsLink>
-                ; runs fall back to the local sandbox otherwise.
-              </p>
+                  {t("Services")}{" "}</SettingsLink>
+                {t("; runs fall back to the local sandbox otherwise.")}{" "}</p>
             </div>
           </div>
         </SettingsCard>
       )}
 
       {draft && (
-        <SettingsCard title="Image generation">
+        <SettingsCard title={t("Image generation")}>
           <ImageModelField
             value={draft.imageModel}
             listing={imageModels}
@@ -226,7 +220,7 @@ export function DefaultsPanel() {
       )}
 
       {draft && (
-        <SettingsCard title="Verification">
+        <SettingsCard title={t("Verification")}>
           <VerifierModelField
             value={draft.verifierModel}
             onChange={(verifierModel) => setDraft({ ...draft, verifierModel })}
@@ -244,10 +238,9 @@ export function DefaultsPanel() {
             disabled={!dirty || saving}
             onClick={() => baseline && setDraft(baseline)}
           >
-            Discard
-          </Button>
+            {t("Discard")}{" "}</Button>
           <Button type="button" size="sm" className="text-xs" disabled={!dirty || saving} onClick={() => void save()}>
-            {saving ? "Saving…" : "Save defaults"}
+            {saving ? t("Saving…") : t("Save defaults")}
           </Button>
         </div>
       )}
@@ -257,36 +250,33 @@ export function DefaultsPanel() {
 
 /** The model verifier specialists run on, so checks come from a different model. */
 function VerifierModelField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const t = useT();
   const { modelAvailability } = useModels();
   const agents = getVerifierAgents();
   const disconnected = Boolean(value) && modelAvailability({ id: value }) === "unavailable";
   return (
     <div className="grid gap-1.5">
       <label htmlFor="default-verifier-model" className="text-xs font-medium">
-        Verifier model
-      </label>
+        {t("Verifier model")}{" "}</label>
       <ModelField
         id="default-verifier-model"
-        label="Verifier model"
+        label={t("Verifier model")}
         value={value}
         emptyLabel="Not set — verifiers run on the same model as other specialists"
         onChange={onChange}
       />
       {disconnected ? (
         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          This model&apos;s provider is not connected, so verifiers keep their usual model until you connect it under{" "}
-          <SettingsLink tab="providers">Providers</SettingsLink>.
+          {t("This model's provider is not connected, so verifiers keep their usual model until you connect it under")}{" "}
+          <SettingsLink tab="providers">{t("Providers")}</SettingsLink>.
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          Specialists that check work run on this model, so a result is reviewed by a different model than the one
-          that produced it. A specialist that pins its own model keeps it. Applies to the next delegation, including in
-          open chats; verifier runs count toward the project spend cap like any other.
-        </p>
+          {t("Specialists that check work run on this model, so a result is reviewed by a different model than the one that produced it. A specialist that pins its own model keeps it. Applies to the next delegation, including in open chats; verifier runs count toward the project spend cap like any other.")}{" "}</p>
       )}
       {agents.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          Applies to: <span className="font-mono">{agents.join(", ")}</span>
+          {t("Applies to:")}{" "}<span className="font-mono">{agents.join(", ")}</span>
         </p>
       ) : null}
     </div>
@@ -307,6 +297,7 @@ function ImageModelField({
   error: string | null;
   onChange: (value: string) => void;
 }) {
+  const t = useT();
   const models = listing?.models ?? [];
   const byRef = new Map(models.map((model) => [model.ref, model] as const));
   const builtIn = listing?.builtIn.map((ref) => byRef.get(ref)?.name ?? ref) ?? [];
@@ -318,8 +309,7 @@ function ImageModelField({
       <div className="flex flex-col">
         <span>{model.name}</span>
         <span className="text-[10px] text-muted-foreground">
-          {price(model.cost.input)} in · {price(model.cost.output)} out per M tokens
-          {model.imageInput ? " · edits images" : ""}
+          {price(model.cost.input)} {" "}{t("in ·")}{" "}{price(model.cost.output)} {t("out per M tokens")}{" "}{model.imageInput ? t(" · edits images") : ""}
         </span>
       </div>
     </SelectItem>
@@ -327,52 +317,48 @@ function ImageModelField({
   return (
     <div className="grid gap-1.5">
       <label htmlFor="default-image-model" className="text-xs font-medium">
-        Image model
-      </label>
+        {t("Image model")}{" "}</label>
       <Select
         value={value || BUILT_IN_IMAGE_MODEL}
         onValueChange={(next) => onChange(next === BUILT_IN_IMAGE_MODEL ? "" : next)}
         disabled={!listing}
       >
-        <SelectTrigger id="default-image-model" size="sm" className="h-8 w-full text-xs" aria-label="Default image model">
+        <SelectTrigger id="default-image-model" size="sm" className="h-8 w-full text-xs" aria-label={t("Default image model")}>
           {/* Explicit children: the items carry a price line the trigger must not mirror. */}
           <SelectValue>
-            {value ? (selected?.name ?? value) : `Not set — AI Scientist's default (${builtIn[0] ?? "built-in order"})`}
+            {value ? (selected?.name ?? value) : t("Not set — AI Scientist's default ({v0})", { v0: builtIn[0] ?? t("built-in order") })}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
             <SelectItem value={BUILT_IN_IMAGE_MODEL} className="text-xs">
-              Not set — AI Scientist&apos;s default{builtIn.length ? ` (${builtIn.join(", then ")})` : ""}
+              {t("Not set — AI Scientist's default")}{builtIn.length ? ` (${builtIn.join(", then ")})` : ""}
             </SelectItem>
           </SelectGroup>
           {connected.length > 0 && (
             <SelectGroup>
-              <SelectLabel className="text-[10px]">Connected</SelectLabel>
+              <SelectLabel className="text-[10px]">{t("Connected")}</SelectLabel>
               {connected.map(row)}
             </SelectGroup>
           )}
           {disconnected.length > 0 && (
             <SelectGroup>
-              <SelectLabel className="text-[10px]">Not connected</SelectLabel>
+              <SelectLabel className="text-[10px]">{t("Not connected")}</SelectLabel>
               {disconnected.map(row)}
             </SelectGroup>
           )}
         </SelectContent>
       </Select>
       {error ? (
-        <p className="text-[11px] text-destructive">{error}</p>
+        <p className="text-[11px] text-destructive">{t(error)}</p>
       ) : value && selected && !selected.available ? (
         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          This model&apos;s provider is not connected, so AI Scientist uses its built-in default until you connect it under{" "}
-          <SettingsLink tab="providers">Providers</SettingsLink>.
+          {t("This model's provider is not connected, so AI Scientist uses its built-in default until you connect it under")}{" "}
+          <SettingsLink tab="providers">{t("Providers")}</SettingsLink>.
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          Used when AI Scientist generates figures and schematics, unless you ask for another model in chat. Only models priced
-          per token are listed, so every image counts toward the project spend cap. Applies right away, including to
-          open chats.
-        </p>
+          {t("Used when AI Scientist generates figures and schematics, unless you ask for another model in chat. Only models priced per token are listed, so every image counts toward the project spend cap. Applies right away, including to open chats.")}{" "}</p>
       )}
     </div>
   );

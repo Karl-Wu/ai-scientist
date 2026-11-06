@@ -36,9 +36,11 @@ The first UI pass covers the workspace shell, project/session navigation,
 composer controls, Files controls and preview chrome, Journal navigation and
 filters, Tasks, settings navigation and Appearance. The existing workflow
 catalogue translations remain in `web/src/data/workflow-locales/zh-CN.json`;
-workflow execution prompts are unchanged. Detailed provider/service/project
-settings, specialized scientific viewers and deeper research dialogs can be
-translated incrementally using the same infrastructure.
+workflow execution prompts are unchanged. All settings pages, their forms and
+confirmation dialogs, provider metadata, and model/compute pickers now use the
+same translation infrastructure. Specialized scientific viewers can be
+translated incrementally. Raw provider authentication challenges, user-authored
+skills, templates, and specialist prompts retain their original content.
 
 Tests cover interpolation parity, fallback, saved preferences, browser-language
 fallback, live switching, cross-tab updates, storage failures, and native file

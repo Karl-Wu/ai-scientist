@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
@@ -158,6 +160,7 @@ export function ModelPickerList({
   excludeFusion,
   onNavigate,
 }: ModelPickerListProps) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const selectedRowRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -281,16 +284,14 @@ export function ModelPickerList({
             <span className="font-semibold text-foreground truncate">{model.label}</span>
             {isRecommended(model) && (
               <span className="rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary shrink-0">
-                recommended
-              </span>
+                {t("recommended")}{" "}</span>
             )}
             <span className={cn("text-[10px] font-medium shrink-0", providerColor)}>
               {model.provider}
             </span>
             {!available ? (
               <span className="rounded-full bg-destructive/10 px-1.5 py-px text-[10px] font-medium text-destructive">
-                disconnected
-              </span>
+                {t("disconnected")}{" "}</span>
             ) : null}
           </div>
           <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground/70">
@@ -301,21 +302,20 @@ export function ModelPickerList({
               </>
             )}
             {model.sourceId === "nvidia" ? (
-              <span>Billed via NVIDIA API credits · not metered by AI Scientist</span>
+              <span>{t("Billed via NVIDIA API credits · not metered by AI Scientist")}</span>
             ) : model.billingMode === "subscription" &&
               model.sourceId &&
               OAUTH_SECTION_ORDER.includes(model.sourceId) ? (
-              <span>Uses provider-managed subscription limits</span>
+              <span>{t("Uses provider-managed subscription limits")}</span>
             ) : model.billingMode === "subscription" ? (
-              <span>Billed to your provider plan or credits · not metered by AI Scientist</span>
+              <span>{t("Billed to your provider plan or credits · not metered by AI Scientist")}</span>
             ) : model.billingMode === "metered_oauth" ? (
               <span>
-                ${model.pricing.prompt.toFixed(2)} in / ${model.pricing.completion.toFixed(2)} out per 1M tok · extra usage
-              </span>
+                ${model.pricing.prompt.toFixed(2)} in / ${model.pricing.completion.toFixed(2)} {t("out per 1M tok · extra usage")}{" "}</span>
             ) : local ? (
-              <span>Runs locally · no API cost</span>
+              <span>{t("Runs locally · no API cost")}</span>
             ) : (
-              <span>${model.pricing.prompt.toFixed(2)} in / ${model.pricing.completion.toFixed(2)} out per 1M tok</span>
+              <span>${model.pricing.prompt.toFixed(2)} in / ${model.pricing.completion.toFixed(2)} {" "}{t("out per 1M tok")}</span>
             )}
           </div>
         </div>
@@ -330,7 +330,7 @@ export function ModelPickerList({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search models..."
+          placeholder={t("Search models...")}
           className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
           autoFocus
         />
@@ -342,7 +342,7 @@ export function ModelPickerList({
       <div
         ref={listRef}
         role="listbox"
-        aria-label="Models"
+        aria-label={t("Models")}
         className={cn("relative overflow-y-auto py-1", compact ? "max-h-72" : "max-h-80")}
       >
         {groups.map((group, index) => (
@@ -359,12 +359,12 @@ export function ModelPickerList({
                 {group.id === "ollama"
                   ? ollamaAvailable
                     ? `${ollamaModels.length} available`
-                    : "not running"
+                    : t("not running")
                   : group.id === "openai-compatible"
                     ? openaiCompatibleAvailable
                       ? `${openaiCompatibleModels.length} available`
-                      : "not running"
-                    : `${group.models.length} model${group.models.length === 1 ? "" : "s"}`}
+                      : t("not running")
+                    : t(group.models.length === 1 ? "{count} model" : "{count} models", { count: group.models.length })}
               </span>
             </div>
             {group.models.map(renderModelRow)}
@@ -376,15 +376,15 @@ export function ModelPickerList({
             {groups.length > 0 ? <div className="my-1 border-t border-border/60" /> : null}
             <div className="flex items-center gap-1.5 px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <HardDriveIcon className="size-3" aria-hidden />
-              <span>Local (Ollama)</span>
+              <span>{t("Local (Ollama)")}</span>
               <span className="ml-auto text-[10px] font-normal normal-case tracking-normal text-muted-foreground/70">
-                {ollamaAvailable ? "0 available" : "not running"}
+                {ollamaAvailable ? "0 available" : t("not running")}
               </span>
             </div>
             <div className="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground/80">
               {ollamaAvailable ? (
                 <>
-                  Ollama is running but no models are pulled. Run{" "}
+                  {t("Ollama is running but no models are pulled. Run")}{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
                     ollama pull qwen3.6
                   </code>
@@ -392,9 +392,7 @@ export function ModelPickerList({
                 </>
               ) : (
                 <>
-                  Start Ollama to use local models, then pull a model and reopen
-                  this menu.
-                </>
+                  {t("Start Ollama to use local models, then pull a model and reopen this menu.")}{" "}</>
               )}
             </div>
           </div>
@@ -410,26 +408,22 @@ export function ModelPickerList({
             {groups.length > 0 ? <div className="my-1 border-t border-border/60" /> : null}
             <div className="flex items-center gap-1.5 px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <HardDriveIcon className="size-3" aria-hidden />
-              <span>Local (OpenAI-compatible)</span>
+              <span>{t("Local (OpenAI-compatible)")}</span>
               <span className="ml-auto text-[10px] font-normal normal-case tracking-normal text-muted-foreground/70">
-                {openaiCompatibleAvailable ? "0 available" : "not running"}
+                {openaiCompatibleAvailable ? "0 available" : t("not running")}
               </span>
             </div>
             <div className="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground/80">
               {openaiCompatibleAvailable ? (
                 <>
-                  The server is up but serving no models. Load one and reopen
-                  this menu.
-                </>
+                  {t("The server is up but serving no models. Load one and reopen this menu.")}{" "}</>
               ) : (
                 <>
-                  No server answered at{" "}
+                  {t("No server answered at")}{" "}
                   <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
                     OPENAI_COMPATIBLE_BASE_URL
                   </code>
-                  (Settings → Providers → Local model servers). Start LM Studio,
-                  vLLM, or another OpenAI-compatible server and reopen this menu.
-                </>
+                  {t("(Settings → Providers → Local model servers). Start LM Studio, vLLM, or another OpenAI-compatible server and reopen this menu.")}{" "}</>
               )}
             </div>
           </div>
@@ -437,7 +431,7 @@ export function ModelPickerList({
 
         {totalCount === 0 && (
           <div className="px-3 py-6 text-center text-[11px] text-muted-foreground">
-            No models match &ldquo;{search}&rdquo;.
+            {t("No models match “{query}”.", { query: search })}
           </div>
         )}
       </div>
@@ -463,8 +457,7 @@ export function ModelPickerList({
             openSettings({ tab: "providers" });
           }}
         >
-          Manage providers
-        </button>
+          {t("Manage providers")}{" "}</button>
       </div>
     </div>
   );
@@ -484,6 +477,7 @@ export function ModelSelector({
   onChange: (model: Model) => void;
   excludeFusion?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { modelAvailability } = useModels();
   const selectedAvailability = modelAvailability(selected);
@@ -526,7 +520,7 @@ export function ModelSelector({
                   : "text-destructive",
               )}
             >
-              {selectedAvailability === "checking" ? "checking…" : "disconnected"}
+              {selectedAvailability === "checking" ? "checking…" : t("disconnected")}
             </span>
           ) : null}
           <ChevronDownIcon
@@ -547,7 +541,7 @@ export function ModelSelector({
       >
         {selectedAvailability === "unavailable" ? (
           <div className="flex items-center gap-2 border-b bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
-            <span className="min-w-0 flex-1">{selected.label}&apos;s provider is not connected.</span>
+            <span className="min-w-0 flex-1">{selected.label}{t("'s provider is not connected.")}</span>
             <button
               type="button"
               className="shrink-0 font-medium underline-offset-2 hover:underline"
@@ -556,8 +550,7 @@ export function ModelSelector({
                 openSettings({ tab: "providers" });
               }}
             >
-              Connect…
-            </button>
+              {t("Connect…")}{" "}</button>
           </div>
         ) : null}
         <ModelPickerList

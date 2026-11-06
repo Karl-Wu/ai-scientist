@@ -1,5 +1,7 @@
 "use client";
 
+import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+
 /**
  * Settings → Models → Providers: every way to reach a model in one place.
  * One row per provider (sign-in and API key merged — see lib/provider-rows),
@@ -54,14 +56,14 @@ const OPENROUTER_KEY: KeyDef = {
   notifyProviders: true,
 };
 
-function fieldKeyDef(provider: DirectProviderStatus, field: DirectProviderField): KeyDef {
+function fieldKeyDef(provider: DirectProviderStatus, field: DirectProviderField, t: ReturnType<typeof useT>): KeyDef {
   return {
     id: field.credentialId,
     bodyField: field.bodyField,
     label: field.label,
     placeholder: field.placeholder ?? (field.secret ? "…" : ""),
     keysUrl: field.isKey ? provider.keysUrl : undefined,
-    hint: field.hint ? `${field.hint} Stored as ${field.envVar} in .env.` : `Stored as ${field.envVar} in .env.`,
+    hint: `${field.hint ? t(field.hint) + " " : ""}${t("Stored as {v0} in .env.", { v0: field.envVar })}`,
     secret: field.secret,
     notifyProviders: true,
   };
@@ -84,18 +86,19 @@ function billingBadge(provider: ModelProviderStatus): string {
 }
 
 function StatusBadge({ row }: { row: ProviderRow }) {
+  const t = useT();
   if (row.status === "none") {
     return (
-      <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">Not connected</span>
+      <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{t("Not connected")}</span>
     );
   }
   if (row.status === "reauth") {
-    return <Badge variant="destructive">Reconnect required</Badge>;
+    return <Badge variant="destructive">{t("Reconnect required")}</Badge>;
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
       <CheckCircle2Icon className="size-3" aria-hidden />
-      {providerStatusLabel(row)}
+      {t(providerStatusLabel(row))}
     </span>
   );
 }
@@ -119,12 +122,13 @@ function ProviderRowCard({
   onDisconnect: (provider: ModelProviderStatus) => void;
   disconnecting: boolean;
 }) {
-  const methods = [row.oauth ? "Sign in" : null, row.direct || row.openrouterKey ? "API key" : null]
+  const t = useT();
+  const methods = [row.oauth ? t("Sign in") : null, row.direct || row.openrouterKey ? t("API key") : null]
     .filter(Boolean)
     .join(" · ");
   const keyDefs: KeyDef[] = row.openrouterKey
     ? [OPENROUTER_KEY]
-    : (row.direct?.fields ?? []).map((field) => fieldKeyDef(row.direct!, field));
+    : (row.direct?.fields ?? []).map((field) => fieldKeyDef(row.direct!, field, t));
 
   return (
     <div className="rounded-lg border" data-testid={`provider-row-${row.id}`}>
@@ -143,9 +147,9 @@ function ProviderRowCard({
         <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
           {row.connected
             ? row.modelCount > 0
-              ? `${row.modelCount} model${row.modelCount === 1 ? "" : "s"}`
+              ? ((row.modelCount === 1 ? "" : "s") === "" ? t("{v0} model", {v0: row.modelCount}) : t("{v0} models", {v0: row.modelCount}))
               : row.openrouterKey
-                ? "Full catalogue"
+                ? t("Full catalogue")
                 : ""
             : methods}
         </span>
@@ -156,8 +160,8 @@ function ProviderRowCard({
             <div className="flex items-start gap-3" data-testid={`provider-signin-${row.id}`}>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium">{row.oauth.accountLabel}</span>
-                  <Badge variant="outline">{billingBadge(row.oauth)}</Badge>
+                  <span className="text-xs font-medium">{t(row.oauth.accountLabel)}</span>
+                  <Badge variant="outline">{t(billingBadge(row.oauth))}</Badge>
                 </div>
                 <p
                   className={cn(
@@ -167,7 +171,7 @@ function ProviderRowCard({
                       : "text-muted-foreground",
                   )}
                 >
-                  {row.oauth.billingNote}
+                  {t(row.oauth.billingNote)}
                 </p>
               </div>
               {row.oauth.connected ? (
@@ -178,25 +182,24 @@ function ProviderRowCard({
                   className="shrink-0"
                   disabled={disconnecting}
                   onClick={() => onDisconnect(row.oauth!)}
-                  aria-label={`Disconnect ${row.oauth.accountLabel}`}
+                  aria-label={t("Disconnect {v0}", { v0: row.oauth.accountLabel })}
                 >
                   {disconnecting ? (
                     <LoaderCircleIcon className="size-3.5 animate-spin" aria-hidden />
                   ) : (
                     <LogOutIcon className="size-3.5" aria-hidden />
                   )}
-                  Disconnect
-                </Button>
+                  {t("Disconnect")}{" "}</Button>
               ) : (
                 <Button
                   type="button"
                   size="sm"
                   className="shrink-0"
                   onClick={() => onSignIn(row.oauth!)}
-                  aria-label={`${row.oauth.needsReauth ? "Reconnect" : "Connect"} ${row.oauth.accountLabel}`}
+                  aria-label={`${row.oauth.needsReauth ? t("Reconnect") : t("Connect")} ${t(row.oauth.accountLabel)}`}
                 >
                   <LogInIcon className="size-3.5" aria-hidden />
-                  {row.oauth.needsReauth ? "Reconnect" : "Sign in"}
+                  {row.oauth.needsReauth ? t("Reconnect") : t("Sign in")}
                 </Button>
               )}
             </div>
@@ -205,19 +208,18 @@ function ProviderRowCard({
           {row.oauth && keyDefs.length > 0 ? (
             <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
               <span className="h-px flex-1 bg-border" />
-              or use an API key
-              <span className="h-px flex-1 bg-border" />
+              {t("or use an API key")}{" "}<span className="h-px flex-1 bg-border" />
             </div>
           ) : null}
 
           {row.direct?.hint ? (
-            <p className="text-[11px] leading-relaxed text-muted-foreground">{row.direct.hint}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{t(row.direct.hint)}</p>
           ) : null}
           {keyDefs.map((def) => (
             <KeyRow key={def.id} def={def} current={credentials?.[def.id]} onStatus={onCredentials} />
           ))}
           {row.direct?.billingNote ? (
-            <p className="text-[11px] leading-relaxed text-muted-foreground/80">{row.direct.billingNote}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground/80">{t(row.direct.billingNote)}</p>
           ) : null}
         </div>
       ) : null}
@@ -248,6 +250,7 @@ function LocalServerCard({
   available: boolean;
   modelCount: number;
 }) {
+  const t = useT();
   const url = credentials?.[bodyField]?.set ? credentials[bodyField]?.masked : null;
   return (
     <div className="rounded-lg border p-3" data-testid={`local-server-${id}`}>
@@ -256,12 +259,11 @@ function LocalServerCard({
         {available ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-px text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
             <CheckCircle2Icon className="size-3" aria-hidden />
-            Running · {modelCount} model{modelCount === 1 ? "" : "s"}
+            {t("Running ·")}{" "}{t("{count} models", { count: modelCount })}
           </span>
         ) : (
           <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-            Not reachable
-          </span>
+            {t("Not reachable")}{" "}</span>
         )}
         <code className="ml-auto truncate font-mono text-[10px] text-muted-foreground">{url ?? defaultUrl}</code>
       </div>
@@ -269,9 +271,9 @@ function LocalServerCard({
         def={{
           id: bodyField,
           bodyField,
-          label: "Base URL",
+          label: t("Base URL"),
           placeholder: defaultUrl,
-          hint: `${hint} Leave unset to use ${defaultUrl}. Stored as ${envVar} in .env.`,
+          hint: `${t(hint)} ${t("Leave unset to use {url}. Stored as {env} in .env.", { url: defaultUrl, env: envVar })}`,
           secret: false,
           notifyProviders: true,
         }}
@@ -283,6 +285,7 @@ function LocalServerCard({
 }
 
 export function ProvidersPanel({ section }: { section?: string }) {
+  const t = useT();
   const auth = useProviderAuth();
   const credentials = useCredentialStatus();
   const models = useModels();
@@ -305,14 +308,14 @@ export function ProvidersPanel({ section }: { section?: string }) {
   const loadDirect = useCallback(async () => {
     try {
       const res = await apiFetch("/providers");
-      if (!res.ok) throw new Error(`Failed to load providers (${res.status})`);
+      if (!res.ok) throw new Error(t("Failed to load providers ({v0})", { v0: res.status }));
       const data = (await res.json()) as { providers?: DirectProviderStatus[] };
       setDirect(Array.isArray(data.providers) ? data.providers : []);
       setDirectError(null);
     } catch (exc) {
       setDirectError(exc instanceof Error ? exc.message : "Failed to load providers");
     }
-  }, []);
+  }, [t]);
 
   const { refresh: refreshAuth } = auth;
   useEffect(() => {
@@ -360,10 +363,10 @@ export function ProvidersPanel({ section }: { section?: string }) {
 
   const disconnect = async (provider: ModelProviderStatus) => {
     const ok = await confirm({
-      title: `Disconnect ${provider.accountLabel}?`,
+      title: t("Disconnect {v0}?", { v0: provider.accountLabel }),
       description:
-        "Existing chats remain on disk, but new requests through this sign-in will stop working until you reconnect.",
-      confirmLabel: "Disconnect",
+        t("Existing chats remain on disk, but new requests through this sign-in will stop working until you reconnect."),
+      confirmLabel: t("Disconnect"),
       destructive: true,
     });
     if (!ok) return;
@@ -397,14 +400,11 @@ export function ProvidersPanel({ section }: { section?: string }) {
     <div className="flex flex-col gap-4">
       {dialog}
       <SettingsHeader
-        title="Model providers"
+        title={t("Model providers")}
         description={
           <>
-            Bring your own model to AI Scientist: sign in with a subscription you already have, paste an
-            API key, or point it at a local server. Credentials stay on this machine (keys in{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.env</code>, sign-ins in
-            AI Scientist&apos;s Pi credential store). Credentials are used only to connect to the model provider you choose.
-          </>
+            {t("Bring your own model to AI Scientist: sign in with a subscription you already have, paste an API key, or point it at a local server. Credentials stay on this machine (keys in")}{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">.env</code>{t(", sign-ins in AI Scientist's Pi credential store). Credentials are used only to connect to the model provider you choose.")}{" "}</>
         }
         appliesTo="immediately"
       />
@@ -414,15 +414,13 @@ export function ProvidersPanel({ section }: { section?: string }) {
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
           <LoaderCircleIcon className="size-4 animate-spin" aria-hidden />
-          Loading providers…
-        </div>
+          {t("Loading providers…")}{" "}</div>
       ) : (
         <>
-          <SettingsCard id="connected" title={`Connected (${connected.length})`}>
+          <SettingsCard id="connected" title={t("Connected ({v0})", { v0: connected.length })}>
             {connected.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">
-                No model provider is connected yet. Pick one below, or run a local model server.
-              </p>
+                {t("No model provider is connected yet. Pick one below, or run a local model server.")}{" "}</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {connected.map((row) => (
@@ -434,8 +432,8 @@ export function ProvidersPanel({ section }: { section?: string }) {
 
           <SettingsCard
             id="add-provider"
-            title="Add a provider"
-            description="Subscriptions (ChatGPT, Claude Pro/Max, Copilot, …) sign in through the provider; everything else takes an API key or cloud credential. A connected provider gets its own section in the model picker."
+            title={t("Add a provider")}
+            description={t("Subscriptions (ChatGPT, Claude Pro/Max, Copilot, …) sign in through the provider; everything else takes an API key or cloud credential. A connected provider gets its own section in the model picker.")}
           >
             {/* Deep-link anchors: the first-run card's "subscription" / "API key" actions. */}
             <span id="subscriptions" className="block scroll-mt-4" aria-hidden />
@@ -444,11 +442,11 @@ export function ProvidersPanel({ section }: { section?: string }) {
               <SettingsSearch
                 value={query}
                 onChange={setQuery}
-                placeholder="Search providers (name or env var)…"
-                label="Search model providers"
+                placeholder={t("Search providers (name or env var)…")}
+                label={t("Search model providers")}
                 className="min-w-48 flex-1"
               />
-              <div className="flex items-center gap-1 rounded-lg border p-1 text-xs" role="group" aria-label="Connection method">
+              <div className="flex items-center gap-1 rounded-lg border p-1 text-xs" role="group" aria-label={t("Connection method")}>
                 {(
                   [
                     ["all", "All"],
@@ -466,14 +464,14 @@ export function ProvidersPanel({ section }: { section?: string }) {
                       filter === value ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/60",
                     )}
                   >
-                    {label}
+                    {t(label)}
                   </button>
                 ))}
               </div>
             </div>
             {filtered.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">
-                {q ? "No provider matches." : "Every provider of this kind is already connected."}
+                {q ? t("No provider matches.") : t("Every provider of this kind is already connected.")}
               </p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -485,7 +483,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
             {!q && filter === "all" && (hiddenCount > 0 || showAll) ? (
               <div className="mt-3 flex justify-end">
                 <Button type="button" variant="ghost" size="sm" className="text-xs" onClick={() => setShowAll((v) => !v)}>
-                  {showAll ? "Show popular only" : `Show all ${available.length} providers`}
+                  {showAll ? t("Show popular only") : t("Show all {v0} providers", { v0: available.length })}
                 </Button>
               </div>
             ) : null}
@@ -493,8 +491,8 @@ export function ProvidersPanel({ section }: { section?: string }) {
 
           <SettingsCard
             id="local-servers"
-            title="Local model servers"
-            description="Free, private models running on this machine or your network. AI Scientist probes each server and lists its models in the picker while it is reachable."
+            title={t("Local model servers")}
+            description={t("Free, private models running on this machine or your network. AI Scientist probes each server and lists its models in the picker while it is reachable.")}
           >
             <div className="flex flex-col gap-3">
               <LocalServerCard
@@ -503,7 +501,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
                 envVar="OLLAMA_BASE_URL"
                 bodyField="ollamaBaseUrl"
                 defaultUrl="http://localhost:11434"
-                hint="Run `ollama serve` and pull a model."
+                hint={t("Run `ollama serve` and pull a model.")}
                 credentials={credentials.status}
                 onCredentials={credentials.setStatus}
                 available={models.ollamaAvailable}
@@ -511,11 +509,11 @@ export function ProvidersPanel({ section }: { section?: string }) {
               />
               <LocalServerCard
                 id="openai-compatible"
-                title="OpenAI-compatible server"
+                title={t("OpenAI-compatible server")}
                 envVar="OPENAI_COMPATIBLE_BASE_URL"
                 bodyField="openaiCompatibleBaseUrl"
                 defaultUrl="http://localhost:1234"
-                hint="LM Studio, vLLM, llama.cpp server, text-generation-webui — anything serving /v1/models. vLLM's default port (8000) collides with AI Scientist's backend, so move one of them."
+                hint={t("LM Studio, vLLM, llama.cpp server, text-generation-webui — anything serving /v1/models. vLLM's default port (8000) collides with AI Scientist's backend, so move one of them.")}
                 credentials={credentials.status}
                 onCredentials={credentials.setStatus}
                 available={models.openaiCompatibleAvailable}
@@ -529,10 +527,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
           </div>
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Provider subscriptions have their own quotas and overage rules. Except for
-            Anthropic&apos;s documented metered extra usage, AI Scientist records tokens but does not treat
-            provider-managed subscription usage as project spend.
-          </p>
+            {t("Provider subscriptions have their own quotas and overage rules. Except for Anthropic's documented metered extra usage, AI Scientist records tokens but does not treat provider-managed subscription usage as project spend.")}{" "}</p>
         </>
       )}
 

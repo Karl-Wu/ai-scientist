@@ -71,23 +71,23 @@ export function useConfirm() {
       {pending && (
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{pending.title}</DialogTitle>
+            <DialogTitle>{t(pending.title)}</DialogTitle>
             {pending.description && (
               <DialogDescription className="whitespace-pre-line leading-relaxed">
-                {pending.description}
+                {t(pending.description)}
               </DialogDescription>
             )}
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => settle(false)}>
-              {pending.cancelLabel ?? t("Cancel")}
+              {t(pending.cancelLabel ?? "Cancel")}
             </Button>
             <Button
               variant={pending.destructive ? "destructive" : "default"}
               onClick={() => settle(true)}
               autoFocus
             >
-              {pending.confirmLabel ?? t("Confirm")}
+              {t(pending.confirmLabel ?? "Confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
