@@ -37,6 +37,8 @@ export interface ComputeDefaults {
 }
 
 export interface AppDefaults {
+  /** Interface language shared across browsers on this installation. */
+  locale?: "en" | "zh-CN";
   model?: string;
   thinkingLevel?: ThinkingLevel;
   compute?: ComputeDefaults;
@@ -49,7 +51,7 @@ export interface AppDefaults {
 /** A present key set to `null` clears it; an absent key is left unchanged. `compute` is replaced whole. */
 export type AppDefaultsPatch = { [K in keyof AppDefaults]?: AppDefaults[K] | null };
 
-const DEFAULT_KEYS = new Set<string>(["model", "thinkingLevel", "compute", "imageModel", "verifierModel"]);
+const DEFAULT_KEYS = new Set<string>(["model", "thinkingLevel", "compute", "imageModel", "verifierModel", "locale"]);
 const COMPUTE_KEYS = new Set<string>(["target", "gpuCount", "gpuFallback", "cache"]);
 
 type Rec = Record<string, unknown>;
@@ -117,6 +119,7 @@ export function validateAppDefaultsPatch(patch: unknown): string | null {
   for (const key of Object.keys(patch)) {
     if (!DEFAULT_KEYS.has(key)) return `Unknown setting "${key}" (expected ${[...DEFAULT_KEYS].join(", ")})`;
   }
+  if (patch.locale != null && patch.locale !== "en" && patch.locale !== "zh-CN") return "locale must be en or zh-CN, or null to clear it";
   if (patch.model != null) {
     const error = invalidModelRef(patch.model);
     if (error) return error;
@@ -155,6 +158,7 @@ function normalizeCompute(value: Rec): ComputeDefaults {
 export function readAppDefaults(agentDir = KADY_PI_AGENT_DIR): AppDefaults {
   const defaults = asRecord(loadForWrite(agentDir)?.defaults);
   const out: AppDefaults = {};
+  if (defaults.locale === "en" || defaults.locale === "zh-CN") out.locale = defaults.locale;
   if (!invalidModelRef(defaults.model)) out.model = (defaults.model as string).trim();
   const thinkingLevel = parseThinkingLevel(defaults.thinkingLevel);
   if (thinkingLevel) out.thinkingLevel = thinkingLevel;
@@ -186,6 +190,10 @@ export function writeAppDefaults(patch: AppDefaultsPatch, agentDir = KADY_PI_AGE
   const file = loadForWrite(agentDir);
   if (file === null) return null;
   const defaults = { ...asRecord(file.defaults) };
+  if (patch.locale !== undefined) {
+    if (patch.locale === null) delete defaults.locale;
+    else defaults.locale = patch.locale;
+  }
   if (patch.model !== undefined) {
     if (patch.model === null) delete defaults.model;
     else defaults.model = patch.model.trim();

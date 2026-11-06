@@ -33,6 +33,17 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+it("persists the shared UI locale and validates supported values", () => {
+  expect(validateAppDefaultsPatch({ locale: "zh-CN" })).toBeNull();
+  expect(validateAppDefaultsPatch({ locale: "fr" })).toMatch(/locale/);
+  writeAppDefaults({ model: "ollama/llama3", locale: "zh-CN" }, dir);
+  expect(readAppDefaults(dir)).toMatchObject({ locale: "zh-CN", model: "ollama/llama3" });
+  writeAppDefaults({ thinkingLevel: "high" }, dir);
+  expect(readAppDefaults(dir).locale).toBe("zh-CN");
+  writeAppDefaults({ locale: null }, dir);
+  expect(readAppDefaults(dir).locale).toBeUndefined();
+});
+
 describe("readAppDefaults / writeAppDefaults", () => {
   it("reads a missing file as no defaults", () => {
     expect(readAppDefaults(dir)).toEqual({});
@@ -179,6 +190,15 @@ describe("GET/PUT /settings/defaults", () => {
   }
   const put = (app: FastifyInstance, payload: unknown) =>
     app.inject({ method: "PUT", url: "/settings/defaults", payload: payload as object });
+
+  it("shares a persisted locale across fresh route instances", async () => {
+    const first = await routes();
+    expect((await put(first, { locale: "zh-CN" })).statusCode).toBe(200);
+    const reopened = await routes();
+    expect((await reopened.inject({ url: "/settings/defaults" })).json().defaults.locale).toBe("zh-CN");
+    expect((await put(reopened, { locale: "invalid" })).statusCode).toBe(400);
+    expect((await reopened.inject({ url: "/settings/defaults" })).json().defaults.locale).toBe("zh-CN");
+  });
 
   it("round-trips a patch", async () => {
     const app = await routes();

@@ -29,7 +29,7 @@ export function AppearancePanel() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
         <div className="space-y-1">
           <label htmlFor="interface-language" className="text-sm font-medium">{t("Language")}</label>
-          <p className="text-xs text-muted-foreground">{t("Choose your interface language. Saved in this browser.")}</p>
+          <p className="text-xs text-muted-foreground">{t("Choose your interface language. Shared across browsers on this installation.")}</p>
         </div>
         <LanguageSelector id="interface-language" />
       </div>

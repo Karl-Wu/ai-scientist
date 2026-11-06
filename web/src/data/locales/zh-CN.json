@@ -862,5 +862,7 @@
   "Direct evidence context was bounded; omitted links are not verified absent.": "直接证据的上下文范围受到限制；未收录的关联不代表已确认不存在。",
   "Only the current frozen plan and three other plan/deviation records were selected; inspect the full validated plan history before acting.": "仅选取了当前冻结计划和另外三条计划或偏离记录；采取行动前请审阅完整且已验证的计划历史。",
   "Additional source artifacts were not identity-checked within the context budget.": "由于上下文预算限制，部分额外来源产物未进行身份核验。",
-  "Some cited source artifacts changed or are missing. Proposed tests require source review.": "部分引用的来源产物已更改或缺失；拟议检验需要先审阅来源。"
+  "Some cited source artifacts changed or are missing. Proposed tests require source review.": "部分引用的来源产物已更改或缺失；拟议检验需要先审阅来源。",
+  "Choose your interface language. Shared across browsers on this installation.": "选择界面语言。此设置保存在应用中，可在不同浏览器间共用。",
+  "Language changed locally, but could not be saved to the app. Please try again.": "语言已在当前浏览器切换，但未能保存到应用。请重试。"
 }

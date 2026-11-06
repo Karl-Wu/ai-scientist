@@ -2,9 +2,11 @@
 
 The UI currently supports English (`en`) and Simplified Chinese (`zh-CN`).
 Choose the language in Settings → Appearance → Language, or in the workflow
-catalogue. Both controls change the same app-wide preference. The browser stores
-it under `kady:locale`; on first use, Chinese browser locales select Simplified
-Chinese and other browser locales select English. Other tabs follow changes.
+catalogue. Both controls change the same app-wide preference, persisted in
+`kady-settings.json` and cached in the browser under `kady:locale`. When no
+preference exists, Chinese browser locales select Simplified Chinese and other
+browser locales select English. Other tabs on the same origin follow changes;
+other browsers read the app preference when opening or reloading the page.
 
 ## Adding UI copy
 
@@ -41,3 +43,5 @@ translated incrementally using the same infrastructure.
 Tests cover interpolation parity, fallback, saved preferences, browser-language
 fallback, live switching, cross-tab updates, storage failures, and native file
 uploads with a Chinese UI.
+
+Language preferences are saved app-wide as `defaults.locale` in `kady-settings.json` through `/settings/defaults`. Browser localStorage is a startup/offline cache; the app setting wins on load, so Edge, the in-app browser, `localhost` and `127.0.0.1` share the choice. Existing explicit browser preferences migrate if the app has no saved language. Browser-language detection is never persisted automatically.

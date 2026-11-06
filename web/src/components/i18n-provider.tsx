@@ -1,7 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { isLocale, LOCALE_STORAGE_KEY, localeFromLanguage, type Locale } from "@/lib/i18n";
+
+import { toast } from "sonner";
+import { readSavedLocale, saveLocale } from "@/lib/ui-locale-settings";
 
 import { english, translate, type Translate } from "@/lib/translations";
 
@@ -16,7 +19,21 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
 
+  const revision = useRef(0);
+  const saves = useRef(Promise.resolve());
+  const cacheLocale = useCallback((value: Locale) => {
+    try { window.localStorage.setItem(LOCALE_STORAGE_KEY, value); } catch { /* Cache is optional. */ }
+  }, []);
+  const persistLocale = useCallback((value: Locale) => {
+    // Serialize rapid selections so the last choice also wins on disk.
+    saves.current = saves.current.then(() => saveLocale(value)).catch(() => {
+      toast.error(translate(value, "Language changed locally, but could not be saved to the app. Please try again."));
+    });
+  }, []);
+
   useEffect(() => {
+    let disposed = false;
+    const version = revision.current;
     let stored: string | null = null;
     try {
       stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
@@ -24,24 +41,34 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       // Storage can be disabled; browser language remains a useful fallback.
     }
     setLocaleState(isLocale(stored) ? stored : localeFromLanguage(navigator.language));
-  }, []);
+    void readSavedLocale().then((saved) => {
+      if (disposed || revision.current !== version) return;
+      if (saved) {
+        setLocaleState(saved);
+        cacheLocale(saved);
+      } else if (isLocale(stored)) {
+        // Migrate an existing explicit browser preference once; never save an inferred language.
+        persistLocale(stored);
+      }
+    }).catch(() => { /* Offline: keep the cached preference. */ });
+    return () => { disposed = true; };
+  }, [cacheLocale, persistLocale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
+    revision.current++;
     setLocaleState(nextLocale);
-    try {
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
-    } catch {
-      // Keep the in-memory preference for this page even without storage access.
-    }
-  }, []);
+    cacheLocale(nextLocale);
+    persistLocale(nextLocale);
+  }, [cacheLocale, persistLocale]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key === LOCALE_STORAGE_KEY) {
+        revision.current++;
         setLocaleState(isLocale(event.newValue) ? event.newValue : localeFromLanguage(navigator.language));
       }
     };
