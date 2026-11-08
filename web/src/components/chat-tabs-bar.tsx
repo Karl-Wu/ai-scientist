@@ -45,6 +45,7 @@ export interface ChatTabDescriptor {
   titleIsCustom?: boolean;
   isStreaming: boolean;
   userMessageCount: number;
+  hasCompletedTurn?: boolean;
   sessionId?: string | null;
 }
 
@@ -111,7 +112,7 @@ function RecentChatsList({
   const deletedSessions = useRef(new Set<string>());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const openSessionKey = tabs.map((tab) => `${tab.sessionId ?? tab.id}:${tab.userMessageCount}:${tab.isStreaming}`).join("\u0000");
+  const openSessionKey = tabs.map((tab) => `${tab.sessionId ?? tab.id}:${tab.userMessageCount}:${tab.isStreaming}:${tab.hasCompletedTurn}`).join("\u0000");
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -152,9 +153,13 @@ function RecentChatsList({
   const openBySessionId = new Map(
     tabs.flatMap((tab) => tab.sessionId ? [[tab.sessionId, tab] as const] : []),
   );
-  const saved = sessions ?? [];
+  // Preserve draft/run recovery, but only publish completed chats in history.
+  const saved = (sessions ?? []).filter((session) =>
+    openBySessionId.get(session.id)?.hasCompletedTurn ?? session.messageCount > 1,
+  );
   const savedIds = new Set(saved.map((session) => session.id));
   const unpersistedTabs = [...tabs]
+    .filter((tab) => tab.hasCompletedTurn ?? (tab.userMessageCount > 0 && !tab.isStreaming))
     .filter((tab) => !tab.sessionId || !savedIds.has(tab.sessionId))
     .reverse();
   const recentSessions = saved.map((session) => ({
@@ -482,7 +487,9 @@ export function ChatTabsBar({
   canExport = false,
 }: ChatTabsBarProps) {
   const t = useT();
-  const atLimit = tabs.length >= maxTabs;
+  const atLimit = tabs.length >= maxTabs && !tabs.some((tab) =>
+    tab.hasCompletedTurn === false && tab.userMessageCount === 0 && !tab.isStreaming,
+  );
 
   return (
     <div

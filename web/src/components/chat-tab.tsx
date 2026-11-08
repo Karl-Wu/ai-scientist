@@ -1,6 +1,7 @@
 "use client";
 
 import { ConversationMap } from "@/components/conversation-map";
+import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
 
 import { useT } from "@/components/i18n-provider";
 
@@ -1670,6 +1671,7 @@ export interface ChatTabMeta {
   isStreaming: boolean;
   needsInput: boolean;
   userMessageCount: number;
+  hasCompletedTurn: boolean;
   suggestedTitle?: string;
   notebookEntries: NotebookEntry[];
   subagentCompletions: number;
@@ -2112,6 +2114,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     [messages],
   );
   const suggestedTitle = suggestedChatTitle(messages.find((message) => message.role === "user" && message.content.trim())?.content);
+  const hasCompletedTurn = hasCompletedChatTurn(messages, isStreaming);
   const needsInput = isStreaming && messages.some((message) =>
     message.activities?.some((activity) =>
       (activity.toolName === "interview" || activity.toolName === "permission") &&
@@ -2126,6 +2129,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       isStreaming,
       needsInput,
       userMessageCount,
+      hasCompletedTurn,
       suggestedTitle,
       notebookEntries,
       subagentCompletions,
@@ -2138,6 +2142,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     isStreaming,
     needsInput,
     userMessageCount,
+    hasCompletedTurn,
     suggestedTitle,
     notebookEntries,
     subagentCompletions,

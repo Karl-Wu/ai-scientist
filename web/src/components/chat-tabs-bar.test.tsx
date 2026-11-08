@@ -70,3 +70,29 @@ describe("historical chat deletion", () => {
     expect(props.onClose).not.toHaveBeenCalled();
   });
 });
+
+describe("draft conversation visibility", () => {
+  it("hides empty open tabs and empty or user-only saved sessions", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [
+      { ...saved, id: "empty", name: "Chat 1", messageCount: 0 },
+      { ...saved, id: "pending", name: "Waiting for first answer", messageCount: 1 },
+    ] } as Response);
+    render(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...props.tabs[0], title: "Chat 2", hasCompletedTurn: false }]} /></TooltipProvider>);
+    await screen.findByText("No chats yet.");
+    expect(screen.queryByText("Chat 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chat 2")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for first answer")).not.toBeInTheDocument();
+  });
+
+  it("publishes the meaningful title only after the first turn completes", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [{ ...saved, name: "Analyze my data" }] } as Response);
+    const tab = { ...props.tabs[0], sessionId: saved.id, title: "Analyze my data", userMessageCount: 1, isStreaming: true, hasCompletedTurn: false };
+    const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={[tab]} /></TooltipProvider>);
+    await screen.findByText("No chats yet.");
+    expect(screen.queryByText("Analyze my data")).not.toBeInTheDocument();
+    view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, isStreaming: false, hasCompletedTurn: true }]} /></TooltipProvider>);
+    expect(await screen.findByText("Analyze my data")).toBeInTheDocument();
+    view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, userMessageCount: 2, hasCompletedTurn: true }]} /></TooltipProvider>);
+    expect(screen.getByText("Analyze my data")).toBeInTheDocument();
+  });
+});

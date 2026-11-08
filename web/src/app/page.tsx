@@ -583,6 +583,7 @@ function WorkspacePage({
           existing.runState === meta.runState &&
           existing.isStreaming === meta.isStreaming &&
           existing.userMessageCount === meta.userMessageCount &&
+          existing.hasCompletedTurn === meta.hasCompletedTurn &&
           existing.needsInput === meta.needsInput &&
           existing.notebookEntries === meta.notebookEntries &&
           existing.subagentCompletions === meta.subagentCompletions
@@ -838,6 +839,16 @@ function WorkspacePage({
   // ------------------------------------------------------------------
 
   const newTab = useCallback(() => {
+    // Hidden drafts remain recoverable through New chat and must not consume
+    // a new slot every time the user opens an otherwise empty conversation.
+    const draft = tabsRef.current.find((tab) => {
+      const meta = tabsMeta[tab.id];
+      return meta?.hasCompletedTurn === false && meta.userMessageCount === 0 && !meta.isStreaming;
+    });
+    if (draft) {
+      setActiveTabId(draft.id);
+      return;
+    }
     // Mint the id OUTSIDE any setState updater. Strict mode invokes
     // updaters twice for purity testing, which would otherwise produce
     // two different ids on a single click — the array would commit one
@@ -861,7 +872,7 @@ function WorkspacePage({
         : [...prev, { id, title: defaultTabTitle(prev.length) }],
     );
     setActiveTabId(id);
-  }, []);
+  }, [tabsMeta]);
 
   const closeTab = useCallback((id: string) => {
     // Abort an in-flight stream so the agent doesn't keep running into a
@@ -1088,6 +1099,7 @@ function WorkspacePage({
         titleIsCustom: t.titleIsCustom,
         isStreaming: tabsMeta[t.id]?.isStreaming ?? false,
         userMessageCount: tabsMeta[t.id]?.userMessageCount ?? 0,
+        hasCompletedTurn: tabsMeta[t.id]?.hasCompletedTurn,
         sessionId: tabsMeta[t.id]?.sessionId ?? t.sessionId ?? null,
       })),
     [tabs, tabsMeta],
