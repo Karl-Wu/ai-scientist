@@ -3,6 +3,7 @@
 import { ConversationMap } from "@/components/conversation-map";
 import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
 import { useSessionModel } from "@/lib/use-session-model";
+import { useInputHistory } from "@/lib/use-input-history";
 
 import { useT } from "@/components/i18n-provider";
 
@@ -751,11 +752,13 @@ function ChatInput({
   modelAvailability = "available",
   projectId,
   currentSessionId,
+  inputHistory,
   researchRefs,
   onResearchChange,
   delegation,
   onDelegationChange,
 }: {
+  inputHistory: string[];
   isActiveTab: boolean;
   allFiles: string[];
   attachedFiles: string[];
@@ -812,6 +815,8 @@ function ChatInput({
   const budgetBlocked =
     budgetState === "exceeded" && modelUsesBillableBudget(selectedModel);
   const controller = usePromptInputController();
+
+  const { onKeyDown: recallInput, reset: resetInputRecall } = useInputHistory(inputHistory, controller.textInput.setInput);
 
   // "Ask AI Scientist" handoff from the LaTeX editor: only the active tab's composer
   // appends the prefill text (it does not submit), so a background tab never
@@ -998,6 +1003,7 @@ function ChatInput({
   }, [controller, mentionAtIdx, mentionQuery, onAddFile]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    resetInputRecall();
     const val = e.target.value;
     const cursor = e.target.selectionStart ?? val.length;
     const before = val.slice(0, cursor);
@@ -1017,9 +1023,10 @@ function ChatInput({
     } else {
       setMentionQuery(null);
     }
-  }, []);
+  }, [resetInputRecall]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const slashOpen = slashQuery !== null && slashItems.length > 0;
     if (slashOpen) {
       if (e.key === "ArrowDown") {
@@ -1049,7 +1056,10 @@ function ChatInput({
     if (!isOpen && e.key === "Enter" && !e.shiftKey) {
       queueIntentRef.current = e.altKey;
     }
-    if (!isOpen) return;
+    if (!isOpen) {
+      recallInput(e);
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setMentionSelIdx(i => Math.min(i + 1, filteredFiles.length - 1));
@@ -1063,7 +1073,7 @@ function ChatInput({
       e.preventDefault();
       closeMention();
     }
-  }, [mentionQuery, filteredFiles, safeMentionSelIdx, applyMention, closeMention, slashQuery, slashItems, safeSlashSelIdx, applySlash]);
+  }, [mentionQuery, filteredFiles, safeMentionSelIdx, applyMention, closeMention, slashQuery, slashItems, safeSlashSelIdx, applySlash, recallInput]);
 
   const handleTranscription = useCallback((text: string) => {
     appendToComposer(controller.textInput, text, " ");
@@ -2424,7 +2434,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       )}
     >
       <Conversation className="flex-1">
-        <ConversationContent className={cn("mx-auto w-full max-w-full px-4", userMessageCount > 1 && "@min-[640px]/chat:pl-7")}>
+        <ConversationContent className={cn("mx-auto w-full max-w-full px-4", userMessageCount > 1 && "@min-[640px]/chat:pl-5")}>
           {messages.length === 0 ? (
             hasAnyModelAccess === false ? (
               <div className="flex size-full items-center justify-center p-8">
@@ -2458,7 +2468,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
         <ConversationMap messages={messages} />
       </Conversation>
 
-      <div className={cn("px-4 pb-6 pt-2", userMessageCount > 1 && "@min-[640px]/chat:pl-7")}>
+      <div className={cn("px-4 pb-6 pt-2", userMessageCount > 1 && "@min-[640px]/chat:pl-5")}>
         {(reconnecting || (!initialSessionReady && !getSessionId())) && (
           <p role="status" className="mb-2 text-xs text-muted-foreground">
             {reconnecting ? "Reconnecting to this run…" : "Restoring this conversation… Retrying if the server is unavailable."}
@@ -2470,6 +2480,16 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
           onStateChange={setComposerDraft}
         >
           <ChatInput
+            inputHistory={messages.filter((message) => message.role === "user").map((message) => {
+              const text = splitComposerContext(message.content).text;
+              const command = parseCommandBlock(text);
+              if (!command) return text;
+              // Template arguments have already been substituted on the server;
+              // preserve that text rather than re-invoking a template without them.
+              return command.kind === "skill"
+                ? `/skill:${command.name}${command.tail ? ` ${command.tail}` : ""}`
+                : [command.body, command.tail].filter(Boolean).join("\n\n");
+            }).filter((text) => text.trim())}
             isActiveTab={isActiveTab}
             allFiles={allFiles}
             attachedFiles={attachedFiles}

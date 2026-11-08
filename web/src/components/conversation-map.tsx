@@ -71,7 +71,7 @@ export function ConversationMap({ messages }: { messages: ChatMessage[] }) {
   };
   return (
     <TooltipProvider delayDuration={150}>
-      <nav aria-label={t("Conversation map")} className="absolute bottom-6 left-0 top-6 z-10 hidden w-7 flex-col justify-center @min-[640px]/chat:flex">
+      <nav aria-label={t("Conversation map")} className="absolute bottom-6 left-[2px] top-6 z-10 hidden w-4 flex-col justify-center @min-[640px]/chat:flex">
         <div className="flex max-h-full min-h-0 flex-col overflow-y-auto [scrollbar-width:none]">
           {turns.map((turn, index) => (
             <Tooltip key={turn.id}>
@@ -79,8 +79,8 @@ export function ConversationMap({ messages }: { messages: ChatMessage[] }) {
                 <button type="button" aria-label={t("Go to turn {number}: {prompt}", { number: index + 1, prompt: turn.prompt.slice(0, 80) || t("Image or attachment") })}
                   aria-current={active === turn.id ? "step" : undefined}
                   onClick={() => jump(turn.id)}
-                  className="group flex h-3.5 min-h-1 shrink items-center pl-1 pr-0 outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">
-                  <span className={cn("h-[3px] w-2 shrink-0 rounded-full bg-muted-foreground/25 transition-all group-hover:w-6 group-hover:bg-foreground/70 group-focus-visible:w-6 group-focus-visible:bg-foreground/70", active === turn.id && "bg-foreground")} />
+                  className="group flex h-[10px] min-h-1 shrink items-center justify-center p-0 outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring">
+                  <span className={cn("size-[5px] shrink-0 rounded-full bg-muted-foreground/30 transition-[transform,background-color] group-hover:scale-200 group-hover:bg-foreground/70 group-focus-visible:scale-200 group-focus-visible:bg-foreground/70", active === turn.id && "bg-foreground")} />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" align="center" sideOffset={12} className="w-80 max-w-[calc(100vw-6rem)] rounded-xl border bg-popover p-4 text-left text-popover-foreground shadow-lg [&_svg]:hidden">
