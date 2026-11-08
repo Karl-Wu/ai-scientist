@@ -2,6 +2,7 @@
 
 import { ConversationMap } from "@/components/conversation-map";
 import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
+import { useSessionModel } from "@/lib/use-session-model";
 
 import { useT } from "@/components/i18n-provider";
 
@@ -1799,7 +1800,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     onSessionUnavailable?.(tabId);
     toast.error("That conversation is no longer available — starting a new one.");
   }, [onSessionUnavailable, tabId]);
-  const initialSessionReady = useSessionRestore({
+  const transcriptReady = useSessionRestore({
     sessionId: initialSessionId ?? null,
     loadSession,
     onUnavailable: handleSessionUnavailable,
@@ -1851,6 +1852,15 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   // something on its chips. The model waits until its provider's list lands.
   const appDefaults = useAppDefaults();
   const chipsTouched = useRef(false);
+  const sessionModelReady = useSessionModel({
+    projectId,
+    sessionId: initialSessionId,
+    initialModel: initialWorkspaceState?.selectedModel,
+    models: knownModels,
+    touched: chipsTouched,
+    onRestore: setSelectedModel,
+  });
+  const initialSessionReady = transcriptReady && sessionModelReady;
   const defaultsPending = useRef({
     model: !initialWorkspaceState && !initialSessionId,
     rest: !initialWorkspaceState && !initialSessionId,
@@ -2065,6 +2075,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   }, [isStreaming]);
 
   useEffect(() => {
+    if (!sessionModelReady) return;
     onWorkspaceStateChange?.(tabId, {
       selectedModel,
       thinkingLevel,
@@ -2087,6 +2098,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     selectedComputeTarget,
     selectedDbs,
     selectedModel,
+    sessionModelReady,
     selectedSkills,
     tabId,
     thinkingLevel,

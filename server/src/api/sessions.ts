@@ -75,6 +75,7 @@ import {
   getModelRegistry,
   getModelRuntime,
   getSession,
+  lastModelInSessionFile,
   listSessions,
 } from "../agent/session-registry.ts";
 import { parseThinkingLevel } from "../agent/thinking.ts";
@@ -205,6 +206,15 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
 
   // Full transcript of a stored session, replayed as client frames so the UI
   // can rebuild a past chat after a reload ("reopen session").
+  app.get<{ Params: { id: string } }>("/sessions/:id/selection", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const file = findSessionFile(activePaths(), req.params.id);
+    if (!file) return reply.code(404).send({ detail: "No such session" });
+    // Read the recorded choice, not a runtime fallback for disconnected auth.
+    const model = lastModelInSessionFile(file);
+    return { model: model ? `${model.provider}/${model.modelId}` : null };
+  });
+
   app.get<{ Params: { id: string } }>("/sessions/:id/history", async (req, reply) => {
     try {
       const paths = activePaths();

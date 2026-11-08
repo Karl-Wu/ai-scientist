@@ -1155,6 +1155,28 @@ function WorkspacePage({
           </button>
           <span className="mx-1 h-4 w-px bg-border/60" aria-hidden />
           <ProjectSwitcher onOpenProjectView={onOpenProjectView} />
+          <InfoTooltip
+            content={
+              <>
+                <b>{t(chatNavigationOpen ? "Hide left navigation" : "Show left navigation")}</b>
+                <br />
+                {t("Show or hide New chat, Recent chats, and Workflows.")}</>
+            }
+          >
+            <button
+              onClick={toggleChatNavigation}
+              aria-label={chatNavigationOpen ? t("Hide left navigation") : t("Show left navigation")}
+              aria-pressed={chatNavigationOpen}
+              className={cn(
+                "shrink-0 rounded-lg p-1.5 transition-colors hover:bg-muted hover:text-foreground",
+                chatNavigationOpen
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <PanelLeftIcon className="size-4" />
+            </button>
+          </InfoTooltip>
         </div>
         <p className="absolute left-1/2 hidden -translate-x-1/2 text-[11px] text-muted-foreground/60 tracking-wide select-none 2xl:block">
           A research workspace for scientists and biologists
@@ -1187,53 +1209,29 @@ function WorkspacePage({
           ) : modalJobsLoading ? (
             <span className="sr-only" aria-live="polite">Checking compute jobs</span>
           ) : null}
-          {/* The left navigation and right project panel collapse independently. */}
-          <div className="flex items-center gap-0.5 rounded-lg border bg-muted/30 p-0.5">
-            <InfoTooltip
-              content={
-                <>
-                  <b>{t(chatNavigationOpen ? "Hide left navigation" : "Show left navigation")}</b>
-                  <br />
-                  {t("Show or hide New chat, Recent chats, and Workflows.")}</>
-              }
+          {/* Project panel toggle stays beside the other workspace controls. */}
+          <InfoTooltip
+            content={
+              <>
+                <b>{t(rightPanelOpen ? "Hide right panel" : "Show right panel")}</b>
+                <br />
+                {t("Show or hide Files, Workflows, Journal, and Tasks.")}</>
+            }
+          >
+            <button
+              onClick={toggleRightPanel}
+              aria-label={rightPanelOpen ? t("Hide right panel") : t("Show right panel")}
+              aria-pressed={rightPanelOpen}
+              className={cn(
+                "shrink-0 rounded-lg p-1.5 transition-colors hover:bg-muted hover:text-foreground",
+                rightPanelOpen
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
             >
-              <button
-                onClick={toggleChatNavigation}
-                aria-label={chatNavigationOpen ? t("Hide left navigation") : t("Show left navigation")}
-                aria-pressed={chatNavigationOpen}
-                className={cn(
-                  "rounded-md p-1.5 transition-colors",
-                  chatNavigationOpen
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <PanelLeftIcon className="size-4" />
-              </button>
-            </InfoTooltip>
-            <InfoTooltip
-              content={
-                <>
-                  <b>{t(rightPanelOpen ? "Hide right panel" : "Show right panel")}</b>
-                  <br />
-                  {t("Show or hide Files, Workflows, Journal, and Tasks.")}</>
-              }
-            >
-              <button
-                onClick={toggleRightPanel}
-                aria-label={rightPanelOpen ? t("Hide right panel") : t("Show right panel")}
-                aria-pressed={rightPanelOpen}
-                className={cn(
-                  "rounded-md p-1.5 transition-colors",
-                  rightPanelOpen
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <PanelRightIcon className="size-4" />
-              </button>
-            </InfoTooltip>
-          </div>
+              <PanelRightIcon className="size-4" />
+            </button>
+          </InfoTooltip>
           <InfoTooltip
             content={
               <>
