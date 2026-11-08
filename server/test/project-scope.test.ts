@@ -96,3 +96,18 @@ describe("unknown project scope", () => {
     expect(response.headers["x-project-fallback"]).toBe("unavailable-study");
   });
 });
+
+
+it("writes project skills only into the explicitly requested project", async () => {
+  createProject({ name: "Default", projectId: DEFAULT_PROJECT_ID });
+  const target = createProject({ name: "test", projectId: "skill-target" });
+  const response = await app.inject({
+    method: "POST", url: "/skills/create",
+    headers: { "x-project-id": target.id },
+    payload: { name: "scope-regression", description: "Scoped fixture", scope: "project" },
+  });
+  expect(response.statusCode).toBe(200);
+  const relative = path.join(".pi", "skills", "scope-regression", "SKILL.md");
+  expect(fs.existsSync(path.join(resolvePaths(target.id).sandbox, relative))).toBe(true);
+  expect(fs.existsSync(path.join(resolvePaths(DEFAULT_PROJECT_ID).sandbox, relative))).toBe(false);
+});

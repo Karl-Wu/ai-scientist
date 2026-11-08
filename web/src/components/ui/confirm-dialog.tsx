@@ -69,11 +69,16 @@ export function useConfirm() {
       }}
     >
       {pending && (
-        <DialogContent showCloseButton={false} className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t(pending.title)}</DialogTitle>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[calc(100dvh-2rem)] grid-cols-1 overflow-y-auto sm:max-w-md"
+        >
+          <DialogHeader className="min-w-0">
+            <DialogTitle className="leading-snug [overflow-wrap:anywhere]">
+              {t(pending.title)}
+            </DialogTitle>
             {pending.description && (
-              <DialogDescription className="whitespace-pre-line leading-relaxed">
+              <DialogDescription className="whitespace-pre-line leading-relaxed [overflow-wrap:anywhere]">
                 {t(pending.description)}
               </DialogDescription>
             )}

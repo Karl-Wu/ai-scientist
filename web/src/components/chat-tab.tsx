@@ -1,5 +1,7 @@
 "use client";
 
+import { ConversationMap } from "@/components/conversation-map";
+
 import { useT } from "@/components/i18n-provider";
 
 import {
@@ -1553,7 +1555,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   // Extension notices and compaction markers sit between the bubbles.
   if (message.role === "system") return <SystemCard message={message} />;
   return (
-    <Message from={message.role} key={message.id}>
+    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined}>
       <MessageContent>
         {message.role === "assistant" ? (
           <AssistantMessageBody
@@ -2400,12 +2402,12 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     <div
       ref={rootRef}
       className={cn(
-        "flex flex-1 flex-col min-h-0 overflow-hidden",
+        "@container/chat flex flex-1 flex-col min-h-0 overflow-hidden",
         !isActive && "hidden",
       )}
     >
       <Conversation className="flex-1">
-        <ConversationContent className="mx-auto w-full max-w-full px-4">
+        <ConversationContent className={cn("mx-auto w-full max-w-full px-4", userMessageCount > 1 && "@min-[640px]/chat:pl-7")}>
           {messages.length === 0 ? (
             hasAnyModelAccess === false ? (
               <div className="flex size-full items-center justify-center p-8">
@@ -2436,9 +2438,10 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
           )}
         </ConversationContent>
         <ConversationScrollButton />
+        <ConversationMap messages={messages} />
       </Conversation>
 
-      <div className="px-4 pb-6 pt-2">
+      <div className={cn("px-4 pb-6 pt-2", userMessageCount > 1 && "@min-[640px]/chat:pl-7")}>
         {(reconnecting || (!initialSessionReady && !getSessionId())) && (
           <p role="status" className="mb-2 text-xs text-muted-foreground">
             {reconnecting ? "Reconnecting to this run…" : "Restoring this conversation… Retrying if the server is unavailable."}

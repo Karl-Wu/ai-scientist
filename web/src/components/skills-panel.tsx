@@ -74,9 +74,16 @@ const ORIGIN_LABEL: Record<SkillOrigin, string> = {
 
 type Pane = "none" | "install" | "create" | "edit";
 
-export function SkillsPanel() {
+export function SkillsPanel({ projectId }: { projectId?: string } = {}) {
+  const { activeProjectId } = useProjects();
+  const target = projectId ?? activeProjectId;
+  return <ScopedSkillsPanel key={target} projectId={target} />;
+}
+
+// A different target gets fresh editor, trust acknowledgement and preview state.
+function ScopedSkillsPanel({ projectId }: { projectId: string }) {
   const t = useT();
-  const { activeProject, activeProjectId } = useProjects();
+  const { activeProject, projects } = useProjects();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const [scope, setScope] = useState<SkillScope>("project");
   const [rows, setRows] = useState<Row[]>([]);
@@ -115,7 +122,7 @@ export function SkillsPanel() {
       if (showLoading) setLoading(true);
       setError(null);
       try {
-        const listing = await getAllSkills(nextScope);
+        const listing = await getAllSkills(nextScope, projectId);
         const merged: Row[] = [
           ...listing.enabled.map((s) => ({ ...s, enabled: true })),
           ...listing.disabled.map((s) => ({ ...s, enabled: false })),
@@ -132,12 +139,12 @@ export function SkillsPanel() {
         if (showLoading) setLoading(false);
       }
     },
-    [],
+    [projectId],
   );
 
   useEffect(() => {
     void load(scope);
-  }, [load, scope, activeProjectId]);
+  }, [load, scope, projectId]);
 
   const run = useCallback(
     async (key: string, work: () => Promise<string | void>) => {
@@ -161,27 +168,27 @@ export function SkillsPanel() {
     async (name: string, next: boolean) => {
       setRows((rs) => rs.map((r) => (r.name === name ? { ...r, enabled: next } : r)));
       try {
-        await setSkillEnabled(name, next, scope);
+        await setSkillEnabled(name, next, scope, projectId);
       } catch (exc) {
         setError(exc instanceof Error ? exc.message : "Toggle failed");
         void load(scope, false); // reconcile on failure
       }
     },
-    [load, scope],
+    [load, scope, projectId],
   );
 
   const refresh = useCallback(async () => {
     setSyncing(true);
     setError(null);
     try {
-      await syncSkills();
+      await syncSkills(projectId);
       await load(scope, false);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Skill synchronization failed");
     } finally {
       setSyncing(false);
     }
-  }, [load, scope]);
+  }, [load, scope, projectId]);
 
   const closePanes = useCallback(() => {
     setPane("none");
@@ -205,7 +212,7 @@ export function SkillsPanel() {
         source: source.trim(),
         ref: ref.trim() || undefined,
         scope,
-      });
+      }, projectId);
       setPreview(result);
       // Preselect what isn't already here; re-installing an existing skill
       // should be a deliberate choice, not the default.
@@ -215,7 +222,7 @@ export function SkillsPanel() {
     } finally {
       setPreviewing(false);
     }
-  }, [ref, scope, source]);
+  }, [ref, scope, source, projectId]);
 
   const doInstall = useCallback(async () => {
     if (!preview) return;
@@ -230,7 +237,7 @@ export function SkillsPanel() {
         stagingToken: preview.stagingToken,
         replace: replacing,
         acknowledged: true,
-      });
+      }, projectId);
       closePanes();
       const parts = [((result.installed.length === 1 ? "" : "s") === "" ? t("Installed {v0} skill", {v0: result.installed.length}) : t("Installed {v0} skills", {v0: result.installed.length}))];
       if (result.conflicts.length > 0) {
@@ -238,12 +245,12 @@ export function SkillsPanel() {
       }
       return t("{v0}. New chat tabs pick them up.", { v0: parts.join("; ") });
     });
-  }, [closePanes, picked, preview, run, scope, t]);
+  }, [closePanes, picked, preview, run, scope, t, projectId]);
 
   const doCreate = useCallback(async () => {
     const name = newName.trim().toLowerCase();
     await run("create", async () => {
-      await createSkill({ name, description: newDescription.trim() || undefined, scope });
+      await createSkill({ name, description: newDescription.trim() || undefined, scope }, projectId);
       setNewName("");
       setNewDescription("");
       closePanes();
@@ -252,13 +259,13 @@ export function SkillsPanel() {
       setPane("edit");
       setEditLoading(true);
       try {
-        setEditContent(await getSkillSource(name, scope));
+        setEditContent(await getSkillSource(name, scope, projectId));
       } finally {
         setEditLoading(false);
       }
       return t("Created {v0}.", { v0: name });
     });
-  }, [closePanes, newDescription, newName, run, scope, t]);
+  }, [closePanes, newDescription, newName, run, scope, t, projectId]);
 
   const openEditor = useCallback(
     async (name: string) => {
@@ -267,25 +274,25 @@ export function SkillsPanel() {
       setEditLoading(true);
       setError(null);
       try {
-        setEditContent(await getSkillSource(name, scope));
+        setEditContent(await getSkillSource(name, scope, projectId));
       } catch (exc) {
         setError(exc instanceof Error ? exc.message : "Could not read that skill");
       } finally {
         setEditLoading(false);
       }
     },
-    [scope],
+    [scope, projectId],
   );
 
   const saveEditor = useCallback(async () => {
     if (!editing) return;
     await run("save", async () => {
-      await saveSkillSource(editing, editContent, scope);
+      await saveSkillSource(editing, editContent, scope, projectId);
       const name = editing;
       closePanes();
       return t("Saved {v0}.", { v0: name });
     });
-  }, [closePanes, editContent, editing, run, scope, t]);
+  }, [closePanes, editContent, editing, run, scope, t, projectId]);
 
   const doRemove = useCallback(
     async (row: Row) => {
@@ -302,25 +309,25 @@ export function SkillsPanel() {
       });
       if (!ok) return;
       await run(`remove:${row.name}`, async () => {
-        const result = await removeSkill(row.name, scope);
+        const result = await removeSkill(row.name, scope, projectId);
         return result.disposition === "archived"
           ? t("Archived {v0} (kept in .pi/skills-archived).", { v0: result.name })
           : t("Deleted {v0}.", { v0: result.name });
       });
     },
-    [confirm, run, scope, t],
+    [confirm, run, scope, t, projectId],
   );
 
   const doCheckUpdate = useCallback(
     async (name: string) => {
       await run(`check:${name}`, async () => {
-        const result = await checkSkillUpdate(name, scope);
+        const result = await checkSkillUpdate(name, scope, projectId);
         return result.updateAvailable
           ? t("{v0} has an update available.", { v0: name })
           : t("{v0} is up to date.", { v0: name });
       });
     },
-    [run, scope, t],
+    [run, scope, t, projectId],
   );
 
   const replaceWithUpstream = useCallback(
@@ -335,11 +342,11 @@ export function SkillsPanel() {
       });
       if (!ok) return;
       await run(`update:${row.name}`, async () => {
-        await updateSkillFromUpstream(row.name, scope);
+        await updateSkillFromUpstream(row.name, scope, projectId);
         return t("Updated {v0}.", { v0: row.name });
       });
     },
-    [confirm, run, scope, t],
+    [confirm, run, scope, t, projectId],
   );
 
   const filtered = useMemo(
@@ -423,7 +430,7 @@ export function SkillsPanel() {
       <ScopeSwitcher
         value={scope}
         onChange={(next) => void switchScope(next)}
-        projectName={activeProject?.name ?? activeProjectId}
+        projectName={projects?.find((project) => project.id === projectId)?.name ?? (activeProject?.id === projectId ? activeProject.name : projectId)}
       />
 
       {scope === "global" && (
@@ -839,7 +846,7 @@ export function SkillsPanel() {
                   disabled={rowBusy}
                   onClick={() =>
                     void run(`invoke:${r.name}`, async () => {
-                      const next = await setSkillModelInvocation(r.name, Boolean(r.disableModelInvocation), scope);
+                      const next = await setSkillModelInvocation(r.name, Boolean(r.disableModelInvocation), scope, projectId);
                       return next.disableModelInvocation
                         ? t("{v0} now runs only when you type /skill:{v1}.", { v0: r.name, v1: r.name })
                         : t("{v0} can be activated by the model again.", { v0: r.name });

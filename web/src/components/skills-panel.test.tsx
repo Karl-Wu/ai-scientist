@@ -58,7 +58,7 @@ describe("SkillsPanel", () => {
     const scanpyToggle = screen.getByRole("switch", { name: /scanpy/i });
     await userEvent.click(scanpyToggle);
     await waitFor(() =>
-      expect(setSpy).toHaveBeenCalledWith("scanpy", false, "project"),
+      expect(setSpy).toHaveBeenCalledWith("scanpy", false, "project", "p1"),
     );
   });
 
@@ -158,7 +158,7 @@ describe("SkillsPanel", () => {
     expect(updateSpy).not.toHaveBeenCalled();
     await userEvent.click(await screen.findByRole("button", { name: /^replace$/i }));
 
-    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("scanpy", "project"));
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("scanpy", "project", "p1"));
     await waitFor(() =>
       expect(screen.queryByText("Update available")).not.toBeInTheDocument(),
     );
@@ -203,7 +203,7 @@ describe("SkillsPanel", () => {
     await screen.findByText("scanpy");
     await userEvent.click(screen.getByRole("button", { name: /all projects/i }));
 
-    await waitFor(() => expect(getSpy).toHaveBeenLastCalledWith("global"));
+    await waitFor(() => expect(getSpy).toHaveBeenLastCalledWith("global", "p1"));
     expect(await screen.findByText("shared-skill")).toBeInTheDocument();
     expect(screen.getByText(/Shadowed by a project skill/i)).toBeInTheDocument();
     // The catalogue is per project, so its refresh has nothing to do here.
@@ -227,7 +227,7 @@ describe("SkillsPanel", () => {
       .spyOn(caps, "installSkills")
       .mockResolvedValue({ installed: ["web-design", "writing"], conflicts: [] });
 
-    render(<SkillsPanel />);
+    render(<SkillsPanel projectId="test-178665" />);
     await screen.findByText(/No skills installed/i);
 
     await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
@@ -256,9 +256,10 @@ describe("SkillsPanel", () => {
           stagingToken: "token",
           acknowledged: true,
           scope: "project",
-        }),
+        }), "test-178665"
       ),
     );
+    expect(previewSpy).toHaveBeenCalledWith(expect.objectContaining({ scope: "project" }), "test-178665");
     expect(installSpy.mock.calls[0][0].names.sort()).toEqual(["web-design", "writing"]);
   });
 
@@ -280,7 +281,7 @@ describe("SkillsPanel", () => {
 
     await waitFor(() =>
       expect(createSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "lab-qc", scope: "project" }),
+        expect.objectContaining({ name: "lab-qc", scope: "project" }), "p1"
       ),
     );
     expect(await screen.findByLabelText(/SKILL.md for lab-qc/i)).toBeInTheDocument();
@@ -304,7 +305,7 @@ describe("SkillsPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() =>
-      expect(saveSpy).toHaveBeenCalledWith("lab-qc", "rewritten", "project"),
+      expect(saveSpy).toHaveBeenCalledWith("lab-qc", "rewritten", "project", "p1"),
     );
   });
 
@@ -325,7 +326,7 @@ describe("SkillsPanel", () => {
     expect(await screen.findByText(/archived/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^archive$/i }));
 
-    await waitFor(() => expect(removeSpy).toHaveBeenCalledWith("scanpy", "project"));
+    await waitFor(() => expect(removeSpy).toHaveBeenCalledWith("scanpy", "project", "p1"));
     expect(await screen.findByText(/Archived scanpy/i)).toBeInTheDocument();
   });
 
@@ -363,7 +364,7 @@ describe("SkillsPanel", () => {
     );
 
     await waitFor(() =>
-      expect(checkSpy).toHaveBeenCalledWith("web-design", "project"),
+      expect(checkSpy).toHaveBeenCalledWith("web-design", "project", "p1"),
     );
     expect(await screen.findByText(/web-design is up to date/i)).toBeInTheDocument();
   });
@@ -379,8 +380,27 @@ describe("SkillsPanel user-invoked only", () => {
     render(<SkillsPanel />);
     expect(await screen.findByText("User-invoked only")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Let the model invoke lab-protocol" }));
-    await waitFor(() => expect(toggle).toHaveBeenCalledWith("lab-protocol", true, "project"));
+    await waitFor(() => expect(toggle).toHaveBeenCalledWith("lab-protocol", true, "project", "p1"));
     await userEvent.click(screen.getByRole("button", { name: "Make qc user-invoked only" }));
-    await waitFor(() => expect(toggle).toHaveBeenCalledWith("qc", false, "project"));
+    await waitFor(() => expect(toggle).toHaveBeenCalledWith("qc", false, "project", "p1"));
   });
+});
+
+it("drops an acknowledged install preview when the settings target changes", async () => {
+  stubProjects();
+  const load = vi.spyOn(caps, "getAllSkills").mockResolvedValue(listing());
+  vi.spyOn(caps, "previewSkillSource").mockResolvedValue({ source: "owner/repo", stagingKey: "key", stagingToken: "reviewed-for-test", skills: [{ name: "new-skill", description: "content", files: 1, installed: false }], problems: [] });
+  const install = vi.spyOn(caps, "installSkills");
+  const view = render(<SkillsPanel projectId="test-178665" />);
+  await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
+  await userEvent.type(screen.getByPlaceholderText(/owner\/repo/i), "owner/repo");
+  await userEvent.click(screen.getByRole("button", { name: /look up/i }));
+  await screen.findByText("new-skill");
+  await userEvent.click(screen.getByRole("checkbox", { name: /trust this source/i }));
+  expect(screen.getByRole("button", { name: /install 1 skill/i })).toBeEnabled();
+  view.rerender(<SkillsPanel projectId="other-project" />);
+  await waitFor(() => expect(load).toHaveBeenLastCalledWith("project", "other-project"));
+  expect(screen.queryByRole("button", { name: /install 1 skill/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("checkbox", { name: /trust this source/i })).not.toBeInTheDocument();
+  expect(install).not.toHaveBeenCalled();
 });

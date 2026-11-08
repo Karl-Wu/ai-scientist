@@ -76,7 +76,7 @@ const WORKSPACE_TABS: TabDef[] = [
 ];
 
 /** Tabs whose panels follow the globally active project (their API calls do). */
-const ACTIVE_PROJECT_TABS = new Set<SettingsTab>(["skills", "prompts", "specialists", "connectors"]);
+const ACTIVE_PROJECT_TABS = new Set<SettingsTab>(["prompts", "specialists", "connectors"]);
 
 const DEFAULT_TAB: SettingsTab = "providers";
 
@@ -225,7 +225,7 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
           <div ref={contentRef} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
             {showsOtherProject ? (
               <div className="mx-5 mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px]" role="note">
-                {t("Showing the current project, {current}. Open {target} to edit its skills, prompt templates, specialists and connectors.", { current: projectName(activeProjectId), target: projectName(projectId) })}
+                {t("Showing the current project, {current}. Open {target} to edit its prompt templates, specialists and connectors.", { current: projectName(activeProjectId), target: projectName(projectId) })}
               </div>
             ) : null}
             <TabsContent value="providers" className="min-w-0 p-5">
@@ -238,7 +238,7 @@ export function SettingsDialog({ open, onOpenChange, request }: SettingsDialogPr
               <ProjectSettingsPanel projectId={projectId} />
             </TabsContent>
             <TabsContent value="skills" className="min-w-0 p-5">
-              <SkillsPanel />
+              <SkillsPanel projectId={projectId} />
             </TabsContent>
             <TabsContent value="prompts" className="min-w-0 p-5">
               <PromptsPanel />

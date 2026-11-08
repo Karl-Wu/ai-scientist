@@ -1567,5 +1567,11 @@
   "{price}/hour estimated": "预计 {price}/小时",
   "Edited in this project, so newer shipped guidance (raw-data guard, specialist questions) is not applied automatically.": "此项目已修改指令，因此不会自动应用新版内置指引（原始数据保护、专家提问等）。",
   "verifier": "复核专家",
-  "{price}/hr est.": "预计 {price}/小时"
+  "{price}/hr est.": "预计 {price}/小时",
+  "Showing the current project, {current}. Open {target} to edit its prompt templates, specialists and connectors.": "当前显示项目 {current}。请打开 {target}，以编辑其提示词模板、专家助手和连接器。",
+  "Conversation map": "对话轮次导航",
+  "Go to turn {number}: {prompt}": "跳转到第 {number} 轮：{prompt}",
+  "Turn {number}": "第 {number} 轮",
+  "Image or attachment": "图片或附件",
+  "No response yet": "暂无回答"
 }

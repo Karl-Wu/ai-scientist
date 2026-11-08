@@ -104,8 +104,13 @@ async function failure(res: Response, label: string): Promise<Error> {
   return new Error(data?.detail || `${label} ${res.status}`);
 }
 
-export async function getAllSkills(scope?: SkillScope): Promise<SkillsListing> {
-  const res = await apiFetch(`/skills/all${scopeQuery(scope)}`);
+/** Skill operations pin their owning settings project instead of re-reading browser state. */
+function skillFetch(path: string, init: RequestInit | undefined, projectId?: string): Promise<Response> {
+  return projectId === undefined ? apiFetch(path, init) : apiFetch(path, init, projectId);
+}
+
+export async function getAllSkills(scope?: SkillScope, projectId?: string): Promise<SkillsListing> {
+  const res = await skillFetch(`/skills/all${scopeQuery(scope)}`, undefined, projectId);
   if (!res.ok) throw new Error(`getAllSkills ${res.status}`);
   const data = (await res.json()) as Partial<SkillsListing>;
   return {
@@ -118,18 +123,19 @@ export async function getAllSkills(scope?: SkillScope): Promise<SkillsListing> {
   };
 }
 
-export async function syncSkills(): Promise<void> {
-  const res = await apiFetch("/skills/sync", { method: "POST" });
+export async function syncSkills(projectId?: string): Promise<void> {
+  const res = await skillFetch("/skills/sync", { method: "POST" }, projectId);
   if (!res.ok) throw await failure(res, "syncSkills");
 }
 
 export async function updateSkillFromUpstream(
   name: string,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<void> {
-  const res = await apiFetch(
+  const res = await skillFetch(
     `/skills/${encodeURIComponent(name)}/update${scopeQuery(scope)}`,
-    { method: "POST" },
+    { method: "POST" }, projectId
   );
   if (!res.ok) throw await failure(res, "updateSkillFromUpstream");
 }
@@ -142,10 +148,11 @@ export interface SkillUpdateCheck {
 export async function checkSkillUpdate(
   name: string,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<SkillUpdateCheck> {
-  const res = await apiFetch(
+  const res = await skillFetch(
     `/skills/${encodeURIComponent(name)}/check-update${scopeQuery(scope)}`,
-    { method: "POST" },
+    { method: "POST" }, projectId
   );
   if (!res.ok) throw await failure(res, "checkSkillUpdate");
   return (await res.json()) as SkillUpdateCheck;
@@ -155,18 +162,19 @@ export async function setSkillEnabled(
   name: string,
   enabled: boolean,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<void> {
   const action = enabled ? "enable" : "disable";
-  const res = await apiFetch(
+  const res = await skillFetch(
     `/skills/${encodeURIComponent(name)}/${action}${scopeQuery(scope)}`,
-    { method: "POST" },
+    { method: "POST" }, projectId
   );
   if (!res.ok) throw await failure(res, "setSkillEnabled");
 }
 
-export async function getSkillSource(name: string, scope?: SkillScope): Promise<string> {
-  const res = await apiFetch(
-    `/skills/${encodeURIComponent(name)}/source${scopeQuery(scope)}`,
+export async function getSkillSource(name: string, scope?: SkillScope, projectId?: string): Promise<string> {
+  const res = await skillFetch(
+    `/skills/${encodeURIComponent(name)}/source${scopeQuery(scope)}`, undefined, projectId
   );
   if (!res.ok) throw new Error(`getSkillSource ${res.status}`);
   const data = (await res.json()) as { content: string };
@@ -177,14 +185,15 @@ export async function saveSkillSource(
   name: string,
   content: string,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<void> {
-  const res = await apiFetch(
+  const res = await skillFetch(
     `/skills/${encodeURIComponent(name)}/source${scopeQuery(scope)}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
-    },
+    }, projectId
   );
   if (!res.ok) throw await failure(res, "saveSkillSource");
 }
@@ -197,10 +206,11 @@ export interface SkillRemoval {
 export async function removeSkill(
   name: string,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<SkillRemoval> {
-  const res = await apiFetch(`/skills/${encodeURIComponent(name)}${scopeQuery(scope)}`, {
+  const res = await skillFetch(`/skills/${encodeURIComponent(name)}${scopeQuery(scope)}`, {
     method: "DELETE",
-  });
+  }, projectId);
   if (!res.ok) throw await failure(res, "removeSkill");
   return (await res.json()) as SkillRemoval;
 }
@@ -209,12 +219,12 @@ export async function createSkill(input: {
   name: string;
   description?: string;
   scope?: SkillScope;
-}): Promise<{ name: string }> {
-  const res = await apiFetch("/skills/create", {
+}, projectId?: string): Promise<{ name: string }> {
+  const res = await skillFetch("/skills/create", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  });
+  }, projectId);
   if (!res.ok) throw await failure(res, "createSkill");
   return (await res.json()) as { name: string };
 }
@@ -242,12 +252,12 @@ export async function previewSkillSource(input: {
   source: string;
   ref?: string;
   scope?: SkillScope;
-}): Promise<SkillSourcePreview> {
-  const res = await apiFetch("/skills/preview", {
+}, projectId?: string): Promise<SkillSourcePreview> {
+  const res = await skillFetch("/skills/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  });
+  }, projectId);
   if (!res.ok) throw await failure(res, "previewSkillSource");
   return (await res.json()) as SkillSourcePreview;
 }
@@ -261,12 +271,12 @@ export async function installSkills(input: {
   replace?: boolean;
   /** Required: the server rejects an install that has not been acknowledged. */
   acknowledged: boolean;
-}): Promise<{ installed: string[]; conflicts: string[] }> {
-  const res = await apiFetch("/skills/install", {
+}, projectId?: string): Promise<{ installed: string[]; conflicts: string[] }> {
+  const res = await skillFetch("/skills/install", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
-  });
+  }, projectId);
   if (!res.ok) throw await failure(res, "installSkills");
   return (await res.json()) as { installed: string[]; conflicts: string[] };
 }
@@ -276,14 +286,15 @@ export async function setSkillModelInvocation(
   name: string,
   modelInvocable: boolean,
   scope?: SkillScope,
+  projectId?: string,
 ): Promise<{ disableModelInvocation: boolean }> {
-  const res = await apiFetch(
+  const res = await skillFetch(
     `/skills/${encodeURIComponent(name)}/model-invocation${scopeQuery(scope)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: modelInvocable }),
-    },
+    }, projectId
   );
   if (!res.ok) throw await failure(res, "setSkillModelInvocation");
   return (await res.json()) as { disableModelInvocation: boolean };

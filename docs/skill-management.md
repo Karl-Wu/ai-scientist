@@ -65,3 +65,5 @@ handles live replacement and local-edit preservation. The staged tree and lock
 metadata, not CLI output, determine installed content. Catalogue seeding can
 fall back to a shallow clone. Origin/removal state lives in
 `.kady/skills-sync.json`; global state in the Pi directory's `kady-skills/`.
+
+Settings → Skills binds every request to the project named by the settings dialog, even when another project is active in the workspace or another browser tab changes the active-project preference. Changing the target project remounts the skill editor and discards any source preview, selection and trust acknowledgement; they must be reviewed again for the new target. The All projects scope continues to install into the shared user skill root.

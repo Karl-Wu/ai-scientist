@@ -92,8 +92,9 @@ describe("SettingsDialog", () => {
       expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute("aria-selected", "true"),
     );
     expect(screen.getByText("· Other")).toBeInTheDocument();
-    // Skills follow the active project, so the dialog says which one it shows.
-    expect(screen.getByRole("note")).toHaveTextContent(/Showing the current project, P1/);
+    // The settings target owns skill requests, even while P1 stays active.
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/skills/all", undefined, "p2"));
   });
 
   it("maps legacy tab ids and remembers the last tab", async () => {

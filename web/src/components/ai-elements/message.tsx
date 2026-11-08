@@ -20,7 +20,7 @@ import { withApiToken } from "@/lib/api-auth";
 import { sandboxMarkdownUrls } from "@/lib/sandbox-markdown";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
+import { safeCode as code } from "@/lib/code-highlighter";
 import { createMathPlugin } from "@streamdown/math";
 import "katex/dist/katex.min.css";
 import { mermaid } from "@streamdown/mermaid";
