@@ -78,7 +78,8 @@ interface SessionListItem {
 }
 
 function sessionTitle(s: SessionListItem, untitled: string): string {
-  const raw = (s.name ?? commandPreview(s.firstMessage ?? "")).replace(/\s+/g, " ").trim();
+  if (s.name?.trim()) return s.name;
+  const raw = commandPreview(s.firstMessage ?? "").replace(/\s+/g, " ").trim();
   if (!raw) return untitled;
   return raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
 }
@@ -109,6 +110,9 @@ function RecentChatsList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const editTarget = useRef<{ title: string; tabId?: string; sessionId?: string | null } | null>(null);
+  const [savingName, setSavingName] = useState(false);
+  const listRevision = useRef(0);
   const deletedSessions = useRef(new Set<string>());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
@@ -124,10 +128,11 @@ function RecentChatsList({
   useEffect(() => {
     let cancelled = false;
     const load = () => {
+      const revision = listRevision.current;
       apiFetch("/sessions", {}, projectId)
         .then((r) => (r.ok ? r.json() : []))
         .then((list: SessionListItem[]) => {
-          if (cancelled) return;
+          if (cancelled || revision !== listRevision.current) return;
           const sorted = [...list]
             .filter((s) => s.messageCount > 0 && !deletedSessions.current.has(`${projectId}:${s.id}`))
             .sort(
@@ -137,7 +142,7 @@ function RecentChatsList({
           setSessions(sorted);
         })
         .catch(() => {
-          if (!cancelled) setSessions([]);
+          if (!cancelled && revision === listRevision.current) setSessions([]);
         });
     };
     load();
@@ -166,17 +171,63 @@ function RecentChatsList({
     session,
     tab: openBySessionId.get(session.id),
   }));
-  const startRename = (tab: ChatTabDescriptor) => {
-    setEditingId(tab.id);
-    setDraftTitle(tab.title);
+  const startRename = (id: string, title: string, tabId?: string, sessionId?: string | null) => {
+    if (savingName) return;
+    editTarget.current = { title, tabId, sessionId };
+    setEditingId(id);
+    setDraftTitle(title);
   };
-  const commitRename = () => {
-    if (!editingId) return;
-    const next = draftTitle.trim();
-    if (next) onRenameTab(editingId, next);
+  const cancelRename = () => {
+    editTarget.current = null;
     setEditingId(null);
     setDraftTitle("");
   };
+  const commitRename = async () => {
+    const target = editTarget.current;
+    if (!target) return;
+    const name = draftTitle.trim();
+    cancelRename();
+    if (!name || name === target.title) return;
+    const sessionId = target.sessionId ?? tabs.find((tab) => tab.id === target.tabId)?.sessionId;
+    setSavingName(true);
+    try {
+      if (sessionId) {
+        const response = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }, projectId);
+        if (!response.ok) throw new Error("Could not rename chat");
+        listRevision.current++;
+        setSessions((current) => current?.map((session) => session.id === sessionId ? { ...session, name } : session) ?? current);
+      }
+      if (target.tabId) onRenameTab(target.tabId, name);
+    } catch {
+      toast.error(t("Could not rename chat. Please try again."));
+    } finally {
+      setSavingName(false);
+    }
+  };
+  const renameInput = (
+    <input
+      ref={inputRef}
+      aria-label={t("Chat name")}
+      value={draftTitle}
+      onChange={(event) => setDraftTitle(event.target.value)}
+      onBlur={() => void commitRename()}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.key === "Enter" || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === "Enter") void commitRename();
+          else cancelRename();
+        }
+      }}
+      className="w-full min-w-0 flex-1 bg-transparent text-xs outline-none"
+      maxLength={120}
+    />
+  );
   const deleteChat = async (title: string, tab?: ChatTabDescriptor, sessionId = tab?.sessionId) => {
     if (tab?.isStreaming || deletingId) return;
     const ok = await confirm({
@@ -234,36 +285,18 @@ function RecentChatsList({
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 )}
               >
-                <button
-                  type="button"
-                  onClick={() => onSelectTab(tab.id)}
-                  onDoubleClick={() => startRename(tab)}
-                  title={t("{title} — double-click to rename", { title: tab.title })}
-                  className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
-                >
-                  {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
-                  {isEditing ? (
-                    <input
-                      ref={inputRef}
-                      value={draftTitle}
-                      onChange={(event) => setDraftTitle(event.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") commitRename();
-                        if (event.key === "Escape") {
-                          setEditingId(null);
-                          setDraftTitle("");
-                        }
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                      className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-                      maxLength={40}
-                    />
-                  ) : (
+                {isEditing ? renameInput : (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTab(tab.id)}
+                    onDoubleClick={() => startRename(tab.id, tab.title, tab.id, tab.sessionId)}
+                    title={t("{title} — double-click to rename", { title: tab.title })}
+                    className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
+                  >
+                    {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
                     <span className="min-w-0 flex-1 truncate">{tab.title}</span>
-                  )}
-                </button>
+                  </button>
+                )}
                 {!isEditing && (
                   <>
                     <DropdownMenu>
@@ -278,7 +311,7 @@ function RecentChatsList({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" side="right" className="min-w-36">
-                        <DropdownMenuItem onSelect={() => startRename(tab)}>
+                        <DropdownMenuItem onSelect={() => startRename(tab.id, tab.title, tab.id, tab.sessionId)}>
                           <PencilIcon className="size-3.5" />
                           {t("Rename")}</DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -298,7 +331,8 @@ function RecentChatsList({
           })}
           {recentSessions.map(({ session, tab }) => {
             const title = sessionTitle(session, t("Untitled chat"));
-            const rowTitle = tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
+            const rowTitle = !session.name && tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
+            const isEditing = editingId === session.id;
             return (
               <div
                 key={session.id}
@@ -309,44 +343,26 @@ function RecentChatsList({
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 )}
               >
-                <button
-                  type="button"
-                  title={`${rowTitle} · ${tab?.isStreaming ? t("Running") : relativeTime(session.modified, locale)}`}
-                  onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
-                  onDoubleClick={() => tab && startRename(tab)}
-                  className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
-                >
-                  {tab?.isStreaming && (
-                    <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
-                  )}
-                  {editingId === tab?.id && tab ? (
-                    <input
-                      ref={inputRef}
-                      value={draftTitle}
-                      onChange={(event) => setDraftTitle(event.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") commitRename();
-                        if (event.key === "Escape") {
-                          setEditingId(null);
-                          setDraftTitle("");
-                        }
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                      className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-                      maxLength={40}
-                    />
-                  ) : (
+                {isEditing ? renameInput : (
+                  <button
+                    type="button"
+                    title={`${rowTitle} · ${tab?.isStreaming ? t("Running") : relativeTime(session.modified, locale)}`}
+                    onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
+                    onDoubleClick={() => startRename(session.id, rowTitle, tab?.id, session.id)}
+                    className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
+                  >
+                    {tab?.isStreaming && (
+                      <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
+                    )}
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{rowTitle}</span>
                       <span className="text-[10px] text-muted-foreground/75">
                         {relativeTime(session.modified, locale)}
                       </span>
                     </span>
-                  )}
-                </button>
-                {(!tab || editingId !== tab.id) && (
+                  </button>
+                )}
+                {!isEditing && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -359,14 +375,11 @@ function RecentChatsList({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" side="right" className="min-w-36">
-                      {tab && (
-                        <>
-                          <DropdownMenuItem onSelect={() => startRename(tab)}>
-                            <PencilIcon className="size-3.5" />
-                            {t("Rename")}</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                        </>
-                      )}
+                      <DropdownMenuItem disabled={savingName} onSelect={() => startRename(session.id, rowTitle, tab?.id, session.id)}>
+                        <PencilIcon className="size-3.5" />
+                        {t("Rename")}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
                         disabled={tab?.isStreaming || deletingId !== null}

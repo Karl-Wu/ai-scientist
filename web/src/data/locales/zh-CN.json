@@ -282,6 +282,8 @@
   "Delete \"{name}\"?": "删除“{name}”？",
   "Remove this conversation and its chat history from Recent chats. Project files, notebook entries and cost records are kept.": "从最近会话中移除此会话及其聊天记录。项目文件、日志条目和费用记录将保留。",
   "Its sandbox files and chats will be permanently removed. This cannot be undone.": "其沙盒文件和会话将永久删除，此操作无法撤销。",
+  "Chat name": "会话名称",
+  "Could not rename chat. Please try again.": "无法重命名会话，请重试。",
   "Could not delete chat. Please try again.": "无法删除会话，请重试。",
   "Could not update project": "无法更新项目",
   "just now": "刚刚",

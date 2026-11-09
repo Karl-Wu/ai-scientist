@@ -577,6 +577,23 @@ export async function listSessions(paths: ProjectPaths): Promise<SessionInfo[]> 
   return SessionManager.list(paths.sandbox, paths.sessionsDir);
 }
 
+/** Rename through the live manager if present; cold chats need no agent. */
+export async function renameSession(projectId: string, paths: ProjectPaths, id: string, file: string, name: string): Promise<boolean> {
+  const key = keyFor(projectId, id);
+  const pending = opening.get(key);
+  if (pending) await pending;
+  if (deleting.has(key) || !fs.existsSync(file)) return false;
+  const session = live.get(key);
+  if (session) {
+    session.setSessionName(name);
+  } else {
+    const manager = SessionManager.open(file, paths.sessionsDir, paths.sandbox);
+    if (manager.getSessionId() !== id) return false;
+    manager.appendSessionInfo(name);
+  }
+  return true;
+}
+
 export async function disposeSession(projectId: string, sessionId: string): Promise<void> {
   const k = keyFor(projectId, sessionId);
   const s = live.get(k);

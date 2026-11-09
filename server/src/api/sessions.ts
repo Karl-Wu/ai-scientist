@@ -77,6 +77,7 @@ import {
   getSession,
   lastModelInSessionFile,
   listSessions,
+  renameSession,
 } from "../agent/session-registry.ts";
 import { parseThinkingLevel } from "../agent/thinking.ts";
 import {
@@ -179,6 +180,21 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
       messageCount: i.messageCount,
       firstMessage: i.firstMessage,
     }));
+  });
+
+  app.patch<{ Params: { id: string }; Body: { name?: unknown } }>("/sessions/:id", async (req, reply) => {
+    const { id } = req.params;
+    const name = typeof req.body?.name === "string" ? req.body.name.replace(/[\r\n]+/g, " ").trim() : "";
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || !name || name.length > 120) {
+      return reply.code(400).send({ detail: "Invalid session id or name" });
+    }
+    const paths = activePaths();
+    if (id === schedulerSessionId(paths)) return reply.code(409).send({ detail: "System sessions cannot be renamed" });
+    const file = findSessionFile(paths, id);
+    if (!file || !await renameSession(currentProjectId(), paths, id, file, name)) {
+      return reply.code(404).send({ detail: "No such session" });
+    }
+    return { id, name };
   });
 
   app.delete<{ Params: { id: string } }>("/sessions/:id", async (req, reply) => {

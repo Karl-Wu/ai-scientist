@@ -40,7 +40,7 @@ describe("historical chat deletion", () => {
   it("refreshes session metadata when a message is sent instead of waiting for polling", async () => {
     const initial = [{ ...props.tabs[0], sessionId: saved.id }];
     const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={initial} /></TooltipProvider>);
-    await screen.findByRole("button", { name: "Chat actions for New chat" });
+    await screen.findByRole("button", { name: "Chat actions for Historical chat" });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     fetchMock.mockClear();
     view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...initial[0], userMessageCount: 1, isStreaming: true }]} /></TooltipProvider>);
@@ -94,5 +94,41 @@ describe("draft conversation visibility", () => {
     expect(await screen.findByText("Analyze my data")).toBeInTheDocument();
     view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, userMessageCount: 2, hasCompletedTurn: true }]} /></TooltipProvider>);
     expect(screen.getByText("Analyze my data")).toBeInTheDocument();
+  });
+});
+
+describe("saved chat names", () => {
+  it("renames an unopened chat and reads the saved name after remounting", async () => {
+    let name = saved.name;
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "PATCH") name = JSON.parse(String(options.body)).name;
+      return { ok: true, json: async () => [{ ...saved, name }] } as Response;
+    });
+    const user = userEvent.setup();
+    const view = render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByRole("textbox", { name: "Chat name" });
+    await user.clear(input);
+    await user.type(input, "Renamed research{Enter}");
+    expect(await screen.findByText("Renamed research")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/sessions/saved-chat", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Renamed research" }) }), "project-a");
+    expect(props.onOpenSession).not.toHaveBeenCalled();
+    view.unmount();
+    render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+    expect(await screen.findByText("Renamed research")).toBeInTheDocument();
+  });
+
+  it("keeps the previous name when the server refuses the rename", async () => {
+    fetchMock.mockImplementation(async (_url, options) => ({ ok: options?.method !== "PATCH", json: async () => [saved] } as Response));
+    const user = userEvent.setup();
+    render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByRole("textbox", { name: "Chat name" });
+    await user.clear(input);
+    await user.type(input, "Unsaved name{Enter}");
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Could not rename chat. Please try again."));
+    expect(screen.getByText("Historical chat")).toBeInTheDocument();
   });
 });
