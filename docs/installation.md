@@ -38,8 +38,7 @@ flow, or configure a [local model server](local-models-ollama.md). For ChatGPT,
 use **OpenAI → Sign in with ChatGPT**. The provider list shows the available
 methods and cloud configuration fields.
 
-OpenRouter is optional unless you use Fusion or server-side speech
-transcription; either an OpenRouter sign-in or an API key works. Keys can also be set in the repo-root `.env`; see `.env.example`
+Fusion requires an OpenRouter sign-in or API key. Keys can also be set in the repo-root `.env`; see `.env.example`
 for names. See [Model selection](model-selection.md) for billing and defaults.
 
 OAuth tokens live in `~/.kady/pi-agent/auth.json`, shared by lead and specialist

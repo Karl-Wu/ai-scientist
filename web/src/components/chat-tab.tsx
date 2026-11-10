@@ -5,7 +5,7 @@ import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
 import { useSessionModel } from "@/lib/use-session-model";
 import { useInputHistory } from "@/lib/use-input-history";
 
-import { useT } from "@/components/i18n-provider";
+import { useLocale, useT } from "@/components/i18n-provider";
 
 import {
   Conversation,
@@ -1079,26 +1079,8 @@ function ChatInput({
     appendToComposer(controller.textInput, text, " ");
   }, [controller]);
   const [speechMode, setSpeechMode] = useState<SpeechInputMode>("detecting");
-  const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
-    const form = new FormData();
-    form.append("audio", audioBlob, "dictation");
-    const response = await apiFetch("/speech/transcribe", {
-      method: "POST",
-      body: form,
-    });
-    const payload = (await response.json().catch(() => null)) as
-      | { text?: string; detail?: string }
-      | null;
-    if (!response.ok) {
-      throw new Error(
-        payload?.detail || `Dictation could not be transcribed (${response.status}).`,
-      );
-    }
-    if (!payload?.text?.trim()) {
-      throw new Error("The transcription provider returned no text.");
-    }
-    return payload.text.trim();
-  }, []);
+  const locale = useLocale();
+  const dictationLanguage = locale === "zh-CN" ? "zh-CN" : "en-US";
 
   const isMentionOpen = mentionQuery !== null && filteredFiles.length > 0;
   const isSlashOpen = slashQuery !== null && slashItems.length > 0;
@@ -1321,12 +1303,10 @@ function ChatInput({
                     <b>{t("Dictate")}</b>
                     <br />
                     {speechMode === "detecting"
-                      ? "Checking dictation support…"
+                      ? t("Checking dictation support…")
                       : speechMode === "speech-recognition"
-                        ? "Hold to dictate using this browser's speech recognition."
-                        : speechMode === "media-recorder"
-                          ? "Hold to record. Audio is sent to OpenRouter for transcription."
-                          : "This browser cannot record audio for dictation."}
+                        ? t("Hold to dictate using this browser's speech recognition.")
+                        : t("This browser does not support dictation.")}
                   </>
                 }
               >
@@ -1334,10 +1314,10 @@ function ChatInput({
                   <SpeechInput
                     size="icon-sm"
                     variant="ghost"
+                    lang={dictationLanguage}
                     onTranscriptionChange={handleTranscription}
-                    onAudioRecorded={handleAudioRecorded}
                     onModeChange={setSpeechMode}
-                    onSpeechError={(message) => toast.error(message)}
+                    onSpeechError={(message) => toast.error(t(message))}
                   />
                 </span>
               </InfoTooltip>

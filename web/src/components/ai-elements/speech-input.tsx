@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react";
 
+import { useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -58,40 +59,14 @@ declare global {
   }
 }
 
-export type SpeechInputMode =
-  | "detecting"
-  | "speech-recognition"
-  | "media-recorder"
-  | "none";
+export type SpeechInputMode = "detecting" | "speech-recognition" | "none";
 
 export type SpeechInputProps = ComponentProps<typeof Button> & {
   onTranscriptionChange?: (text: string) => void;
-  /**
-   * Callback for when audio is recorded using MediaRecorder fallback.
-   * This is called in browsers that don't support the Web Speech API (Firefox, Safari).
-   * The callback receives an audio Blob that should be sent to a transcription service.
-   * Return the transcribed text, which will be passed to onTranscriptionChange.
-   */
-  onAudioRecorded?: (audioBlob: Blob) => Promise<string>;
   onModeChange?: (mode: SpeechInputMode) => void;
   onSpeechError?: (message: string) => void;
+  /** A BCP 47 tag for browser recognition. */
   lang?: string;
-};
-
-export const detectSpeechInputMode = (): Exclude<SpeechInputMode, "detecting"> => {
-  if (typeof window === "undefined") {
-    return "none";
-  }
-
-  if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
-    return "speech-recognition";
-  }
-
-  if ("MediaRecorder" in window && "mediaDevices" in navigator) {
-    return "media-recorder";
-  }
-
-  return "none";
 };
 
 function speechRecognitionErrorMessage(error: string): string | null {
@@ -105,6 +80,8 @@ function speechRecognitionErrorMessage(error: string): string | null {
       return "No microphone is available.";
     case "network":
       return "Speech recognition could not reach its service.";
+    case "language-not-supported":
+      return "This browser does not support the current dictation language.";
     case "no-speech":
       return "No speech was detected.";
     default:
@@ -115,7 +92,6 @@ function speechRecognitionErrorMessage(error: string): string | null {
 export const SpeechInput = ({
   className,
   onTranscriptionChange,
-  onAudioRecorded,
   onModeChange,
   onSpeechError,
   lang = "en-US",
@@ -127,76 +103,49 @@ export const SpeechInput = ({
   onKeyUp: onKeyUpProp,
   ...buttonProps
 }: SpeechInputProps) => {
+  const t = useT();
   const [isListening, setIsListening] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [mode, setMode] = useState<SpeechInputMode>("detecting");
-  const [isRecognitionReady, setIsRecognitionReady] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const isHoldingRef = useRef(false);
   const onTranscriptionChangeRef = useRef<
     SpeechInputProps["onTranscriptionChange"]
   >(onTranscriptionChange);
-  const onAudioRecordedRef =
-    useRef<SpeechInputProps["onAudioRecorded"]>(onAudioRecorded);
   const onErrorRef =
     useRef<SpeechInputProps["onSpeechError"]>(onSpeechError);
 
   // Keep refs in sync
   onTranscriptionChangeRef.current = onTranscriptionChange;
-  onAudioRecordedRef.current = onAudioRecorded;
   onErrorRef.current = onSpeechError;
-
-  // Declared before the recorder cleanup so it flips first: unmounting stops
-  // the recorder, whose stop handler would otherwise fire a transcription
-  // request whose result has nowhere to go.
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
-
-  // Detect browser-only APIs after hydration so server and client initially
-  // render the same disabled button.
-  useEffect(() => {
-    setMode(detectSpeechInputMode());
-  }, []);
 
   useEffect(() => {
     onModeChange?.(mode);
   }, [mode, onModeChange]);
 
-  // Initialize Speech Recognition when mode is speech-recognition
+  const busy = isStarting || isListening;
+
+  // Detect and initialize the browser API after hydration.
   useEffect(() => {
-    if (mode !== "speech-recognition") {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setMode("none");
       return;
     }
 
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
     let speechRecognition: SpeechRecognition;
     try {
       speechRecognition = new SpeechRecognition();
     } catch {
-      setMode(
-        "MediaRecorder" in window && "mediaDevices" in navigator
-          ? "media-recorder"
-          : "none",
-      );
-      onErrorRef.current?.("Speech recognition is unavailable in this browser.");
+      setMode("none");
       return;
     }
 
     speechRecognition.continuous = true;
     speechRecognition.interimResults = true;
-    speechRecognition.lang = lang;
-
     const handleStart = () => {
+      setIsStarting(false);
       if (!isHoldingRef.current) {
         speechRecognition.stop();
         return;
@@ -205,6 +154,7 @@ export const SpeechInput = ({
     };
 
     const handleEnd = () => {
+      setIsStarting(false);
       setIsListening(false);
     };
 
@@ -229,21 +179,9 @@ export const SpeechInput = ({
     };
 
     const handleError = (event: Event) => {
+      setIsStarting(false);
       setIsListening(false);
       const error = (event as SpeechRecognitionErrorEvent).error;
-      const canUseRecordedFallback =
-        (error === "service-not-allowed" ||
-          error === "language-not-supported") &&
-        "MediaRecorder" in window &&
-        "mediaDevices" in navigator &&
-        Boolean(onAudioRecordedRef.current);
-      if (canUseRecordedFallback) {
-        setMode("media-recorder");
-        onErrorRef.current?.(
-          "Browser speech recognition is unavailable. Hold again to use recorded transcription.",
-        );
-        return;
-      }
       const message = speechRecognitionErrorMessage(error);
       if (message) onErrorRef.current?.(message);
     };
@@ -254,7 +192,7 @@ export const SpeechInput = ({
     speechRecognition.addEventListener("error", handleError);
 
     recognitionRef.current = speechRecognition;
-    setIsRecognitionReady(true);
+    setMode("speech-recognition");
 
     return () => {
       speechRecognition.removeEventListener("start", handleStart);
@@ -267,148 +205,30 @@ export const SpeechInput = ({
         // Some implementations throw when stop() is called before start().
       }
       recognitionRef.current = null;
-      setIsRecognitionReady(false);
     };
-  }, [mode, lang]);
-
-  // Cleanup MediaRecorder and stream on unmount
-  useEffect(
-    () => () => {
-      if (mediaRecorderRef.current?.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
-      if (streamRef.current) {
-        for (const track of streamRef.current.getTracks()) {
-          track.stop();
-        }
-      }
-    },
-    []
-  );
-
-  // Start MediaRecorder recording
-  const startMediaRecorder = useCallback(async () => {
-    if (!onAudioRecordedRef.current) {
-      return;
-    }
-
-    setIsStarting(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!isHoldingRef.current) {
-        for (const track of stream.getTracks()) track.stop();
-        return;
-      }
-      streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-
-      const handleDataAvailable = (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      const handleStop = async () => {
-        for (const track of stream.getTracks()) {
-          track.stop();
-        }
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-        if (!mountedRef.current) return;
-        setIsListening(false);
-
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type:
-            mediaRecorder.mimeType ||
-            audioChunksRef.current[0]?.type ||
-            "application/octet-stream",
-        });
-
-        if (audioBlob.size > 0 && onAudioRecordedRef.current) {
-          setIsProcessing(true);
-          try {
-            const transcript = await onAudioRecordedRef.current(audioBlob);
-            if (transcript && mountedRef.current) {
-              onTranscriptionChangeRef.current?.(transcript);
-            }
-          } catch (error) {
-            if (mountedRef.current) {
-              onErrorRef.current?.(
-                error instanceof Error ? error.message : "Dictation could not be transcribed.",
-              );
-            }
-          } finally {
-            if (mountedRef.current) setIsProcessing(false);
-          }
-        }
-      };
-
-      const handleError = () => {
-        setIsListening(false);
-        for (const track of stream.getTracks()) {
-          track.stop();
-        }
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-        onErrorRef.current?.("The microphone stopped recording unexpectedly.");
-      };
-
-      mediaRecorder.addEventListener("dataavailable", handleDataAvailable);
-      mediaRecorder.addEventListener("stop", handleStop);
-      mediaRecorder.addEventListener("error", handleError);
-
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
-      setIsListening(true);
-    } catch (error) {
-      setIsListening(false);
-      if (streamRef.current) {
-        for (const track of streamRef.current.getTracks()) track.stop();
-        streamRef.current = null;
-      }
-      const message =
-        error instanceof DOMException && error.name === "NotAllowedError"
-          ? "Microphone access was denied. Allow microphone access and try again."
-          : "The microphone could not be started.";
-      onErrorRef.current?.(message);
-    } finally {
-      setIsStarting(false);
-    }
-  }, []);
-
-  // Stop MediaRecorder recording
-  const stopMediaRecorder = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-    setIsListening(false);
   }, []);
 
   const startListening = useCallback(() => {
-    if (isListening || isStarting || isProcessing) return;
-    if (mode === "speech-recognition" && recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch {
-        onErrorRef.current?.("Dictation could not be started.");
-      }
-    } else if (mode === "media-recorder") {
-      void startMediaRecorder();
+    const recognition = recognitionRef.current;
+    if (busy || !recognition) return;
+
+    try {
+      recognition.lang = lang;
+      setIsStarting(true);
+      recognition.start();
+    } catch {
+      setIsStarting(false);
+      onErrorRef.current?.("Dictation could not be started.");
     }
-  }, [mode, isListening, isStarting, isProcessing, startMediaRecorder]);
+  }, [busy, lang]);
 
   const stopListening = useCallback(() => {
-    if (mode === "speech-recognition" && recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // Already stopped.
-      }
-    } else if (mode === "media-recorder") {
-      stopMediaRecorder();
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Already stopped.
     }
-  }, [mode, stopMediaRecorder]);
+  }, []);
 
   // Global pointerup to catch release even when pointer leaves the button
   useEffect(() => {
@@ -427,23 +247,14 @@ export const SpeechInput = ({
     };
   }, [isListening, isStarting, stopListening]);
 
-  // Determine if button should be disabled
-  const isDisabled =
-    Boolean(disabledProp) ||
-    mode === "detecting" ||
-    mode === "none" ||
-    (mode === "speech-recognition" && !isRecognitionReady) ||
-    (mode === "media-recorder" && !onAudioRecorded) ||
-    isProcessing;
+  const isDisabled = Boolean(disabledProp) || mode !== "speech-recognition";
   const ariaLabel =
     buttonProps["aria-label"] ??
-    (isProcessing
-      ? "Transcribing dictation"
-      : isListening
-        ? "Release to stop dictation"
-        : isDisabled
-          ? "Dictation unavailable"
-          : "Hold to dictate");
+    t(isListening
+      ? "Release to stop dictation"
+      : isDisabled
+        ? "Dictation unavailable"
+        : "Hold to dictate");
 
   const release = () => {
     isHoldingRef.current = false;
@@ -513,13 +324,9 @@ export const SpeechInput = ({
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {(isStarting || isProcessing) && <Spinner />}
-        {!(isStarting || isProcessing) && isListening && (
-          <SquareIcon className="size-4" />
-        )}
-        {!(isStarting || isProcessing || isListening) && (
-          <MicIcon className="size-4" />
-        )}
+        {isStarting ? <Spinner /> : isListening
+          ? <SquareIcon className="size-4" />
+          : <MicIcon className="size-4" />}
       </Button>
     </div>
   );

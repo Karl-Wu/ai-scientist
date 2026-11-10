@@ -13,8 +13,8 @@ changes, or choose another available model. Model availability and quotas are
 controlled by the provider.
 
 [Fusion](openrouter-fusion.md) has no local file/shell tools. Local server
-compatibility depends on tool-calling support. Server-side speech transcription
-and Fusion still require OpenRouter (a sign-in or an API key).
+compatibility depends on tool-calling support. Dictation requires a browser
+with Web Speech API speech recognition.
 
 ## Local shell trust boundary
 

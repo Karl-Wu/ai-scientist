@@ -109,9 +109,7 @@ or already-admitted requests can exceed it; model requests have no worst-case
 cost reservation. [Modal](modal-compute.md#budgets-and-reservations) reserves
 estimated full-lifetime cost. External-CLI specialists bypass Kady accounting.
 
-## OpenRouter-only features
+## OpenRouter Fusion
 
-[Fusion](openrouter-fusion.md) and server-side speech transcription require an
-OpenRouter credential: the OpenRouter sign-in or `OPENROUTER_API_KEY`, resolved
-by Pi like a chat turn. Browser-native dictation uses the Web Speech API when
-available. Other providers' logins do not authorize the OpenRouter endpoints.
+[Fusion](openrouter-fusion.md) requires an OpenRouter sign-in or
+`OPENROUTER_API_KEY`. Pi resolves the credential as it does for chat turns.

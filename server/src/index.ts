@@ -35,7 +35,6 @@ import { registerMcpRoutes } from "./api/mcp.ts";
 import { registerCredentialRoutes } from "./api/credentials.ts";
 import { registerAppSettingsRoutes } from "./api/app-settings.ts";
 import { registerAgentRoutes } from "./api/agents.ts";
-import { registerSpeechRoutes } from "./api/speech.ts";
 import { registerModalRoutes } from "./api/modal.ts";
 import { registerModelProviderRoutes } from "./api/model-providers.ts";
 import { registerOpenApiDocs } from "./api/openapi-docs.ts";
@@ -202,7 +201,6 @@ export async function buildApp() {
   await registerAgentRoutes(app);
   await registerSubagentMeterRoutes(app);
   await registerSubagentRoutes(app);
-  await registerSpeechRoutes(app);
   await registerModalRoutes(app);
   await registerModelProviderRoutes(app);
 

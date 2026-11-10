@@ -52,7 +52,7 @@ const OPENROUTER_KEY: KeyDef = {
   label: "OpenRouter API key",
   placeholder: "sk-or-v1-…",
   keysUrl: "https://openrouter.ai/keys",
-  hint: "One pay-as-you-go account for hundreds of hosted models, plus OpenRouter Fusion and server-side speech.",
+  hint: "One pay-as-you-go account for hundreds of hosted models, plus OpenRouter Fusion.",
   notifyProviders: true,
 };
 
