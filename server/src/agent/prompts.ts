@@ -103,7 +103,8 @@ function listDir(dir: string, scope: PromptScope): Array<PromptTemplateInfo & { 
       ...(fm.argumentHint ? { argumentHint: fm.argumentHint } : {}),
       scope,
       content,
-      seeded: SEEDED_TEMPLATES.some((t) => t.name === name && scope === "project"),
+      seeded: (SEEDED_TEMPLATES.some((t) => t.name === name && scope === "project") ||
+        (name === ADE_BOOTSTRAP_TEMPLATE_NAME && scope === "project" && content.includes(ADE_BOOTSTRAP_TEMPLATE_MARKER))),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -327,6 +328,8 @@ function seededNamesFile(paths: ProjectPaths): string {
  * templates shipped before per-name tracking. Never extend this list.
  */
 const LEGACY_SEEDED_TEMPLATES: readonly string[] = ["qc", "stats-check", "figure-audit", "methods-review", "replicate"];
+const ADE_BOOTSTRAP_TEMPLATE_NAME = "ade-bootstrap";
+const ADE_BOOTSTRAP_TEMPLATE_MARKER = "<!-- ai-scientist: ade-bootstrap-v2 -->";
 
 function readSeededNames(paths: ProjectPaths): Set<string> {
   try {
@@ -341,6 +344,63 @@ function readSeededNames(paths: ProjectPaths): Set<string> {
 function writeSeededNames(paths: ProjectPaths, names: Iterable<string>): void {
   fs.mkdirSync(paths.kadyDir, { recursive: true });
   fs.writeFileSync(seededNamesFile(paths), JSON.stringify([...new Set(names)].sort()) + "\n", "utf-8");
+}
+
+function adeBootstrapTemplate(paths: ProjectPaths): string | null {
+  const adeHome = process.env.ADE_HOME?.trim();
+  const adeBin = process.env.ADE_BIN?.trim() || (adeHome ? path.join(adeHome, "bin", "ade") : "");
+  if (!adeHome || !adeBin) return null;
+
+  let version = process.env.ADE_VERSION?.trim() || "";
+  if (!version) {
+    try {
+      version = String(JSON.parse(fs.readFileSync(path.join(adeHome, "runtime.json"), "utf-8")).ade_version);
+    } catch {
+      version = "unknown";
+    }
+  }
+
+  const sandbox = paths.sandbox;
+  return `---
+description: 收敛 ADE 工作区到 ade/ 并规范化表名（幂等，默认返回上次记录）
+---
+
+${ADE_BOOTSTRAP_TEMPLATE_MARKER}
+
+无论工作区当前是什么状态，跑完后必须满足第 1 节的两条不变量。
+
+**默认模式不重复执行**：输入没变时直接返回上一次的执行记录。只有用户明确要求
+"重新初始化"时才加 \`--reinit\`，明确要求"强制重跑"时才加 \`--force\`。
+
+## 0. 路径
+
+- \`ADE=${adeBin}\`（${version}）
+- \`SANDBOX=${sandbox}\`
+- \`ADE_ROOT=\$SANDBOX/ade\` ← 所有 ade 命令的 \`--project\`
+- 执行记录：\`\$ADE_ROOT/bootstrap-report.json\`
+
+原始数据在 \`\$SANDBOX/user_data/\`，**不在** \`\$ADE_ROOT\` 下，只读。
+
+## 1. 两条不变量
+
+### 1.1 目录归属：ADE 产物只在 \$ADE_ROOT 内
+
+ADE 会写这五样东西：\`sources/\`、\`semantic/\`、\`extractions/\`、\`runtime/\`、\`host-context.json\`。
+它们只能出现在 \`\$ADE_ROOT\` 下。若在 \`\$SANDBOX\` 根发现（把 \`ade init\` 指到业务目录的典型后果）：
+
+1. \`mkdir -p "\$ADE_ROOT/_legacy_v0"\`
+2. 逐个 \`mv "\$SANDBOX/<name>" "\$ADE_ROOT/_legacy_v0/"\`；目标已存在时改名为 \`<name>.dupN\`
+3. **不删除**，只在报告里列出
+
+旧版本的隐藏目录 \`\$SANDBOX/.ade/\` 也要并入：内容整体移进 \`\$ADE_ROOT\`，同名冲突存档到
+\`\$ADE_ROOT/_legacy_v0/old-hidden-*\`，空的 \`.ade\` 目录删除。脚本会自动做这件事。
+
+数据文件（parquet、mapping、report）同样只放 \`\$ADE_ROOT/staging/\`、\`\$ADE_ROOT/mapping.json\`、
+\`\$ADE_ROOT/bootstrap-report.json\`。\`\$ADE_ROOT/.ade/project.json\` 是 ADE 布局检查要求的标记，
+属于唯一允许的隐藏项。
+
+### 1.2 表名：必须匹配 \`^[a-z][a-z0-9_]*\`
+`;
 }
 
 // Canonical SHA-256 of the previously shipped bodies, including frontmatter.
@@ -373,7 +433,27 @@ export function seedPromptTemplates(paths: ProjectPaths): number {
     fs.writeFileSync(file, template.content, "utf-8");
     written++;
   }
-  const names = SEEDED_TEMPLATES.map((template) => template.name);
+  const names = [...SEEDED_TEMPLATES.map((template) => template.name)];
+  const adeBootstrap = adeBootstrapTemplate(paths);
+  if (adeBootstrap) {
+    const file = path.join(dir, `${ADE_BOOTSTRAP_TEMPLATE_NAME}.md`);
+    let current: string | null = null;
+    try {
+      current = fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : null;
+    } catch {
+      current = null;
+    }
+    if (current === null) {
+      if (!offered.has(ADE_BOOTSTRAP_TEMPLATE_NAME)) {
+        fs.writeFileSync(file, adeBootstrap, "utf-8");
+        written++;
+      }
+    } else if (current.includes("<!-- ai-scientist: ade-bootstrap-v1 -->") && !current.includes(ADE_BOOTSTRAP_TEMPLATE_MARKER)) {
+      fs.writeFileSync(file, adeBootstrap, "utf-8");
+      written++;
+    }
+    if (!names.includes(ADE_BOOTSTRAP_TEMPLATE_NAME)) names.push(ADE_BOOTSTRAP_TEMPLATE_NAME);
+  }
   if (!seeded) {
     fs.mkdirSync(paths.kadyDir, { recursive: true });
     fs.writeFileSync(seedMarker(paths), new Date().toISOString() + "\n", "utf-8");

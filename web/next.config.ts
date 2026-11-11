@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: readAppVersion(),
   },
+  // Single-port deployments proxy /api/kady to the private backend from
+  // web/server.mjs, not from `rewrites()`. Rewrites are baked into the build's
+  // routes-manifest, so the backend port would be frozen at build time; the
+  // platform is expected to change KADY_PORT on the target machine.
 };
 
 export default nextConfig;

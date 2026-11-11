@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ADE_HOME="${ADE_HOME:-/data/ade}"
+ADE_PROJECT="${ADE_PROJECT:-$ADE_HOME/workspace}"
+ADE_BIN="${ADE_BIN:-$ADE_HOME/bin/ade}"
+ADE_MALLOY_HOME="${ADE_MALLOY_HOME:-$ADE_HOME/compiler}"
+export ADE_NODE_BINARY="${ADE_NODE_BINARY:-$(command -v node || true)}"
+ADE_PYTHON="${ADE_PYTHON:-$(python3 -c 'import json, os; print(json.load(open(os.path.join(os.environ["ADE_HOME"], "runtime.json")))["python"])' 2>/dev/null || command -v python3)}"
+export PYTHONPATH="$ADE_HOME/python${PYTHONPATH:+:$PYTHONPATH}"
+exec "$ADE_PYTHON" "$ADE_PROJECT/tools/ade_bootstrap.py" \
+  --ade-bin "$ADE_BIN" \
+  --ade-root "$ADE_PROJECT" \
+  --sandbox "$(dirname "$ADE_PROJECT")" \
+  "$@"

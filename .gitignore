@@ -18,6 +18,21 @@ node_modules/
 out/
 dist/
 build/
+!build/
+/build/cache/
+/build/dist/
+!build/.gitignore
+!build/README.md
+!build/build.sh
+!build/platform.sh
+!build/platform.env.example
+!build/deploy.sh
+!build/template/
+!build/template/install-offline.sh
+!build/template/ade/
+!build/template/ade/ade-bootstrap
+!build/template/web/
+!build/template/web/server.mjs
 
 # Logs
 *.log
@@ -68,3 +83,11 @@ AGENTS.md
 CLAUDE.md
 # Local scratch work (demo videos, concepts)
 /work/
+/.deepworks/tmp/
+
+# Packaged platform (build output + operator runtime state)
+/.build-platform/
+/platform/
+/platform.installed
+/platform.env
+/run/

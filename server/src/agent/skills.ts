@@ -270,6 +270,12 @@ export async function seedProjectSkills(
   paths: ProjectPaths,
   allowRemote = true,
 ): Promise<number> {
+  // The offline platform installs the canonical ADE skills beside its runtime.
+  // Seed them first even when a sibling project already has other skills; copySkillTrees
+  // preserves an existing enabled/disabled copy and therefore user edits.
+  const runtimeSkillsDir = process.env.ADE_SKILLS_DIR?.trim();
+  if (runtimeSkillsDir) copySkillTrees(skillTreesIn(runtimeSkillsDir), paths);
+
   if (countInstalledSkills(paths) > 0) {
     applyDefaultSkillStates(paths);
     return countInstalledSkills(paths);

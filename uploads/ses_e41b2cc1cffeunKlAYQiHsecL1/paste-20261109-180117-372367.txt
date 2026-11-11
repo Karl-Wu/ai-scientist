@@ -1,0 +1,50 @@
+Step 4 — 9 failures, verbatim ❌
+
+
+===== source add CRF =====
+{
+  "error": "ConfigurationError",
+  "message": "Source and logical table names must match [a-z][a-z0-9_]*"
+}
+EXIT=2
+Identical for pdiagnose_A001, pemr_A001, pinfo_A001, plis_bacteria_result_A001, plis_register_A001, plis_result_A001, porders_A001, pris_A001. Only sheet2 and sheet3 succeeded (EXIT=0).
+
+Cause: ADE validates source/logical-table names against [a-z][a-z0-9_]* — lowercase only. The brief's sanitisation rule [0-9A-Za-z_] keeps uppercase, and the real sheet names (pinfo_A001, …_A001) all carry it. The two names that worked are the ones whose Chinese sheet names stripped to empty and fell back to sheet<N*. So the naming rule in the brief is a strict superset of what ADE accepts; this is a spec/tool mismatch, not a pandas or parquet problem.
+
+Step 5 — current state
+ade --project "$WORK" source list (complete):
+
+json
+
+
+[
+  { "config_version": 1, "kind": "parquet",
+    "locator": { "path": "derived/ade/staging" },
+    "source_id": "sheet2", "tables": { "sheet2": { "path": "sheet2.parquet" } } },
+  { "config_version": 1, "kind": "parquet",
+    "locator": { "path": "derived/ade/staging" },
+    "source_id": "sheet3", "tables": { "sheet3": { "path": "sheet3.parquet" } } }
+]
+Tables on disk (rows/cols ← original sheet), 9 files → 11 sheets:
+
+
+
+table	rows	cols	source file [sheet]	status
+pinfo_A001*	20	10*	1._病人就诊信息表.xlsx [pinfo_A001]*	❌ not registered
+sheet2	20*	1	1._病人就诊信息表.xlsx [住院流水号]	✅
+sheet3	10	1	1._病人就诊信息表.xlsx [住院号]	✅
+pdiagnose_A001	155	9	2._住院诊断.xlsx [pdiagnose_A001]	❌
+porders_A001	6716	20	3._住院医嘱.xlsx [porders_A001]	❌
+pemr_A001	5872	7	4._电子病历记录.xlsx [pemr_A001]*	❌
+plis_register_A001	1049	14*	5._检验信息.xlsx [plis_register_A001]	❌
+plis_result_A001	12318	17	6._住院检验结果.xlsx [plis_result_A001]	❌
+pris_A001	172	16	7._住院检查信息.xlsx [pris_A001]*	❌
+plis_bacteria_result_A001*	30	24*	8._微生物检验信息.xlsx [plis_bacteria_result_A001]	❌
+CRF	438	16*	肺癌科研CRF261027（标记）.xls [CRF量表]	❌
+Single-column helper tables — ignore when modelling: sheet2 (住院流水号, 20 rows, key inpatient_no) and sheet3 (住院号, 10 rows, key patient_no). Both are pure ID lists from file 1; membership checks only, no grain of their own. Note their fallback names lost the Chinese identity — _mapping.json is the only place 住院流水号/住院* are recorded, so a lowercase rename should restore explicit names (e.g. inpatient_no_list, patient_no_list).
+
+Two further things worth your attention, unrelated to the error: 4._电子病历记录.xlsx has only one sheet (pemr_A001), and CRF量表 (438×16) is a CRF form-definition dictionary, not patient data — its header row is the multi-line label row, so it should not be modelled as a clinical table.
+
+user_data/ is untouched (all 9 mtimes still 12:26, read-only respected). No packages installed outside uv's ephemeral --no-project env.
+
+Fix on your word — cheapest is lowercase logical names with --table, since --table decouples the logical name from the parquet filename, so no re-conversion and no data change: e.g. source add pinfo_a001 --kind parquet --path derived/ade/staging/pinfo_A001.parquet --table pinfo_a001. One unknown: the error wording says "Source and logical table names must match", so ADE may also require source_id == table; positional and --table would then both take the lowercase form, which is fine either way. Say the word and I'll re-run step 4 with lowercase names and finish step 5.*

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "ai-scientist",
+    "createdAt": 1794189517961,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "/Users/yr/PycharmProjects/ai-scientist"
+  ],
+  "reload": null
+}

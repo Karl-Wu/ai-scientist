@@ -1,0 +1,4 @@
+# Generated build and operator state; source templates are tracked explicitly.
+/dist/
+/cache/
+platform.env

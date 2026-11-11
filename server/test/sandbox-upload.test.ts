@@ -47,6 +47,37 @@ function upload(files: UploadFile[]) {
   });
 }
 
+function chunkUpload(
+  uploadIdValue: string,
+  destination: string,
+  chunks: Buffer[],
+  total = Buffer.concat(chunks).length,
+) {
+  const send = (index: number) => app.inject({
+    method: "PUT",
+    url: `/sandbox/file?${new URLSearchParams({
+      transferId: uploadIdValue,
+      path: destination,
+      filename: destination.split("/").pop() ?? "upload.bin",
+      offset: String(chunks.slice(0, index).reduce((sum, chunk) => sum + chunk.length, 0)),
+      total: String(total),
+      ...(index === chunks.length - 1 ? { last: "1" } : {}),
+    }).toString()}`,
+    headers: {
+      "x-project-id": "default",
+      "content-type": "application/octet-stream",
+    },
+    payload: chunks[index],
+  });
+  return chunks.reduce<Promise<unknown>>(
+    (request, _chunk, index) => request.then(() => send(index)),
+    Promise.resolve(),
+  ) as Promise<{
+    statusCode: number;
+    json: () => Promise<{ path?: string; received?: number; renamed?: unknown[] }>;
+  }>;
+}
+
 function uploadDir(): string {
   return resolvePaths("default").uploadDir;
 }
@@ -145,6 +176,45 @@ describe("POST /sandbox/upload", () => {
       .readdirSync(resolvePaths("default").root)
       .filter((name) => name.startsWith(".upload-"));
     expect(leftovers).toEqual([]);
+  });
+});
+
+describe("PUT /sandbox/file chunk transfers", () => {
+  it("assembles ordered binary chunks and preserves folder destinations", async () => {
+    const res = await chunkUpload("123456789012345678", "dataset/demo.h5ad", [
+      Buffer.from("abc"),
+      Buffer.from("def"),
+    ]);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      path: "user_data/dataset/demo.h5ad",
+      received: 6,
+      complete: true,
+    });
+    expect(fs.readFileSync(path.join(uploadDir(), "dataset/demo.h5ad"), "utf-8")).toBe("abcdef");
+    expect(fs.readdirSync(resolvePaths("default").root).filter((name) => name.startsWith(".file-transfers"))).toEqual([]);
+  });
+
+  it("supports an empty file with one final zero-byte chunk", async () => {
+    const res = await chunkUpload("123456789012345679", "empty.txt", [Buffer.alloc(0)]);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ path: "user_data/empty.txt", received: 0, complete: true });
+    expect(fs.statSync(path.join(uploadDir(), "empty.txt")).size).toBe(0);
+  });
+
+  it("parks a colliding chunked upload beside the existing file", async () => {
+    fs.writeFileSync(path.join(uploadDir(), "report.csv"), "original");
+    const res = await chunkUpload("123456789012345680", "report.csv", [Buffer.from("new")]);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      path: "user_data/report (2).csv",
+      renamed: [{ from: "user_data/report.csv", to: "user_data/report (2).csv" }],
+    });
+    expect(fs.readFileSync(path.join(uploadDir(), "report.csv"), "utf-8")).toBe("original");
+    expect(fs.readFileSync(path.join(uploadDir(), "report (2).csv"), "utf-8")).toBe("new");
   });
 });
 

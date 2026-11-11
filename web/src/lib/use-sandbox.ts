@@ -194,6 +194,92 @@ export interface LatexCompileResult {
   synctex: boolean;
 }
 
+const UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024;
+
+type ScopedFetch = (requestPath: string, init?: RequestInit) => Promise<Response>;
+
+class ChunkedUploadUnavailableError extends Error {}
+
+function browserUploadId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  return `web${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function uploadRelativePath(file: File, relativePath?: string): string {
+  const source = relativePath?.trim() ||
+    (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+    file.name;
+  const parts = source
+    .split(/[\\/]+/)
+    .filter((part) => part && part !== "." && part !== ".." && !part.startsWith("."));
+  return parts.length ? parts.join("/") : file.name;
+}
+
+async function uploadResponseDetail(res: Response): Promise<string> {
+  const detail = (await res.json().catch(() => null)) as { detail?: string } | null;
+  return detail?.detail || `Upload failed (${res.status})`;
+}
+
+async function uploadFileChunked(
+  file: File,
+  relativePath: string,
+  scopedFetch: ScopedFetch,
+): Promise<{ path: string; renamed: { from: string; to: string }[] } | null> {
+  if (file.size > 1024 * 1024 * 1024) {
+    throw new Error(`${file.name} exceeds the maximum upload size`);
+  }
+
+  const id = browserUploadId();
+  const destination = uploadRelativePath(file, relativePath);
+  let offset = 0;
+  let final: { path: string; renamed: { from: string; to: string }[] } | null = null;
+
+  do {
+    const end = Math.min(offset + UPLOAD_CHUNK_SIZE, file.size);
+    const params = new URLSearchParams({
+      transferId: id,
+      path: destination,
+      filename: file.name,
+      offset: String(offset),
+      total: String(file.size),
+    });
+    if (end === file.size) params.set("last", "1");
+    const res = await scopedFetch(`/sandbox/file?${params.toString()}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: file.slice(offset, end),
+    });
+    if (res.status === 404 && offset === 0) throw new ChunkedUploadUnavailableError();
+    if (!res.ok) throw new Error(await uploadResponseDetail(res));
+
+    const data = (await res.json().catch(() => null)) as {
+      received?: number;
+      complete?: boolean;
+      path?: string;
+      renamed?: { from: string; to: string }[];
+    } | null;
+    if (offset === 0 && data && typeof (data as { saved?: string }).saved === "string") {
+      await scopedFetch(
+        `/sandbox/file?path=${encodeURIComponent((data as { saved?: string }).saved ?? "")}`,
+        { method: "DELETE" },
+      );
+      throw new ChunkedUploadUnavailableError();
+    }
+    if (!data || data.received !== end || (end === file.size && data.complete !== true)) {
+      throw new Error("Upload progress did not match the file");
+    }
+    offset = data.received;
+    if (data.complete) {
+      if (!data.path) throw new Error("Upload completed without a path");
+      final = { path: data.path, renamed: data.renamed ?? [] };
+    }
+  } while (offset < file.size);
+
+  return final;
+}
+
 export function useSandbox(
   isActive = false,
   projectId?: string,
@@ -457,26 +543,58 @@ export function useSandbox(
       if (!files.length) return [];
       setUploading(true);
       try {
-        const body = new FormData();
         const arr = Array.from(files);
+
+        const legacyUpload = async (start: number) => {
+          const body = new FormData();
+          for (let i = start; i < arr.length; i++) {
+            body.append("files", arr[i]);
+            body.append(
+              "paths",
+              paths?.[i] ||
+                (arr[i] as File & { webkitRelativePath?: string }).webkitRelativePath ||
+                "",
+            );
+          }
+          const res = await scopedFetch(`/sandbox/upload`, { method: "POST", body });
+          if (!res.ok) throw new Error(await uploadResponseDetail(res));
+          const data = (await res.json()) as {
+            uploaded?: string[];
+            renamed?: { from: string; to: string }[];
+          };
+          return {
+            uploaded: data.uploaded ?? [],
+            renamed: data.renamed ?? [],
+          };
+        };
+
+        const uploaded: string[] = [];
+        const renamed: { from: string; to: string }[] = [];
         for (let i = 0; i < arr.length; i++) {
-          body.append("files", arr[i]);
-          body.append(
-            "paths",
-            paths?.[i] || (arr[i] as File & { webkitRelativePath?: string }).webkitRelativePath || "",
-          );
+          try {
+            const result = await uploadFileChunked(
+              arr[i],
+              paths?.[i] ||
+                (arr[i] as File & { webkitRelativePath?: string }).webkitRelativePath ||
+                "",
+              scopedFetch,
+            );
+            if (result) {
+              uploaded.push(result.path);
+              renamed.push(...result.renamed);
+            }
+          } catch (err) {
+            if (!(err instanceof ChunkedUploadUnavailableError)) throw err;
+            const fallback = await legacyUpload(i);
+            uploaded.push(...fallback.uploaded);
+            renamed.push(...fallback.renamed);
+            break;
+          }
         }
-        const res = await scopedFetch(`/sandbox/upload`, { method: "POST", body });
-        if (!res.ok) {
-          const detail = (await res.json().catch(() => null)) as { detail?: string } | null;
-          throw new Error(detail?.detail || `Upload failed (${res.status})`);
-        }
-        const data = await res.json();
         await fetchTree();
         // The backend parks an upload beside a same-named file rather than
         // overwriting it. Say so, or the user is left looking for a file that
         // isn't where they expect and assuming their original was replaced.
-        const renamed = (data.renamed as { from: string; to: string }[] | undefined) ?? [];
         if (renamed.length === 1) {
           toast.info(`"${baseName(renamed[0].from)}" already existed`, {
             description: `Saved as "${baseName(renamed[0].to)}" so the original is untouched.`,
@@ -486,7 +604,7 @@ export function useSandbox(
             description: "They were saved under numbered names so the originals are untouched.",
           });
         }
-        return (data.uploaded as string[]) ?? [];
+        return uploaded;
       } catch (err) {
         // Silently returning [] made a rejected upload (too large, backend
         // down) look like a no-op the user could only detect by hunting the

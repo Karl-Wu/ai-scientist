@@ -45,6 +45,7 @@ const MAX_PREVIEW_BYTES = 512_000;
 // CSV renders only 250 rows at a time. Allow useful research tables without
 // lifting the tighter bound for unpaginated text/code previews.
 const MAX_CSV_PREVIEW_BYTES = 8_000_000;
+const MAX_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
 const TREE_EXCLUDED_DIRS = new Set(["__pycache__", "node_modules"]);
 
 function isTreeExcludedDir(name: string): boolean {
@@ -94,6 +95,28 @@ function moveFile(from: string, to: string): void {
     if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
     fs.copyFileSync(from, to);
     fs.rmSync(from, { force: true });
+  }
+}
+
+function uploadDestination(parts: string[], filename: string, uploadRoot: string): string {
+  const safeParts = parts
+    .flatMap((value) => value.split(/[\\/]+/))
+    .filter((part) => part && part !== "." && part !== ".." && !part.startsWith("."));
+  if (safeParts.length) return path.join(uploadRoot, ...safeParts);
+  const safeName = path.basename(filename);
+  if (!safeName || safeName.startsWith(".")) {
+    throw new SandboxError(400, "An upload must have a visible destination");
+  }
+  return path.join(uploadRoot, safeName);
+}
+
+function removeUploadChunkRoot(root: string): void {
+  fs.rmSync(root, { recursive: true, force: true });
+  try {
+    fs.rmdirSync(path.dirname(root));
+  } catch (err) {
+    // Other uploads may legitimately still own sibling staging directories.
+    if ((err as NodeJS.ErrnoException).code !== "ENOTEMPTY") throw err;
   }
 }
 
@@ -261,6 +284,110 @@ function sendPreviewImage(req: FastifyRequest, reply: FastifyReply, data: Buffer
   return data;
 }
 
+interface ChunkTransferQuery {
+  transferId: string;
+  path?: string;
+  filename?: string;
+  offset: number;
+  total: number;
+  last?: boolean;
+}
+
+type ChunkTransferRequest = FastifyRequest<{ Querystring: ChunkTransferQuery; Body: Buffer }>;
+
+async function handleChunkTransfer(req: ChunkTransferRequest, reply: FastifyReply) {
+  const paths = activePaths();
+  const transferId = String(req.query.transferId ?? "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{15,127}$/.test(transferId)) {
+    return reply.code(400).send({ detail: "Invalid transferId" });
+  }
+  const offset = Number(req.query.offset);
+  const total = Number(req.query.total);
+  if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(total) ||
+      offset < 0 || total < 0 || total > 1024 * 1024 * 1024 || offset > total) {
+    return reply.code(400).send({ detail: "Invalid chunk range" });
+  }
+
+  const root = path.join(paths.root, ".file-transfers", transferId);
+  const dataFile = path.join(root, "data.bin");
+  const metaFile = path.join(root, "meta.json");
+  type ChunkMeta = { destination: string; received: number };
+  let meta: ChunkMeta;
+
+  try {
+    if (offset === 0) {
+      if (fs.existsSync(root)) {
+        return reply.code(409).send({ detail: "Transfer already exists" });
+      }
+      const destination = uploadDestination(
+        [req.query.path ?? ""],
+        String(req.query.filename ?? ""),
+        paths.uploadDir,
+      );
+      fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+      meta = {
+        destination: safePath(apiRelative(paths.sandbox, destination)),
+        received: 0,
+      };
+      fs.writeFileSync(metaFile, JSON.stringify(meta), { encoding: "utf-8" });
+    } else {
+      if (!fs.existsSync(metaFile) || !fs.existsSync(dataFile)) {
+        return reply.code(404).send({ detail: "Unknown transfer" });
+      }
+      meta = JSON.parse(fs.readFileSync(metaFile, "utf-8")) as ChunkMeta;
+      if (offset !== meta.received) {
+        return reply.code(409).send({ detail: "Chunk offset mismatch" });
+      }
+    }
+
+    const body = req.body instanceof Buffer ? req.body : Buffer.from(String(req.body ?? ""));
+    if (body.length > MAX_UPLOAD_CHUNK_BYTES) {
+      return reply.code(413).send({ detail: "Chunk exceeds the maximum size" });
+    }
+    fs.appendFileSync(dataFile, body);
+    meta.received += body.length;
+    if (meta.received > total) {
+      removeUploadChunkRoot(root);
+      return reply.code(400).send({ detail: "Transfer exceeded its declared size" });
+    }
+    fs.writeFileSync(metaFile, JSON.stringify(meta), { encoding: "utf-8" });
+
+    if (!req.query.last) {
+      return { transferId, offset, received: meta.received, complete: false };
+    }
+    if (meta.received !== total) {
+      removeUploadChunkRoot(root);
+      return reply.code(400).send({ detail: "Transfer is incomplete" });
+    }
+
+    // Revalidate at completion: a symlink can appear after the first chunk.
+    const destination = safePath(apiRelative(paths.sandbox, meta.destination));
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    const finalDest = safePath(apiRelative(paths.sandbox, uniqueDestination(destination)));
+    moveFile(dataFile, finalDest);
+    const renamed = finalDest !== destination
+      ? [{
+          from: apiRelative(paths.sandbox, destination),
+          to: apiRelative(paths.sandbox, finalDest),
+        }]
+      : [];
+    touchProject(currentProjectId());
+    await recordUpload(currentProjectId(), paths.sandbox, [finalDest], provenanceWarn(req));
+    removeUploadChunkRoot(root);
+    return {
+      transferId,
+      path: apiRelative(paths.sandbox, finalDest),
+      renamed,
+      received: meta.received,
+      complete: true,
+    };
+  } catch (err) {
+    if (err instanceof SandboxError) return handle(reply, err);
+    removeUploadChunkRoot(root);
+    throw err;
+  }
+}
+
 export async function registerSandboxRoutes(app: FastifyInstance): Promise<void> {
   app.get("/sandbox/tree", async (req, reply) => {
     const root = activePaths().sandbox;
@@ -414,8 +541,21 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
     }
   });
 
-  app.put<{ Querystring: { path: string }; Body: Buffer }>("/sandbox/file", async (req, reply) => {
+  app.put<{
+    Querystring: {
+      path: string;
+      transferId?: string;
+      filename?: string;
+      offset?: number;
+      total?: number;
+      last?: boolean;
+    };
+    Body: Buffer;
+  }>("/sandbox/file", { bodyLimit: MAX_UPLOAD_CHUNK_BYTES }, async (req, reply) => {
     try {
+      if (req.query.transferId !== undefined) {
+        return await handleChunkTransfer(req as unknown as ChunkTransferRequest, reply);
+      }
       const target = safePath(req.query.path);
       const sandboxRoot = activePaths().sandbox;
       const before = await priorIdentity(sandboxRoot, target);

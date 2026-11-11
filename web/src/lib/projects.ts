@@ -90,6 +90,9 @@ const API_ORIGINS = new Set(
 );
 
 export function isApiUrl(url: string): boolean {
+  // Single-port deployments use a relative API base ("/api/kady"), which has no
+  // parseable origin but is still ours — the token must ride those requests too.
+  if (!url.startsWith("http")) return url.startsWith(API_BASE);
   const origin = originOf(url);
   return origin !== null && API_ORIGINS.has(origin);
 }

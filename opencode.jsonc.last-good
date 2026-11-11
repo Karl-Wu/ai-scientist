@@ -1,0 +1,1 @@
+{"schemaVersion":1,"sha256":"5ff9523022af969ffe1e7f396468d28f79d177a243076ceb7d761ef33cf6bf2d","content":"{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"default_agent\": \"deepworks\"\n}\n"}
