@@ -1154,7 +1154,6 @@ function WorkspacePage({
             </span>
           </button>
           <span className="mx-1 h-4 w-px bg-border/60" aria-hidden />
-          <ProjectSwitcher onOpenProjectView={onOpenProjectView} />
           <InfoTooltip
             content={
               <>
@@ -1167,16 +1166,12 @@ function WorkspacePage({
               onClick={toggleChatNavigation}
               aria-label={chatNavigationOpen ? t("Hide left navigation") : t("Show left navigation")}
               aria-pressed={chatNavigationOpen}
-              className={cn(
-                "shrink-0 rounded-lg p-1.5 transition-colors hover:bg-muted hover:text-foreground",
-                chatNavigationOpen
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
+              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <PanelLeftIcon className="size-4" />
             </button>
           </InfoTooltip>
+          <ProjectSwitcher onOpenProjectView={onOpenProjectView} />
         </div>
         <p className="absolute left-1/2 hidden -translate-x-1/2 text-[11px] text-muted-foreground/60 tracking-wide select-none 2xl:block">
           A research workspace for scientists and biologists
@@ -1222,12 +1217,7 @@ function WorkspacePage({
               onClick={toggleRightPanel}
               aria-label={rightPanelOpen ? t("Hide right panel") : t("Show right panel")}
               aria-pressed={rightPanelOpen}
-              className={cn(
-                "shrink-0 rounded-lg p-1.5 transition-colors hover:bg-muted hover:text-foreground",
-                rightPanelOpen
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
+              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <PanelRightIcon className="size-4" />
             </button>
