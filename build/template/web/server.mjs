@@ -4,6 +4,7 @@ import https from "node:https";
 import fs from "node:fs";
 import process from "node:process";
 import next from "next";
+import { officeHttpsRedirect } from "./office-https.mjs";
 
 const API_PREFIX = "/api/kady";
 const frontendPort = Number(process.env.KADY_FRONTEND_PORT ?? 3000);
@@ -85,7 +86,17 @@ function requestHandler(req, res) {
   });
 }
 
-const server = http.createServer(requestHandler);
+function httpRequestHandler(req, res) {
+  const redirect = officeHttpsRedirect(req, httpsPort);
+  if (redirect) {
+    res.writeHead(308, { Location: String(redirect), "Cache-Control": "public, max-age=31536000" });
+    res.end();
+    return;
+  }
+  requestHandler(req, res);
+}
+
+const server = http.createServer(httpRequestHandler);
 const httpsServer = httpsPort === null ? null : https.createServer({
   key: fs.readFileSync(tlsKey),
   cert: fs.readFileSync(tlsCert),

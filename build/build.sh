@@ -33,12 +33,14 @@ REUSE_FRONTEND=0
 NO_SKILLS=0
 NO_WHEELHOUSE=0
 NO_ADE=0
+NO_OFFICE_RUNTIME=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --reuse-frontend) REUSE_FRONTEND=1; shift ;;
     --no-skills) NO_SKILLS=1; shift ;;
     --no-wheelhouse) NO_WHEELHOUSE=1; shift ;;
     --no-ade) NO_ADE=1; shift ;;
+    --no-office-runtime) NO_OFFICE_RUNTIME=1; shift ;;
     --ade-package) ADE_PACKAGE="${2:?}"; shift 2 ;;
     -h|--help)
       sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
@@ -297,6 +299,21 @@ if [[ "$NO_SKILLS" -eq 0 && -d "$SOURCE_ROOT/projects/default/sandbox/.pi/skills
     tar -xf - -C "$STAGE/platform/seed-skills"
 fi
 
+if [[ "$NO_OFFICE_RUNTIME" -eq 0 ]]; then
+  step "Bundling compressed Office runtime"
+  office_source="${KADY_OFFICE_ASSETS_DIR:-$HOME/.kady/office-assets/zeta-2025-05-13}"
+  office_destination="$STAGE/platform/office-assets/zeta-2025-05-13"
+  mkdir -p "$office_destination"
+  for office_file in soffice.js.gz soffice.data.js.metadata.gz soffice.wasm.gz soffice.data.gz NotoSansSC-Regular.ttf.gz; do
+    [[ -s "$office_source/$office_file" ]] || {
+      echo "Compressed Office runtime asset not found: $office_source/$office_file" >&2
+      echo "Populate the cache first or pass --no-office-runtime." >&2
+      exit 1
+    }
+    cp "$office_source/$office_file" "$office_destination/$office_file"
+  done
+fi
+
 if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
   step "Building Linux x64 Python wheelhouse"
   mkdir -p "$STAGE/platform/wheelhouse"
@@ -394,7 +411,7 @@ COPYFILE_DISABLE=1 tar --no-xattrs -C "$STAGE" \
   server/pi-packages \
   web/src/lib
 
-WEB_PATHS=(web/package.json web/package-lock.json web/.next web/node_modules web/server.mjs)
+WEB_PATHS=(web/package.json web/package-lock.json web/.next web/node_modules web/server.mjs web/office-https.mjs)
 [[ -d "$STAGE/web/public" ]] && WEB_PATHS+=(web/public)
 COPYFILE_DISABLE=1 tar --no-xattrs --exclude 'web/.next/cache' -C "$STAGE" \
   -czf "$PACKAGE_DIR/$WEB_PACKAGE" "${WEB_PATHS[@]}"

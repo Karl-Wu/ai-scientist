@@ -39,7 +39,7 @@ export function OfficeToolbar({ kind, enabled, state, onCommand }: {
         <select aria-label="Font family" className={cn(selectClass, "w-36")} disabled={!enabled || state[".uno:CharFontName"]?.enabled === false}
           value={String(state[".uno:CharFontName"]?.value || "")} onChange={e => onCommand(".uno:CharFontName", { "CharFontName.FamilyName": e.target.value })}>
           <option value="">Font</option>
-          {[...new Set([String(state[".uno:CharFontName"]?.value || ""), "Arial", "Calibri", "Cambria", "Carlito", "Georgia", "Liberation Sans", "Liberation Serif", "Times New Roman", "Verdana"])].filter(Boolean).map(font => <option key={font}>{font}</option>)}
+          {[...new Set([String(state[".uno:CharFontName"]?.value || ""), "Arial", "Calibri", "Cambria", "Carlito", "Georgia", "Liberation Sans", "Liberation Serif", "Noto Sans SC", "Times New Roman", "Verdana"])].filter(Boolean).map(font => <option key={font}>{font}</option>)}
         </select>
         <select aria-label="Font size" className={cn(selectClass, "w-16")} disabled={!enabled || state[".uno:FontHeight"]?.enabled === false}
           value={String(state[".uno:FontHeight"]?.value || "")} onChange={e => onCommand(".uno:FontHeight", { "FontHeight.Height": Number(e.target.value) })}>

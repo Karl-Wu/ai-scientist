@@ -2,13 +2,20 @@
 'use strict';
 var canvas = document.getElementById('qtcanvas');
 var base = location.origin + '/office-assets/zeta-2025-05-13/';
-var port, loaded = false, filename, exportPending = false;
+var port, loaded = false, filename, exportPending = false, fontBytes;
 function notify(cmd, extra, transfer) { parent.postMessage({ source: 'kady-office', cmd, ...extra }, location.origin, transfer || []); }
 var Module = {
   canvas,
   uno_scripts: [location.origin + '/office/zeta.js', location.origin + '/office/thread.js'],
   locateFile: (file, prefix) => (prefix || base) + file,
-  mainScriptUrlOrBlob: new Blob(["importScripts('" + base + "soffice.js');"], { type: 'text/javascript' }),
+  mainScriptUrlOrBlob: new Blob(["importScripts('" + location.origin + "/office/wasm-cache.js', '" + base + "soffice.js');"], { type: 'text/javascript' }),
+  preRun: [() => {
+    if (!fontBytes) return;
+    try {
+      FS.mkdirTree('/usr/share/fonts/truetype/kady');
+      FS.writeFile('/usr/share/fonts/truetype/kady/NotoSansSC-Regular.ttf', fontBytes);
+    } catch (error) { console.warn('Chinese font setup unavailable:', error); }
+  }],
   setStatus: text => { if (text) notify('progress', { message: text }); },
   onAbort: () => notify('error', { message: 'The Office engine could not start. Reload to try again.' }),
 };
@@ -45,28 +52,45 @@ window.addEventListener('message', event => {
     if (message.cmd === 'command') canvas.focus();
   }
 });
+const startEngine = () => {
+  const loadEngine = () => {
+    notify('progress', { message: 'Loading Office engine…' });
+    const script = document.createElement('script'); script.src = base + 'soffice.js';
+    script.onerror = () => notify('error', { message: 'Could not load the Office editor. Check your connection and reload.' });
+    script.onload = () => Module.uno_main.then(thread => {
+      notify('progress', { message: 'Initializing Office engine…' });
+      port = thread;
+      port.onmessage = event => {
+        const message = event.data;
+        if (message.cmd === 'ready') notify('ready');
+        else if (message.cmd === 'opened') {
+          canvas.style.visibility = 'visible'; window.dispatchEvent(new Event('resize'));
+          setTimeout(() => window.dispatchEvent(new Event('resize')), 250); notify('opened');
+        } else if (message.cmd === 'exported') {
+          exportPending = false;
+          const bytes = FS.readFile('/tmp/office/export.' + filename.split('.').pop()).slice().buffer;
+          notify('exported', { id: message.id, bytes }, [bytes]);
+        } else if (message.cmd === 'error') { exportPending = false; notify('error', { message: message.message }); }
+        else if (message.cmd === 'save-request' || message.cmd === 'download-request') notify(message.cmd);
+        else if (message.cmd === 'modified') notify('modified');
+        else if (message.cmd === 'command-state' || message.cmd === 'selection' || message.cmd === 'export-started') notify(message.cmd, message);
+      };
+    }).catch(() => notify('error', { message: 'Office initialization failed. Reload to try again.' }));
+    document.body.appendChild(script);
+  };
+  const cacheScript = document.createElement('script'); cacheScript.src = location.origin + '/office/wasm-cache.js';
+  cacheScript.onerror = loadEngine;
+  cacheScript.onload = loadEngine;
+  document.body.appendChild(cacheScript);
+};
+
 if (!crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-  notify('error', { message: 'This browser cannot start the Office engine here. Open Kady on localhost or HTTPS in a current Chrome, Edge, Firefox or Safari browser.' });
+  notify('error', { message: `This browser cannot start the Office engine at ${location.origin}. Open Kady on localhost or HTTPS in a current Chrome, Edge, Firefox or Safari browser.` });
 } else {
-  const script = document.createElement('script'); script.src = base + 'soffice.js';
-  script.onerror = () => notify('error', { message: 'Could not load the Office editor. Check your connection and reload.' });
-  script.onload = () => Module.uno_main.then(thread => {
-    port = thread;
-    port.onmessage = event => {
-      const message = event.data;
-      if (message.cmd === 'ready') notify('ready');
-      else if (message.cmd === 'opened') {
-        canvas.style.visibility = 'visible'; window.dispatchEvent(new Event('resize'));
-        setTimeout(() => window.dispatchEvent(new Event('resize')), 250); notify('opened');
-      } else if (message.cmd === 'exported') {
-        exportPending = false;
-        const bytes = FS.readFile('/tmp/office/export.' + filename.split('.').pop()).slice().buffer;
-        notify('exported', { id: message.id, bytes }, [bytes]);
-      } else if (message.cmd === 'error') { exportPending = false; notify('error', { message: message.message }); }
-      else if (message.cmd === 'save-request' || message.cmd === 'download-request') notify(message.cmd);
-      else if (message.cmd === 'modified') notify('modified');
-      else if (message.cmd === 'command-state' || message.cmd === 'selection' || message.cmd === 'export-started') notify(message.cmd, message);
-    };
-  }).catch(() => notify('error', { message: 'Office initialization failed. Reload to try again.' }));
-  document.body.appendChild(script);
+  notify('progress', { message: 'Loading Chinese fonts…' });
+  fetch(base + 'NotoSansSC-Regular.ttf')
+    .then(response => { if (!response.ok) throw Error(`HTTP ${response.status}`); return response.arrayBuffer(); })
+    .then(bytes => { fontBytes = new Uint8Array(bytes); notify('progress', { message: 'Starting Office engine…' }); })
+    .catch(error => { console.warn('Chinese font unavailable:', error); })
+    .finally(startEngine);
 }

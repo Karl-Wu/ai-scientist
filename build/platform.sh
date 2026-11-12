@@ -33,6 +33,7 @@ load_config() {
   KADY_PUBLIC_HOST="${KADY_PUBLIC_HOST:-}"
   KADY_ALLOWED_ORIGINS="${KADY_ALLOWED_ORIGINS:-}"
   KADY_OFFLINE="${KADY_OFFLINE:-0}"
+  KADY_PREPARE_SANDBOXES="${KADY_PREPARE_SANDBOXES:-1}"
   KADY_REQUIRE_AUTH="${KADY_REQUIRE_AUTH:-0}"
   ADE_HOME="${ADE_HOME:-}"
   ADE_PROJECT="${ADE_PROJECT:-}"
@@ -54,6 +55,7 @@ load_config() {
   KADY_PUBLIC_HOST="${KADY_PUBLIC_HOST:-$KADY_FRONTEND_HOST}"
   KADY_ALLOWED_ORIGINS="${KADY_ALLOWED_ORIGINS:-}"
   KADY_OFFLINE="${KADY_OFFLINE:-0}"
+  KADY_PREPARE_SANDBOXES="${KADY_PREPARE_SANDBOXES:-1}"
   KADY_REQUIRE_AUTH="${KADY_REQUIRE_AUTH:-0}"
   ADE_HOME="${ADE_HOME:-$ROOT/ade}"
   ADE_PROJECT="${ADE_PROJECT:-$ADE_HOME/workspace}"
@@ -212,7 +214,11 @@ prepare_sandbox_environments() {
   local sandbox_requirements="$ROOT/platform/sandbox-requirements.txt"
   local pyproject sandbox status
   local node="$ROOT/platform/node/bin/node"
+  local uv_timeout_command=""
   [[ -x "$uv" && -f "$sandbox_requirements" && -d "$wheelhouse" ]] || return 0
+  if command -v timeout >/dev/null 2>&1; then
+    uv_timeout_command="timeout 60"
+  fi
 
   if [[ -x "$node" && -d "$ROOT/server/node_modules" ]]; then
     (cd "$ROOT/server" && "$node" node_modules/tsx/dist/cli.mjs src/sandbox-migrate.ts)
@@ -225,21 +231,15 @@ prepare_sandbox_environments() {
     status=0
     (
       cd "$sandbox"
-      UV_PYTHON_DOWNLOADS=never "$uv" sync \
+      UV_PYTHON_DOWNLOADS=never $uv_timeout_command "$uv" sync \
         --offline --no-index --find-links "$wheelhouse" \
         --python "$(command -v python3)"
     ) || status=1
-    if [[ "$status" -ne 0 && "$KADY_OFFLINE" != "1" ]]; then
-      (
-        cd "$sandbox"
-        UV_PYTHON_DOWNLOADS=never "$uv" sync --python "$(command -v python3)"
-      ) || {
-        echo "Sandbox analysis runtime could not be prepared: $sandbox" >&2
-        return 1
-      }
-    elif [[ "$status" -ne 0 ]]; then
-      echo "Sandbox analysis runtime could not be prepared offline: $sandbox" >&2
-      return 1
+    if [[ "$status" -ne 0 ]]; then
+      # Project dependencies are user-owned and may intentionally require
+      # packages outside the packaged wheelhouse. Prewarming must never block
+      # the Web service; the project's next `uv run` can resolve them itself.
+      echo "Sandbox analysis runtime prewarm skipped: $sandbox" >&2
     fi
   done < <(find "$ROOT/projects" -path '*/sandbox/pyproject.toml' -type f -print0 2>/dev/null)
 }
@@ -247,7 +247,9 @@ prepare_sandbox_environments() {
 start() {
   load_config
   prepare_runtime
-  prepare_sandbox_environments
+  if [[ "$KADY_PREPARE_SANDBOXES" == "1" ]]; then
+    prepare_sandbox_environments
+  fi
 
   if [[ -f "$ROOT/run/platform.pid" ]]; then
     local oldpid
@@ -272,6 +274,9 @@ start() {
   export KADY_HTTPS_PORT KADY_HTTPS_HOST KADY_TLS_KEY KADY_TLS_CERT
   export KADY_OFFLINE KADY_REQUIRE_AUTH
   export KADY_WHEELHOUSE="$ROOT/platform/wheelhouse"
+  if [[ -d "$ROOT/platform/office-assets/zeta-2025-05-13" ]]; then
+    export KADY_OFFICE_ASSETS_DIR="$ROOT/platform/office-assets/zeta-2025-05-13"
+  fi
   export ADE_HOME ADE_PROJECT ADE_BIN ADE_SKILLS_DIR ADE_MALLOY_HOME ADE_NODE_BINARY ADE_PYTHON ADE_BOOTSTRAP ADE_VERSION
   export NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
   if [[ "$KADY_OFFLINE" == "1" ]]; then
