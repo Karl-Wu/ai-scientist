@@ -32,7 +32,7 @@ load_config() {
   KADY_HTTPS_HOST="${KADY_HTTPS_HOST:-0.0.0.0}"
   KADY_PUBLIC_HOST="${KADY_PUBLIC_HOST:-}"
   KADY_ALLOWED_ORIGINS="${KADY_ALLOWED_ORIGINS:-}"
-  KADY_OFFLINE="${KADY_OFFLINE:-1}"
+  KADY_OFFLINE="${KADY_OFFLINE:-0}"
   KADY_REQUIRE_AUTH="${KADY_REQUIRE_AUTH:-0}"
   ADE_HOME="${ADE_HOME:-}"
   ADE_PROJECT="${ADE_PROJECT:-}"
@@ -53,7 +53,7 @@ load_config() {
   KADY_HTTPS_HOST="${KADY_HTTPS_HOST:-0.0.0.0}"
   KADY_PUBLIC_HOST="${KADY_PUBLIC_HOST:-$KADY_FRONTEND_HOST}"
   KADY_ALLOWED_ORIGINS="${KADY_ALLOWED_ORIGINS:-}"
-  KADY_OFFLINE="${KADY_OFFLINE:-1}"
+  KADY_OFFLINE="${KADY_OFFLINE:-0}"
   KADY_REQUIRE_AUTH="${KADY_REQUIRE_AUTH:-0}"
   ADE_HOME="${ADE_HOME:-$ROOT/ade}"
   ADE_PROJECT="${ADE_PROJECT:-$ADE_HOME/workspace}"
@@ -137,6 +137,7 @@ prepare_runtime() {
   local uv="$ROOT/platform/bin/uv"
   local wheelhouse="$ROOT/platform/wheelhouse"
   local requirements="$ROOT/platform/helper-requirements.txt"
+  local sandbox_requirements="$ROOT/platform/sandbox-requirements.txt"
 
   [[ -x "$node" ]] || { echo "Bundled Node runtime is missing" >&2; exit 3; }
   [[ -d "$ROOT/server/node_modules" ]] || { echo "server dependencies are missing" >&2; exit 3; }
@@ -205,9 +206,48 @@ prepare_runtime() {
   fi
 }
 
+prepare_sandbox_environments() {
+  local uv="$ROOT/platform/bin/uv"
+  local wheelhouse="$ROOT/platform/wheelhouse"
+  local sandbox_requirements="$ROOT/platform/sandbox-requirements.txt"
+  local pyproject sandbox status
+  local node="$ROOT/platform/node/bin/node"
+  [[ -x "$uv" && -f "$sandbox_requirements" && -d "$wheelhouse" ]] || return 0
+
+  if [[ -x "$node" && -d "$ROOT/server/node_modules" ]]; then
+    (cd "$ROOT/server" && "$node" node_modules/tsx/dist/cli.mjs src/sandbox-migrate.ts)
+  fi
+
+  while IFS= read -r -d '' pyproject; do
+    sandbox="$(dirname "$pyproject")"
+    grep -q 'scanpy' "$pyproject" || continue
+    echo "Preparing sandbox analysis runtime: $sandbox"
+    status=0
+    (
+      cd "$sandbox"
+      UV_PYTHON_DOWNLOADS=never "$uv" sync \
+        --offline --no-index --find-links "$wheelhouse" \
+        --python "$(command -v python3)"
+    ) || status=1
+    if [[ "$status" -ne 0 && "$KADY_OFFLINE" != "1" ]]; then
+      (
+        cd "$sandbox"
+        UV_PYTHON_DOWNLOADS=never "$uv" sync --python "$(command -v python3)"
+      ) || {
+        echo "Sandbox analysis runtime could not be prepared: $sandbox" >&2
+        return 1
+      }
+    elif [[ "$status" -ne 0 ]]; then
+      echo "Sandbox analysis runtime could not be prepared offline: $sandbox" >&2
+      return 1
+    fi
+  done < <(find "$ROOT/projects" -path '*/sandbox/pyproject.toml' -type f -print0 2>/dev/null)
+}
+
 start() {
   load_config
   prepare_runtime
+  prepare_sandbox_environments
 
   if [[ -f "$ROOT/run/platform.pid" ]]; then
     local oldpid
@@ -231,6 +271,7 @@ start() {
   export KADY_ALLOWED_ORIGINS
   export KADY_HTTPS_PORT KADY_HTTPS_HOST KADY_TLS_KEY KADY_TLS_CERT
   export KADY_OFFLINE KADY_REQUIRE_AUTH
+  export KADY_WHEELHOUSE="$ROOT/platform/wheelhouse"
   export ADE_HOME ADE_PROJECT ADE_BIN ADE_SKILLS_DIR ADE_MALLOY_HOME ADE_NODE_BINARY ADE_PYTHON ADE_BOOTSTRAP ADE_VERSION
   export NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
   if [[ "$KADY_OFFLINE" == "1" ]]; then

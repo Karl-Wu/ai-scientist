@@ -25,6 +25,7 @@ import { DEFAULT_PROJECT_ID, PROJECTS_ROOT } from "./config.ts";
 import { isWithin } from "./sandbox-fs.ts";
 import { currentProjectId } from "./scope.ts";
 import { seedSandboxFiles } from "./sandbox-seed.ts";
+import { seedAdeBootstrapPrompt } from "./agent/prompts.ts";
 
 const INDEX_PATH = path.join(PROJECTS_ROOT, "index.json");
 const RESERVED_IDS = new Set(["new", "index", "archive", "..", "."]);
@@ -283,6 +284,7 @@ export function createProject(input: CreateProjectInput): ProjectMeta {
   };
   fs.mkdirSync(paths.sandbox, { recursive: true });
   seedSandboxFiles(paths);
+  seedAdeBootstrapPrompt(paths);
   writeProjectJson(paths, meta);
 
   const index = loadIndex();
@@ -370,6 +372,7 @@ export function ensureProjectExists(projectId: string): ProjectPaths {
   fs.mkdirSync(paths.kadyDir, { recursive: true });
   // Covers projects that predate sandbox seeding; no-op once the files exist.
   seedSandboxFiles(paths);
+  seedAdeBootstrapPrompt(paths);
 
   if (!fs.existsSync(paths.projectJson)) {
     const now = nowIso();

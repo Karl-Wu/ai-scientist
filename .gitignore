@@ -24,6 +24,8 @@ build/
 !build/.gitignore
 !build/README.md
 !build/build.sh
+!build/sandbox-requirements.txt
+!build/sandbox-requirements.lock
 !build/platform.sh
 !build/platform.env.example
 !build/deploy.sh

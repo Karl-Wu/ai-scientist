@@ -82,13 +82,11 @@ describe("AGENTS.md versioned re-seed", () => {
     expect(agentsMdStatus(paths)).toBe("current");
     expect(fs.readFileSync(agentsMd("seed-v"), "utf-8")).toContain("read-only raw data");
 
-    // Roll the sandbox back to the first shipped version: the next seed pass upgrades it.
     fs.writeFileSync(agentsMd("seed-v"), AGENTS_MD_HISTORY[0]);
     expect(agentsMdStatus(paths)).toBe("outdated");
     seedSandboxFiles(paths);
     expect(fs.readFileSync(agentsMd("seed-v"), "utf-8")).toBe(AGENTS_MD);
 
-    // A user edit is never overwritten, but is reported; restore is explicit.
     fs.writeFileSync(agentsMd("seed-v"), AGENTS_MD + "\n## My lab rules\n- always use seed 42\n");
     seedSandboxFiles(paths);
     expect(agentsMdStatus(paths)).toBe("edited");
@@ -98,5 +96,47 @@ describe("AGENTS.md versioned re-seed", () => {
 
     fs.rmSync(agentsMd("seed-v"));
     expect(agentsMdStatus(paths)).toBe("missing");
+  });
+});
+
+describe("sandbox scientific runtime seeding", () => {
+  it("seeds the pinned offline single-cell runtime for new projects", () => {
+    const paths = ensureProjectExists("study");
+    seedSandboxFiles(paths);
+    const contents = fs.readFileSync(path.join(paths.sandbox, "pyproject.toml"), "utf-8");
+
+    expect(contents).toContain('requires-python = ">=3.12,<3.13"');
+    for (const dependency of [
+      "anndata",
+      "scanpy[leiden]",
+      "leidenalg",
+      "igraph",
+      "umap-learn",
+      "scikit-learn",
+    ]) {
+      expect(contents).toContain(dependency);
+    }
+  });
+
+  it("upgrades untouched old sandbox dependencies but preserves user edits", () => {
+    const paths = ensureProjectExists("legacy");
+    fs.writeFileSync(
+      path.join(paths.sandbox, "pyproject.toml"),
+      `[project]\nname = "kady-sandbox"\nversion = "0.1.0"\ndescription = "Kady project sandbox (managed by uv)"\nrequires-python = ">=3.11"\ndependencies = [\n    "numpy",\n    "pandas",\n    "matplotlib",\n    "scipy",\n]\n`,
+      "utf-8",
+    );
+    seedSandboxFiles(paths);
+    let contents = fs.readFileSync(path.join(paths.sandbox, "pyproject.toml"), "utf-8");
+    expect(contents).toContain("scanpy[leiden]");
+
+    fs.writeFileSync(
+      path.join(paths.sandbox, "pyproject.toml"),
+      contents.replace('"scikit-learn>=1.9,<2",', '"torch",'),
+      "utf-8",
+    );
+    seedSandboxFiles(paths);
+    contents = fs.readFileSync(path.join(paths.sandbox, "pyproject.toml"), "utf-8");
+    expect(contents).toContain('"torch"');
+    expect(contents).not.toContain('"scikit-learn');
   });
 });

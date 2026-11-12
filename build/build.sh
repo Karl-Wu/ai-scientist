@@ -326,8 +326,61 @@ if [[ "$NO_WHEELHOUSE" -eq 0 ]]; then
       --python-version 3.12 \
       -r "$requirements"
   fi
+  # uv exports environment markers for the build host. Greenlet is optional on
+  # macOS/arm64 but mandatory on Linux/x86_64, so fetch it explicitly when the
+  # host pip skipped that marker branch.
+  greenlet_specification="$(grep -E '^greenlet==' "$requirements" | head -1 | cut -d';' -f1)"
+  if [[ -n "$greenlet_specification" ]] &&
+     [[ -z "$(find "$wheel_cache" -maxdepth 1 -type f -iname 'greenlet-*.whl' -print -quit)" ]]; then
+    python3 -m pip download \
+      --only-binary=:all: \
+      --dest "$wheel_cache" \
+      --platform manylinux2014_x86_64 \
+      --platform manylinux_2_17_x86_64 \
+      --platform manylinux_2_28_x86_64 \
+      --platform manylinux_2_31_x86_64 \
+      --platform manylinux_2_32_x86_64 \
+      --platform manylinux_2_33_x86_64 \
+      --platform manylinux_2_34_x86_64 \
+      --platform manylinux_2_35_x86_64 \
+      --platform manylinux_2_36_x86_64 \
+      --platform linux_x86_64 \
+      --implementation cp \
+      --abi cp312 \
+      --python-version 3.12 \
+      "$greenlet_specification"
+  fi
   # Keep the immutable build cache intact while making a package-owned copy.
   cp -a "$wheel_cache/." "$STAGE/platform/wheelhouse/"
+
+  step "Building Linux x64 sandbox analysis wheelhouse"
+  sandbox_requirements="$BUILD_ROOT/sandbox-requirements.lock"
+  sandbox_digest="$(git -C "$SOURCE_ROOT" hash-object "$sandbox_requirements")"
+  sandbox_wheel_cache="$CACHE/wheelhouse/sandbox-linux-x64-py312-$sandbox_digest"
+  if [[ ! -d "$sandbox_wheel_cache" || -z "$(ls -A "$sandbox_wheel_cache" 2>/dev/null || true)" ]]; then
+    rm -rf "$sandbox_wheel_cache"
+    mkdir -p "$sandbox_wheel_cache"
+    python3 -m pip download \
+      --only-binary=:all: \
+      --dest "$sandbox_wheel_cache" \
+      --platform manylinux2014_x86_64 \
+      --platform manylinux_2_17_x86_64 \
+      --platform manylinux_2_27_x86_64 \
+      --platform manylinux_2_28_x86_64 \
+      --platform manylinux_2_31_x86_64 \
+      --platform manylinux_2_32_x86_64 \
+      --platform manylinux_2_33_x86_64 \
+      --platform manylinux_2_34_x86_64 \
+      --platform manylinux_2_35_x86_64 \
+      --platform manylinux_2_36_x86_64 \
+      --platform linux_x86_64 \
+      --implementation cp \
+      --abi cp312 \
+      --python-version 3.12 \
+      -r "$sandbox_requirements"
+  fi
+  cp -a "$sandbox_wheel_cache/." "$STAGE/platform/wheelhouse/"
+  cp "$sandbox_requirements" "$STAGE/platform/sandbox-requirements.txt"
   cp "$requirements" "$STAGE/platform/helper-requirements.txt"
 fi
 

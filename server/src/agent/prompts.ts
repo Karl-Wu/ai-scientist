@@ -403,6 +403,35 @@ ADE 会写这五样东西：\`sources/\`、\`semantic/\`、\`extractions/\`、\`
 `;
 }
 
+/**
+ * Project creation needs the ADE command template before a chat tab exists.
+ * Do not seed the full scientific template set here: that would erase the
+ * distinction between legacy projects that have not yet been offered later
+ * template additions.
+ */
+export function seedAdeBootstrapPrompt(paths: ProjectPaths): void {
+  const template = adeBootstrapTemplate(paths);
+  if (!template) return;
+  const file = path.join(promptsDir(paths, "project"), `${ADE_BOOTSTRAP_TEMPLATE_NAME}.md`);
+  let current: string | null = null;
+  try {
+    current = fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : null;
+  } catch {
+    current = null;
+  }
+  if (current === null) {
+    const offered = readSeededNames(paths);
+    if (offered.has(ADE_BOOTSTRAP_TEMPLATE_NAME)) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, template, "utf-8");
+    writeSeededNames(paths, [...offered, ADE_BOOTSTRAP_TEMPLATE_NAME]);
+    return;
+  }
+  if (current.includes("<!-- ai-scientist: ade-bootstrap-v1 -->") && !current.includes(ADE_BOOTSTRAP_TEMPLATE_MARKER)) {
+    fs.writeFileSync(file, template, "utf-8");
+  }
+}
+
 // Canonical SHA-256 of the previously shipped bodies, including frontmatter.
 // Keep historic digests when changing defaults; never infer an edit from a name.
 const PREVIOUS_TEMPLATE_DIGESTS: Record<string, string[]> = {

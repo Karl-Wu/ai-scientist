@@ -25,6 +25,7 @@ describe("ADE bootstrap prompt seeding", () => {
 
   it("creates a project-specific template from the configured ADE runtime", () => {
     const paths = resolvePaths("study");
+    expect(fs.existsSync(path.join(paths.sandbox, ".pi/prompts/ade-bootstrap.md"))).toBe(true);
     seedPromptTemplates(paths);
     const file = path.join(paths.sandbox, ".pi/prompts/ade-bootstrap.md");
     const content = fs.readFileSync(file, "utf-8");

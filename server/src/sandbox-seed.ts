@@ -19,6 +19,25 @@ const PYPROJECT_TOML = `[project]
 name = "kady-sandbox"
 version = "0.1.0"
 description = "Kady project sandbox (managed by uv)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.5.1,<2.6",
+    "pandas>=2.3.3,<3",
+    "matplotlib>=3.11,<3.12",
+    "scipy>=1.18,<1.19",
+    "anndata>=0.12.19,<0.13",
+    "h5py>=3.16,<4",
+    "scanpy[leiden]>=1.12.5,<1.13",
+    "leidenalg>=0.12,<0.13",
+    "igraph>=1,<2",
+    "umap-learn>=0.6,<0.7",
+    "scikit-learn>=1.9,<2",
+]
+`;
+const PYPROJECT_TOML_V1 = `[project]
+name = "kady-sandbox"
+version = "0.1.0"
+description = "Kady project sandbox (managed by uv)"
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
@@ -27,6 +46,26 @@ dependencies = [
     "scipy",
 ]
 `;
+const PYPROJECT_TOML_V2 = `[project]
+name = "kady-sandbox"
+version = "0.1.0"
+description = "Kady project sandbox (managed by uv)"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "scipy",
+    "anndata>=0.12.19",
+    "h5py>=3.16.0",
+    "scanpy>=1.12.5",
+    "leidenalg>=0.12.0",
+    "igraph>=1.0.0",
+    "umap-learn>=0.6.0",
+    "scikit-learn>=1.9.1",
+]
+`;
+const PYPROJECT_TOML_HISTORY: readonly string[] = [PYPROJECT_TOML_V1, PYPROJECT_TOML_V2, PYPROJECT_TOML];
 
 const AGENTS_MD_V1 = `# Sandbox instructions
 
@@ -263,6 +302,18 @@ function rememberSeeded(paths: ProjectPaths, names: Set<string>): void {
   }
 }
 
+function pyprojectStatus(paths: ProjectPaths): "current" | "outdated" | "edited" | "missing" {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.join(paths.sandbox, "pyproject.toml"), "utf-8");
+  } catch {
+    return "missing";
+  }
+  if (canon(text) === canon(PYPROJECT_TOML)) return "current";
+  if (PYPROJECT_TOML_HISTORY.some((version) => canon(text) === canon(version))) return "outdated";
+  return "edited";
+}
+
 /**
  * Write pyproject.toml + AGENTS.md into the sandbox on first provisioning.
  *
@@ -290,6 +341,11 @@ export function seedSandboxFiles(paths: ProjectPaths, opts?: { force?: boolean }
   if (agentsMdStatus(paths) === "outdated") {
     fs.writeFileSync(path.join(paths.sandbox, "AGENTS.md"), AGENTS_MD, "utf-8");
   }
+  // Upgrade an untouched scientific sandbox to the pinned offline runtime. A
+  // user-modified pyproject is left alone so custom dependency choices survive.
+  if (pyprojectStatus(paths) === "outdated") {
+    fs.writeFileSync(path.join(paths.sandbox, "pyproject.toml"), PYPROJECT_TOML, "utf-8");
+  }
 }
 
 /** Overwrite AGENTS.md with the current shipped text (explicit user action). */
@@ -314,10 +370,22 @@ export function syncSandboxVenv(paths: ProjectPaths, opts?: { force?: boolean })
   seedSandboxFiles(paths, opts);
   const uv = findUv();
   if (!uv) return false;
-  const res = spawnSync(uv, ["sync"], {
+  const wheelhouse = process.env.KADY_WHEELHOUSE?.trim();
+  let args = ["sync"];
+  if (wheelhouse && fs.existsSync(wheelhouse)) {
+    args = ["sync", "--offline", "--no-index", "--find-links", wheelhouse];
+  }
+  let res = spawnSync(uv, args, {
     cwd: paths.sandbox,
     stdio: "ignore",
     timeout: 5 * 60 * 1000,
   });
+  if (res.status !== 0 && args.length > 1) {
+    res = spawnSync(uv, ["sync"], {
+      cwd: paths.sandbox,
+      stdio: "ignore",
+      timeout: 5 * 60 * 1000,
+    });
+  }
   return res.status === 0;
 }
