@@ -101,7 +101,7 @@ function ProjectNavigation({
   const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
     { id: "files", label: t("Files"), hint: t("Browse and manage project files"), Icon: FilesIcon, color: "text-blue-500" },
     { id: "workflows", label: t("Workflows"), hint: t("Browse and launch scientific workflows"), Icon: WorkflowIcon, color: "text-violet-500" },
-    { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-blue-500" },
+    { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-amber-500" },
     { id: "automation", label: t("Tasks"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
 

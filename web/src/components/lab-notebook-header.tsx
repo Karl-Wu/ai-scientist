@@ -232,7 +232,7 @@ export function LabNotebookHeader({
     <header className="@container/notebook shrink-0">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <BookOpenIcon className="size-4 shrink-0 text-blue-500" />
+          <BookOpenIcon className="size-4 shrink-0 text-amber-500" />
           <div className="min-w-0">
             <h1 className="text-xs font-semibold">{t("Journal")}</h1>
             <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p>

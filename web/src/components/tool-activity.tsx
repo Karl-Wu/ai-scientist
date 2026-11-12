@@ -367,7 +367,7 @@ export function NotebookEntryChip({
       data-tool-call-id={item.id}
       className="my-1 flex w-full items-center gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10 px-2.5 py-1.5 text-xs"
     >
-      <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
+      <BookOpenIcon className="size-3.5 shrink-0 text-amber-500" />
       <span className="font-medium text-foreground">{t("Journal")} · {t(typeLabel)}</span>
       {title && (
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{title}</span>
