@@ -177,7 +177,7 @@ function TabBar({
   return (
     <div
       ref={scrollRef}
-      className={cn("flex overflow-x-auto border-b bg-muted/20 shrink-0", uniqueTabs.length === 0 && "lg:hidden")}
+      className={cn("flex overflow-x-auto border-b bg-muted/20 shrink-0", (uniqueTabs.length === 0 || showNotebook || showCompute || showAutomation) && "lg:hidden")}
       style={{ scrollbarWidth: "none" }}
     >
       {/* Pinned Lab Notebook tab — always first, never closable */}
@@ -236,7 +236,7 @@ function TabBar({
         </button>
       )}
 
-      {uniqueTabs.map((tab) => {
+      {!showNotebook && !showCompute && !showAutomation && uniqueTabs.map((tab) => {
         const name = tab.path.split("/").pop() ?? tab.path;
         const isActive = !showNotebook && !showCompute && !showAutomation && tab.path === activeTabPath;
         const mode = tabModes[tab.path] ?? "view";

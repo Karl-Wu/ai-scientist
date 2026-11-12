@@ -45,6 +45,20 @@ function panelProps(path = "a.txt"): React.ComponentProps<typeof FilePreviewPane
 
 afterEach(() => vi.restoreAllMocks());
 
+it.each(["showNotebook", "showCompute", "showAutomation"] as const)(
+  "hides file tabs while %s is selected and restores them on return",
+  (surface) => {
+    const props = panelProps();
+    const { rerender } = render(<FilePreviewPanel {...props} />);
+    expect(screen.getAllByTitle("Close tab")).toHaveLength(2);
+    rerender(<FilePreviewPanel {...props} {...{ [surface]: true }} />);
+    expect(screen.queryAllByTitle("Close tab")).toHaveLength(0);
+    rerender(<FilePreviewPanel {...props} />);
+    expect(screen.getAllByTitle("Close tab")).toHaveLength(2);
+    expect(props.onTabClose).not.toHaveBeenCalled();
+  },
+);
+
 it.each(["a.txt", "a.tex"])("retains %s draft across file, notebook, compute, and project navigation", async (path) => {
   const props = panelProps(path);
   const { rerender } = render(<FilePreviewPanel {...props} />);
