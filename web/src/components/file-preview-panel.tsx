@@ -46,9 +46,7 @@ import {
   ChevronUpIcon,
   RefreshCcwIcon,
   AlertCircleIcon,
-  ServerCogIcon,
   GitBranchIcon,
-  AlarmClockIcon,
 } from "lucide-react";
 import {
   Suspense,
@@ -134,11 +132,8 @@ function TabBar({
   onSelect,
   onClose,
   showNotebook,
-  onSelectNotebook,
   showCompute,
-  onSelectCompute,
   showAutomation = false,
-  onSelectAutomation,
 }: {
   tabs: Tab[];
   activeTabPath: string | null;
@@ -146,11 +141,8 @@ function TabBar({
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
   showNotebook: boolean;
-  onSelectNotebook: () => void;
   showCompute: boolean;
-  onSelectCompute: () => void;
   showAutomation?: boolean;
-  onSelectAutomation?: () => void;
 }) {
   const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -171,74 +163,19 @@ function TabBar({
     });
   }, [tabs]);
 
-  // Project surfaces stay pinned in this tab strip on smaller screens. At
-  // desktop widths they move to the project navigation rail.
+  if (uniqueTabs.length === 0 || showNotebook || showCompute || showAutomation) {
+    return null;
+  }
 
   return (
     <div
       ref={scrollRef}
-      className={cn("flex overflow-x-auto border-b bg-muted/20 shrink-0", (uniqueTabs.length === 0 || showNotebook || showCompute || showAutomation) && "lg:hidden")}
+      className="flex shrink-0 overflow-x-auto border-b bg-muted/20"
       style={{ scrollbarWidth: "none" }}
     >
-      {/* Pinned Lab Notebook tab — always first, never closable */}
-      <button
-        type="button"
-        data-active={showNotebook}
-        onClick={onSelectNotebook}
-        title={t("Journal")}
-        className={cn(
-          "group relative flex shrink-0 cursor-pointer select-none lg:hidden",
-          "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
-          showNotebook
-            ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
-            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-        )}
-      >
-        <BookOpenIcon className="size-3.5 shrink-0 text-blue-500" />
-        <span className="whitespace-nowrap font-medium">{t("Journal")}</span>
-      </button>
-
-      {/* Pinned Compute tab — project job history, never closable */}
-      <button
-        type="button"
-        data-active={showCompute}
-        onClick={onSelectCompute}
-        title="Modal Compute"
-        className={cn(
-          "group relative flex shrink-0 select-none lg:hidden",
-          "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
-          showCompute
-            ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
-            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-        )}
-      >
-        <ServerCogIcon className="size-3.5 shrink-0 text-violet-500" />
-        <span className="whitespace-nowrap font-medium">Compute</span>
-      </button>
-
-      {/* Pinned Automation tab — schedules + missions, never closable */}
-      {onSelectAutomation && (
-        <button
-          type="button"
-          data-active={showAutomation}
-          onClick={onSelectAutomation}
-          title={t("Scheduled tasks and ongoing missions")}
-          className={cn(
-            "group relative flex shrink-0 select-none lg:hidden",
-            "items-center gap-1.5 border-r px-3 py-1.5 text-xs transition-colors",
-            showAutomation
-              ? "bg-background text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
-              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-          )}
-        >
-          <AlarmClockIcon className="size-3.5 shrink-0 text-emerald-500" />
-          <span className="whitespace-nowrap font-medium">{t("Tasks")}</span>
-        </button>
-      )}
-
-      {!showNotebook && !showCompute && !showAutomation && uniqueTabs.map((tab) => {
+      {uniqueTabs.map((tab) => {
         const name = tab.path.split("/").pop() ?? tab.path;
-        const isActive = !showNotebook && !showCompute && !showAutomation && tab.path === activeTabPath;
+        const isActive = tab.path === activeTabPath;
         const mode = tabModes[tab.path] ?? "view";
         const isEditing = mode === "edit" || mode === "annotate";
 
@@ -1766,11 +1703,8 @@ export function FilePreviewPanel({
   onCompileLatex,
   revealTarget,
   showNotebook,
-  onSelectNotebook,
   showCompute,
-  onSelectCompute,
   showAutomation = false,
-  onSelectAutomation,
   fileTreeVisible = true,
   onShowFileTree,
   computeSessionId,
@@ -1901,11 +1835,8 @@ export function FilePreviewPanel({
         onSelect={onTabSelect}
         onClose={closeTab}
         showNotebook={showNotebook}
-        onSelectNotebook={onSelectNotebook}
         showCompute={showCompute}
-        onSelectCompute={onSelectCompute}
         showAutomation={showAutomation}
-        onSelectAutomation={onSelectAutomation}
       />
 
       {/* Each open editor owns its draft/undo history. Keep it mounted while
