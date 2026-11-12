@@ -3,6 +3,7 @@
 import { useT } from "@/components/i18n-provider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ChevronDownIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { commandPreview } from "@/lib/command-blocks";
 import { fleetSessions, getFleet, controlSpecialist, type FleetSnapshot, type FleetAction, type FleetNode } from "@/lib/subagent-fleet";
 const active = (state: string) => ["running", "queued", "pending"].includes(state);
@@ -88,22 +89,37 @@ export function SubagentFleetPanel({ projectId }: { projectId: string }) {
     </div>
     {childRows(child.children ?? [])}
   </div>);
-  return <section className="space-y-3 rounded-xl border p-4" aria-label={t("Specialist fleet")}>
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div><h3 className="text-sm font-medium">{t("Specialist fleet")}</h3><p className="text-xs text-muted-foreground">{t("Watch delegated work, inspect results, and guide a specialist.")}</p></div>
-      <div className="flex gap-2">
-        <select aria-label={t("Fleet chat")} value={sessionId} onChange={(e) => setSessionId(e.target.value)} className="max-w-64 rounded border bg-background px-2 py-1 text-xs">
-          {!sessions.length && <option value="">{t("No chats yet")}</option>}
-          {sessions.map((s) => <option key={s.id} value={s.id}>{commandPreview(s.name)}</option>)}
-        </select>
-        <Button size="sm" variant="ghost" onClick={() => setSessionRefresh((n) => n + 1)}>{t("Refresh chats")}</Button>
+  return <section className="@container/fleet min-w-0 space-y-3 rounded-xl border p-4" aria-label={t("Specialist fleet")}>
+    <div className="flex flex-col gap-3 @min-[36rem]/fleet:flex-row @min-[36rem]/fleet:items-center @min-[36rem]/fleet:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <UsersIcon className="size-4 shrink-0 text-violet-500" aria-hidden />
+          <h3 className="text-sm font-medium">{t("Specialist fleet")}</h3>
+          {snapshot?.fleet && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+              {t("{count} active specialists", { count: snapshot.fleet.totalActive })}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t("Watch delegated work, inspect results, and guide a specialist.")}</p>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 @min-[36rem]/fleet:max-w-[50%]">
+        <div className="relative flex min-w-0 flex-1 @min-[36rem]/fleet:max-w-64">
+          <select aria-label={t("Fleet chat")} value={sessionId} onChange={(e) => setSessionId(e.target.value)} className="h-8 w-full min-w-0 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8 text-xs">
+            {!sessions.length && <option value="">{t("No chats yet")}</option>}
+            {sessions.map((s) => <option key={s.id} value={s.id}>{commandPreview(s.name)}</option>)}
+          </select>
+          <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        </div>
+        <Button size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" aria-label={t("Refresh chats")} title={t("Refresh chats")} onClick={() => setSessionRefresh((n) => n + 1)}>
+          <RefreshCwIcon className="size-3.5" />
+        </Button>
       </div>
     </div>
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     {notice && <p role="status" className="whitespace-pre-wrap text-xs">{notice}</p>}
-    {snapshot?.fleet && <p className="text-xs text-muted-foreground">{t("{count} active specialists", { count: snapshot.fleet.totalActive })}</p>}
     {snapshot?.fleet?.entries.map((entry) => <div key={entry.key} className="text-xs"><span className="font-medium">{entry.agent}</span> · {entry.model || "Inherited model"} · {entry.tokens.total.toLocaleString()} tokens{entry.goal && <p className="text-muted-foreground">{entry.goal}</p>}</div>)}
-    {!runs.length && <p className="text-xs text-muted-foreground">{snapshot ? t("No specialist runs in this chat.") : sessionId ? t("Loading specialists…") : t("Start a chat to view its specialists.")}</p>}
+    {!runs.length && <p className="rounded-lg bg-muted/30 px-3 py-3 text-xs leading-relaxed text-muted-foreground">{snapshot ? t("No specialist runs in this chat.") : sessionId ? t("Loading specialists…") : t("Start a chat to view its specialists.")}</p>}
     {runs.map((run) => <div key={run.id} className="space-y-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium">{run.label}</span><span className="text-xs">{t(run.state)}</span></div>
       {run.startedAt && <p className="text-xs text-muted-foreground">{Math.max(0, Math.round(((run.endedAt || Date.now()) - run.startedAt) / 1000))}s elapsed{run.activity?.currentTool ? ` · ${run.activity.currentTool}` : ""}</p>}

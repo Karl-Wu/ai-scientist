@@ -84,6 +84,7 @@ import {
   WavesIcon,
   WindIcon,
   WrenchIcon,
+  WorkflowIcon as WorkflowsIcon,
   ZapIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -569,9 +570,20 @@ export function WorkflowsPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Search + category pills */}
-      <div className="shrink-0 border-b px-4 py-3 space-y-2.5">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3">
+        <div className="flex shrink-0 items-center gap-2">
+          <WorkflowsIcon className="size-4 shrink-0 text-violet-500" aria-hidden />
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium">{t("Workflows")}</h3>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {t("{count} workflows · {categories} categories", {
+                count: ALL_WORKFLOWS.length,
+                categories: CATEGORIES.length,
+              })}
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex min-w-0 max-w-xl flex-1 basis-72 items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <SearchIcon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -583,7 +595,9 @@ export function WorkflowsPanel({
           </div>
           <LanguageSelector />
         </div>
-
+      </header>
+      {/* Category pills */}
+      <div className="shrink-0 border-b px-4 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
           {(categoryScroll.left || categoryScroll.right) && (
             <button

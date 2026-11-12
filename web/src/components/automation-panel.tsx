@@ -167,16 +167,15 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
   const closedMissions = useMemo(() => missions.filter((m) => ["completed", "failed", "cancelled"].includes(m.status)), [missions]);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="automation-panel">
-      <SubagentFleetPanel key={projectId} projectId={projectId} />
+    <div className="@container/tasks flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="automation-panel">
       {dialog}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">{t("Tasks")}</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <h3 className="text-base font-semibold">{t("Tasks")}</h3>
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
             {t("Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one (“re-run the QC report every 6 hours”); they fire from a resident session even with no chat open and pause automatically when the project spend limit is reached.")}</p>
         </div>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void refresh()} aria-label={t("Refresh tasks")}>
+        <Button type="button" size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" title={t("Refresh tasks")} onClick={() => void refresh()} aria-label={t("Refresh tasks")}>
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -191,132 +190,135 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <section aria-label={t("Scheduled tasks")} className="flex flex-col gap-2">
-        <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <AlarmClockIcon className="size-3.5" /> {t("Scheduled tasks")}</h4>
-        <p className="text-xs text-muted-foreground">{t("Tasks that run once at a set time or repeat on a schedule.")}</p>
-        {!loaded ? (
-          <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
-        ) : schedules.length === 0 ? (
-          <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            {t("No scheduled tasks yet. In a chat: “every night at 2am, have the data validator re-check user_data and log a notebook entry”.")}</p>
-        ) : (
-          schedules.map((s) => {
-            const expanded = open[s.id] ?? false;
-            const rowBusy = busy?.endsWith(`:${s.id}`) ?? false;
-            return (
-              <div key={s.id} className="rounded-lg border" data-schedule={s.id}>
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    onClick={() => setOpen((o) => ({ ...o, [s.id]: !expanded }))}
-                    aria-expanded={expanded}
-                    aria-label={t(expanded ? "Collapse {name}" : "Expand {name}", { name: s.name })}
-                  >
-                    {expanded ? <ChevronDownIcon className="size-3.5 shrink-0" /> : <ChevronRightIcon className="size-3.5 shrink-0" />}
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
-                        <span>{s.name}</span>
-                        {s.heldByBudget ? (
-                          <Badge variant="outline" className="h-5 text-[10px] text-amber-600">{t("Held: spend limit")}</Badge>
-                        ) : s.paused ? (
-                          <Badge variant="outline" className="h-5 text-[10px]">{t("Paused")}</Badge>
-                        ) : s.activeRunId ? (
-                          <Badge variant="secondary" className="h-5 text-[10px]">{t("Running")}</Badge>
-                        ) : null}
+      <SubagentFleetPanel key={projectId} projectId={projectId} />
+      <div className="grid min-w-0 grid-cols-1 items-start gap-4 @min-[48rem]/tasks:grid-cols-2">
+        <section aria-label={t("Scheduled tasks")} className="flex min-w-0 flex-col gap-3 rounded-xl border p-4">
+          <h4 className="flex items-center gap-2 text-sm font-medium">
+            <AlarmClockIcon className="size-4 text-emerald-500" /> {t("Scheduled tasks")}</h4>
+          <p className="-mt-1 text-xs leading-relaxed text-muted-foreground">{t("Tasks that run once at a set time or repeat on a schedule.")}</p>
+          {!loaded ? (
+            <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
+          ) : schedules.length === 0 ? (
+            <p className="rounded-lg bg-muted/30 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
+              {t("No scheduled tasks yet. In a chat: “every night at 2am, have the data validator re-check user_data and log a notebook entry”.")}</p>
+          ) : (
+            schedules.map((s) => {
+              const expanded = open[s.id] ?? false;
+              const rowBusy = busy?.endsWith(`:${s.id}`) ?? false;
+              return (
+                <div key={s.id} className="rounded-lg border" data-schedule={s.id}>
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => setOpen((o) => ({ ...o, [s.id]: !expanded }))}
+                      aria-expanded={expanded}
+                      aria-label={t(expanded ? "Collapse {name}" : "Expand {name}", { name: s.name })}
+                    >
+                      {expanded ? <ChevronDownIcon className="size-3.5 shrink-0" /> : <ChevronRightIcon className="size-3.5 shrink-0" />}
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
+                          <span>{s.name}</span>
+                          {s.heldByBudget ? (
+                            <Badge variant="outline" className="h-5 text-[10px] text-amber-600">{t("Held: spend limit")}</Badge>
+                          ) : s.paused ? (
+                            <Badge variant="outline" className="h-5 text-[10px]">{t("Paused")}</Badge>
+                          ) : s.activeRunId ? (
+                            <Badge variant="secondary" className="h-5 text-[10px]">{t("Running")}</Badge>
+                          ) : null}
+                        </div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {describeSchedule(s.trigger, s.paused)}
+                          {s.lastRun ? ` · ${t("last {state}", { state: t(RUN_STATE_LABEL[s.lastRun.state]) })}` : ""}
+                          {s.spendUsd > 0 ? ` · ${t("{amount} spent", { amount: formatUsd(s.spendUsd) })}` : ""}
+                        </div>
                       </div>
-                      <div className="truncate text-[11px] text-muted-foreground">
-                        {describeSchedule(s.trigger, s.paused)}
-                        {s.lastRun ? ` · ${t("last {state}", { state: t(RUN_STATE_LABEL[s.lastRun.state]) })}` : ""}
-                        {s.spendUsd > 0 ? ` · ${t("{amount} spent", { amount: formatUsd(s.spendUsd) })}` : ""}
-                      </div>
-                    </div>
-                  </button>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Run {name} now", { name: s.name })} title={s.heldByBudget ? t("Held until the spend limit is raised") : t("Run {name} now", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "run")}>
-                    {busy === `run:${s.id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : <ZapIcon className="size-3.5" />}
-                  </Button>
-                  {s.paused ? (
-                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Resume {name}", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "resume")}>
-                      <PlayIcon className="size-3.5" />
+                    </button>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Run {name} now", { name: s.name })} title={s.heldByBudget ? t("Held until the spend limit is raised") : t("Run {name} now", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "run")}>
+                      {busy === `run:${s.id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : <ZapIcon className="size-3.5" />}
                     </Button>
-                  ) : (
-                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Pause {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "pause")}>
-                      <PauseIcon className="size-3.5" />
-                    </Button>
-                  )}
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label={t("Delete {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "delete")}>
-                    <Trash2Icon className="size-3.5" />
-                  </Button>
-                </div>
-                {expanded && (
-                  <div className="border-t px-3 py-2 text-[11px]">
-                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">{s.workflowScript}</pre>
-                    <div className="mt-2 text-muted-foreground">
-                      model: {s.model ?? "inherited from the project's latest chat model"}
-                      {s.quiet ? " · quiet (successful fires don't wake AI Scientist)" : ""}
-                      {" · "}catch-up: {s.catchUp}
-                      {s.timeoutMs ? ` · timeout ${Math.round(s.timeoutMs / 60000)} min` : ""}
-                      {s.baseRef ? ` · base ${s.baseRef}` : ""}
-                      {s.missionId ? ` · mission ${s.missionId}` : ""}
-                    </div>
-                    {s.runs.length > 0 && (
-                      <ul className="mt-2 flex flex-col gap-0.5">
-                        {s.runs.map((r) => (
-                          <li key={r.id} className={cn("flex flex-wrap items-center gap-x-2", r.state.startsWith("failed") && "text-destructive")}>
-                            <span className="font-mono text-[10px] text-muted-foreground">{new Date(r.plannedAt).toLocaleString(locale)}</span>
-                            <span>{t(RUN_STATE_LABEL[r.state])}</span>
-                            <span className="text-muted-foreground">({r.dueReason})</span>
-                            {r.error && <span className="w-full break-words">{r.error}</span>}
-                            {r.summary && !r.error && (
-                              <span className="w-full whitespace-pre-wrap break-words rounded bg-muted/40 px-2 py-1 text-[10px] text-foreground">{r.summary}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                    {s.paused ? (
+                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Resume {name}", { name: s.name })} disabled={rowBusy || s.heldByBudget} onClick={() => void act(s, "resume")}>
+                        <PlayIcon className="size-3.5" />
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" aria-label={t("Pause {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "pause")}>
+                        <PauseIcon className="size-3.5" />
+                      </Button>
                     )}
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" aria-label={t("Delete {name}", { name: s.name })} disabled={rowBusy} onClick={() => void act(s, "delete")}>
+                      <Trash2Icon className="size-3.5" />
+                    </Button>
                   </div>
+                  {expanded && (
+                    <div className="border-t px-3 py-2 text-[11px]">
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] leading-relaxed">{s.workflowScript}</pre>
+                      <div className="mt-2 text-muted-foreground">
+                        model: {s.model ?? "inherited from the project's latest chat model"}
+                        {s.quiet ? " · quiet (successful fires don't wake AI Scientist)" : ""}
+                        {" · "}catch-up: {s.catchUp}
+                        {s.timeoutMs ? ` · timeout ${Math.round(s.timeoutMs / 60000)} min` : ""}
+                        {s.baseRef ? ` · base ${s.baseRef}` : ""}
+                        {s.missionId ? ` · mission ${s.missionId}` : ""}
+                      </div>
+                      {s.runs.length > 0 && (
+                        <ul className="mt-2 flex flex-col gap-0.5">
+                          {s.runs.map((r) => (
+                            <li key={r.id} className={cn("flex flex-wrap items-center gap-x-2", r.state.startsWith("failed") && "text-destructive")}>
+                              <span className="font-mono text-[10px] text-muted-foreground">{new Date(r.plannedAt).toLocaleString(locale)}</span>
+                              <span>{t(RUN_STATE_LABEL[r.state])}</span>
+                              <span className="text-muted-foreground">({r.dueReason})</span>
+                              {r.error && <span className="w-full break-words">{r.error}</span>}
+                              {r.summary && !r.error && (
+                                <span className="w-full whitespace-pre-wrap break-words rounded bg-muted/40 px-2 py-1 text-[10px] text-foreground">{r.summary}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </section>
+
+        <section aria-label={t("Missions")} className="flex min-w-0 flex-col gap-3 rounded-xl border p-4">
+          <h4 className="flex items-center gap-2 text-sm font-medium">
+            <FlagIcon className="size-4 text-blue-500" /> {t("Missions")}</h4>
+          <p className="-mt-1 text-xs leading-relaxed text-muted-foreground">{t("Ongoing, multi-step tasks with saved progress, decisions, and results.")}</p>
+          {loaded && missions.length === 0 && (
+            <p className="rounded-lg bg-muted/30 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
+              {t("No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive restarts and hold decisions, artifacts and receipts.")}</p>
+          )}
+          {[...openMissions, ...closedMissions].map((m) => (
+            <div key={m.id} className={cn("rounded-lg border px-3 py-2", ["completed", "failed", "cancelled"].includes(m.status) && "opacity-70")} data-mission={m.id}>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
+                    <span>{missionLabel(m)}</span>
+                    <Badge variant={m.status === "needs_decision" ? "destructive" : "outline"} className="h-5 text-[10px]">{t(m.status.replaceAll("_", " "))}</Badge>
+                    {m.goal && <Badge variant="secondary" className="h-5 text-[10px]">goal · {m.goal.status}</Badge>}
+                  </div>
+                  {m.objective && m.objective !== REDACTED && <div className="truncate text-[11px] text-muted-foreground">{m.objective}</div>}
+                  <div className="text-[10px] text-muted-foreground">
+                    {t(m.runs.length === 1 ? "{count} run" : "{count} runs", { count: m.runs.length })}
+                    {m.decisions.some((d) => d.status === "open") ? ` · ${t("{count} open decision(s)", { count: m.decisions.filter((d) => d.status === "open").length })}` : ""}
+                    {m.usage?.tokens ? ` · ${m.usage.tokens.toLocaleString()} tokens` : ""}
+                    {m.budget?.tokens ? ` / ${m.budget.tokens.toLocaleString()} budget` : ""}
+                    {` · ${t("updated {time}", { time: new Date(m.updatedAt).toLocaleString(locale) })}`}
+                  </div>
+                </div>
+                {!["completed", "failed", "cancelled"].includes(m.status) && (
+                  <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" aria-label={`Close mission ${missionLabel(m)}`} disabled={busy === `close:${m.id}`} onClick={() => void close(m)}>
+                    {t("Close")}</Button>
                 )}
               </div>
-            );
-          })
-        )}
-      </section>
-
-      <section aria-label={t("Missions")} className="flex flex-col gap-2">
-        <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <FlagIcon className="size-3.5" /> {t("Missions")}</h4>
-        <p className="text-xs text-muted-foreground">{t("Ongoing, multi-step tasks with saved progress, decisions, and results.")}</p>
-        {loaded && missions.length === 0 && (
-          <p className="rounded-lg border px-3 py-2.5 text-xs text-muted-foreground">
-            {t("No missions recorded. Multi-step delegations AI Scientist runs create one automatically; they survive restarts and hold decisions, artifacts and receipts.")}</p>
-        )}
-        {[...openMissions, ...closedMissions].map((m) => (
-          <div key={m.id} className={cn("rounded-lg border px-3 py-2", ["completed", "failed", "cancelled"].includes(m.status) && "opacity-70")} data-mission={m.id}>
-            <div className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
-                  <span>{missionLabel(m)}</span>
-                  <Badge variant={m.status === "needs_decision" ? "destructive" : "outline"} className="h-5 text-[10px]">{t(m.status.replaceAll("_", " "))}</Badge>
-                  {m.goal && <Badge variant="secondary" className="h-5 text-[10px]">goal · {m.goal.status}</Badge>}
-                </div>
-                {m.objective && m.objective !== REDACTED && <div className="truncate text-[11px] text-muted-foreground">{m.objective}</div>}
-                <div className="text-[10px] text-muted-foreground">
-                  {t(m.runs.length === 1 ? "{count} run" : "{count} runs", { count: m.runs.length })}
-                  {m.decisions.some((d) => d.status === "open") ? ` · ${t("{count} open decision(s)", { count: m.decisions.filter((d) => d.status === "open").length })}` : ""}
-                  {m.usage?.tokens ? ` · ${m.usage.tokens.toLocaleString()} tokens` : ""}
-                  {m.budget?.tokens ? ` / ${m.budget.tokens.toLocaleString()} budget` : ""}
-                  {` · ${t("updated {time}", { time: new Date(m.updatedAt).toLocaleString(locale) })}`}
-                </div>
-              </div>
-              {!["completed", "failed", "cancelled"].includes(m.status) && (
-                <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" aria-label={`Close mission ${missionLabel(m)}`} disabled={busy === `close:${m.id}`} onClick={() => void close(m)}>
-                  {t("Close")}</Button>
-              )}
             </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }

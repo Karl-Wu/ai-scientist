@@ -2,6 +2,7 @@
   "Files": "文件",
   "Journal": "研究日志",
   "Workflows": "工作流",
+  "{count} workflows · {categories} categories": "{count} 个工作流 · {categories} 个分类",
   "Tasks": "任务",
   "Workspace": "工作区",
   "Sessions": "会话",
