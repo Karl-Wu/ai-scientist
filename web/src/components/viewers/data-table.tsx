@@ -94,7 +94,7 @@ export default function DataTable({ summary }: { summary: TableSummary }) {
           <thead><tr>{summary.columns.map((col, i) => <th key={i} aria-sort={sort?.column === i ? (sort.desc ? "descending" : "ascending") : "none"}
             className="sticky top-0 whitespace-nowrap border-b bg-muted text-left">
             <button className="w-full px-3 py-2 text-left font-medium" onClick={() => setSort({ column: i, desc: sort?.column === i && !sort.desc })}>
-              {col.name} {sort?.column === i ? (sort.desc ? "↓" : "↑") : ""}<span className="ml-1 font-normal text-muted-foreground">{col.dtype}</span>
+              {col.name} {sort?.column === i ? (sort.desc ? "↓" : "↑") : ""}{col.dtype !== "cell" && <span className="ml-1 font-normal text-muted-foreground">{col.dtype}</span>}
             </button>
           </th>)}</tr></thead>
           <tbody>{rows.map(({ row, index }) => <tr key={index} className="border-b border-muted/50 hover:bg-muted/20">
