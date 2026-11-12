@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import OfficeViewer from "./office-viewer";
 vi.mock("@/lib/office-render", () => ({ renderOffice: vi.fn(async () => ({ html: "<p>Rendered document</p>" })) }));
-vi.mock("./arraydata-viewer", () => ({ default: () => <div>Workbook data preview</div> }));
+vi.mock("./arraydata-viewer", () => ({ default: ({ toolbarActions }: { toolbarActions?: import("react").ReactNode }) => <div>{toolbarActions}Workbook data preview</div> }));
 const original = { kind: "docx", revision: "a".repeat(64), readOnly: false, data: "", groups: [] };
 let fetcher: ReturnType<typeof vi.fn>;
 const props = { path: "report.docx", name: "report.docx", projectId: "office-tests", content: null };

@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronDownIcon } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 import { fileCategory, sciSummaryUrl } from "@/lib/use-sandbox";
 import { fetchSciJson, isAbortError } from "@/lib/sci-fetch";
 import type { ViewerProps } from "@/lib/viewers/registry";
@@ -249,12 +251,15 @@ function VariablesView({ summary }: { summary: VariablesSummary }) {
 // Root viewer
 // ---------------------------------------------------------------------------
 
-export default function ArrayDataViewer(props: ViewerProps) {
+type DataViewerProps = ViewerProps & { toolbarActions?: ReactNode };
+
+export default function ArrayDataViewer(props: DataViewerProps) {
   // Selection belongs to a file and project, including when an open tab is reused.
   return <DataPreview key={`${props.projectId}:${props.path}`} {...props} />;
 }
 
-function DataPreview({ path, projectId }: ViewerProps) {
+function DataPreview({ path, projectId, toolbarActions }: DataViewerProps) {
+  const t = useT();
   const [summary, setSummary] = useState<ArraysSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [key, setKey] = useState<string | undefined>();
@@ -283,20 +288,26 @@ function DataPreview({ path, projectId }: ViewerProps) {
   const shownArrays = summary?.kind === "ndarray" && activeDataset
     ? { ...summary, arrays: summary.arrays.filter(array => array.name === activeDataset.name) } : null;
 
-  return <div className="flex h-full flex-col overflow-auto" aria-busy={loading}>
+  return <div className="flex h-full min-h-0 flex-1 flex-col overflow-auto" aria-busy={loading}>
+    {!summary && toolbarActions && <div className="flex shrink-0 justify-end gap-1 border-b px-4 py-2">{toolbarActions}</div>}
     {summary && <>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs">
+      {summary.format !== "xlsx" && <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs">
         <span className="font-semibold">{summary.format}</span>
         <span className="text-muted-foreground">{fmtBytes(summary.file_size)}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 px-4 pt-3 text-xs">
+      </div>}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs">
         {collections && collections.length > 0 && <label className="flex min-w-0 items-center gap-2">
-          {summary.format === "xlsx" ? "Sheet" : "Table"}
-          <select aria-label={summary.format === "xlsx" ? "Sheet" : "Table"} className="min-w-0 max-w-80 rounded border bg-background px-2 py-1.5"
-            value={selection} disabled={loading} onChange={e => { setKey(e.target.value); setSlice(0); }}>
-            {collections.map(name => <option key={name} value={name}>{name}</option>)}
-          </select>
+          <span className="shrink-0 text-muted-foreground">{t(summary.format === "xlsx" ? "Sheet" : "Table")}</span>
+          <span className="relative min-w-0">
+            <select aria-label={t(summary.format === "xlsx" ? "Sheet" : "Table")} className="h-8 w-full min-w-0 max-w-80 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8"
+              value={selection} disabled={loading} onChange={e => { setKey(e.target.value); setSlice(0); }}>
+              {collections.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          </span>
         </label>}
+        {summary.format === "xlsx" && <span className="text-muted-foreground">{fmtBytes(summary.file_size)}</span>}
+        {toolbarActions && <div className="ml-auto flex items-center gap-1">{toolbarActions}</div>}
         {summary.datasets && summary.datasets.length > 0 && <label className="flex min-w-0 items-center gap-2">Dataset
           <select aria-label="Dataset" className="min-w-0 max-w-96 rounded border bg-background px-2 py-1.5" value={selection}
             disabled={loading} onChange={e => { setKey(e.target.value); setSlice(0); }}>
@@ -324,7 +335,7 @@ function DataPreview({ path, projectId }: ViewerProps) {
     </div> : error ? <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
       <p className="font-medium">Data preview failed</p><p className="max-w-md text-xs">{error}</p>
       <button className="mt-2 rounded border px-3 py-1 text-xs" onClick={() => setRetry(retry + 1)}>Retry preview</button>
-    </div> : summary && <div className="flex-1 overflow-auto">
+    </div> : summary && <div className={summary.kind === "table" ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex-1 overflow-auto"}>
       {summary.plot && <div className="p-4 pb-0"><ArrayVisualization plot={summary.plot} /></div>}
       {summary.plot_note && <p className="px-4 pt-4 text-xs text-muted-foreground">{summary.plot_note}</p>}
       {!!summary.value_preview?.length && <p className="break-all px-4 pt-2 font-mono text-xs">Values: {summary.value_preview.join(", ")}</p>}

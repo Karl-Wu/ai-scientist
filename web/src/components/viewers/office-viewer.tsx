@@ -4,11 +4,13 @@ import { apiFetch, getActiveProjectId } from "@/lib/projects";
 import { renderOffice } from "@/lib/office-render";
 import type { OfficeText } from "@/lib/office";
 import type { ViewerProps } from "@/lib/viewers/registry";
+import { useT } from "@/components/i18n-provider";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 const ArrayDataViewer = lazy(() => import("./arraydata-viewer"));
 const button = "rounded border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed";
 
 export default function OfficeViewer({ path, name, projectId = getActiveProjectId() }: ViewerProps) {
+  const t = useT();
   const [model, setModel] = useState<OfficeText | null>(null);
   const [error, setError] = useState("");
   const [generation, setGeneration] = useState(0);
@@ -31,14 +33,17 @@ export default function OfficeViewer({ path, name, projectId = getActiveProjectI
     return () => cancel.abort();
   }, [path, projectId, generation, spreadsheet]);
   const url = `/office?${new URLSearchParams({ path, project: projectId })}`;
+  const actions = <>
+    <button className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" onClick={reload} aria-label={t("Refresh Office preview")} title={t("Refresh Office preview")}><RefreshCwIcon className="size-3.5" /></button>
+    <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium hover:bg-muted">{t("Edit in Office")} <ExternalLinkIcon className="size-3" /></a>
+  </>;
   return <div className="flex h-full min-h-0 flex-col">
-    <div className="flex items-center gap-2 border-b px-3 py-2">
-      <span className="flex-1 text-xs text-muted-foreground">{spreadsheet ? "Workbook preview" : "Document preview"}</span>
-      <button className={button} onClick={reload} aria-label="Refresh Office preview"><RefreshCwIcon className="size-3.5" /></button>
-      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Edit in Office <ExternalLinkIcon className="size-3" /></a>
-    </div>
+    {!spreadsheet && <div className="flex items-center gap-2 border-b px-3 py-2">
+      <span className="flex-1 text-xs text-muted-foreground">Document preview</span>
+      {actions}
+    </div>}
     {error && <div role="alert" className="p-4 text-sm text-destructive">{error} <button className={button} onClick={reload}>Retry</button></div>}
-    {spreadsheet ? <Suspense fallback={<p className="p-4 text-xs">Loading workbook…</p>}><ArrayDataViewer key={generation} path={path} name={name} projectId={projectId} content={null} /></Suspense> : model ? <OfficePreview model={model} /> : !error && <p className="p-4 text-xs text-muted-foreground">Loading document…</p>}
+    {spreadsheet ? <Suspense fallback={<p className="p-4 text-xs">Loading workbook…</p>}><ArrayDataViewer key={generation} path={path} name={name} projectId={projectId} content={null} toolbarActions={actions} /></Suspense> : model ? <OfficePreview model={model} /> : !error && <p className="p-4 text-xs text-muted-foreground">Loading document…</p>}
   </div>;
 }
 

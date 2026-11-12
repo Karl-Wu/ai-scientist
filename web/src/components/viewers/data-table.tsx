@@ -1,5 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
+import { SearchIcon } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 import { NumericChart } from "./data-plots";
 
 export interface TableSummary {
@@ -29,6 +31,7 @@ export function numericCell(value: unknown): number | null {
 }
 
 export default function DataTable({ summary }: { summary: TableSummary }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ column: number; desc: boolean } | null>(null);
   const [view, setView] = useState<"table" | "plot">("table");
@@ -52,23 +55,29 @@ export default function DataTable({ summary }: { summary: TableSummary }) {
     return px === null || py === null ? [] : [{ x: px, y: py }];
   }), [summary.head, x, y]);
   const limited = summary.rows_truncated || (summary.num_rows !== null && summary.num_rows > summary.head.length);
-  return <div className="space-y-3 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2">
+  return <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-4 pt-2.5">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
       <p className="text-xs text-muted-foreground">
-        {summary.num_rows === null ? `${summary.head.length} preview rows · total not scanned` : `${summary.num_rows.toLocaleString()} rows`}
-        {` · ${summary.num_columns} columns`}
+        {summary.num_rows === null ? t("{count} preview rows · total not scanned", { count: summary.head.length }) : t("{count} rows", { count: summary.num_rows.toLocaleString() })}
+        {" · "}{t("{count} columns", { count: summary.num_columns })}
       </p>
-      <div className="flex gap-1 rounded-md border p-0.5 text-xs">
-        <button className={`rounded px-3 py-1 ${view === "table" ? "bg-muted" : ""}`} onClick={() => setView("table")} aria-pressed={view === "table"}>Table</button>
-        <button className={`rounded px-3 py-1 disabled:opacity-40 ${view === "plot" ? "bg-muted" : ""}`} disabled={!numericColumns.length}
-          onClick={() => setView("plot")} aria-pressed={view === "plot"}>Plot</button>
+      <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
+        {view === "table" && <div className="relative min-w-0 flex-1">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <input aria-label={t("Search preview rows")} placeholder={t("Search preview rows…")} value={search} onChange={e => setSearch(e.target.value)} className="h-8 w-full min-w-32 rounded-md border bg-background pl-8 pr-2.5 text-xs" />
+        </div>}
+        <div className="flex shrink-0 gap-1 rounded-md border p-0.5 text-xs">
+          <button className={`rounded px-3 py-1 ${view === "table" ? "bg-muted" : ""}`} onClick={() => setView("table")} aria-pressed={view === "table"}>{t("Table")}</button>
+          <button className={`rounded px-3 py-1 disabled:opacity-40 ${view === "plot" ? "bg-muted" : ""}`} disabled={!numericColumns.length}
+            onClick={() => setView("plot")} aria-pressed={view === "plot"}>{t("Plot")}</button>
+        </div>
       </div>
     </div>
-    {(limited || summary.columns_truncated) && <p className="text-xs text-muted-foreground">
-      Showing the first {summary.head.length} rows and {summary.columns.length} columns. Search, sorting, and plots use this preview only.
+    {(limited || summary.columns_truncated) && <p className="shrink-0 text-xs text-muted-foreground">
+      {t("Showing the first {rows} rows and {columns} columns. Search, sorting, and plots use this preview only.", { rows: summary.head.length, columns: summary.columns.length })}
     </p>}
-    {summary.note && <p className="text-xs text-muted-foreground">{summary.note}</p>}
-    {view === "plot" ? <div className="space-y-3 rounded-lg border p-3">
+    {summary.note && summary.format !== "xlsx" && <p className="shrink-0 text-[11px] leading-relaxed text-muted-foreground">{t(summary.note)}</p>}
+    {view === "plot" ? <div className="min-h-0 flex-1 space-y-3 overflow-auto rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-2">X axis<select className="max-w-52 rounded border bg-background px-2 py-1" value={x} onChange={e => setX(Number(e.target.value))}>
           <option value={-1}>Row number</option>{numericColumns.map(col => <option key={col.index} value={col.index}>{col.name}</option>)}
@@ -80,8 +89,7 @@ export default function DataTable({ summary }: { summary: TableSummary }) {
       <NumericChart points={points} xLabel={x === -1 ? "Row number" : summary.columns[x]?.name ?? "X"} yLabel={summary.columns[y]?.name ?? "Y"} />
       <p className="text-xs text-muted-foreground">{points.length} numeric pairs from {summary.head.length} preview rows. Missing and nonnumeric pairs are omitted. Table search and sorting do not change the plot.</p>
     </div> : <>
-      <input aria-label="Search preview rows" placeholder="Search preview rows…" value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-xs" />
-      <div className="max-h-[32rem] overflow-auto rounded-md border">
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border">
         <table className="w-full border-collapse text-xs">
           <thead><tr>{summary.columns.map((col, i) => <th key={i} aria-sort={sort?.column === i ? (sort.desc ? "descending" : "ascending") : "none"}
             className="sticky top-0 whitespace-nowrap border-b bg-muted text-left">
@@ -97,7 +105,7 @@ export default function DataTable({ summary }: { summary: TableSummary }) {
         </table>
         {!rows.length && <p className="p-6 text-center text-xs text-muted-foreground">{summary.head.length ? "No matching preview rows." : "No data rows in this table."}</p>}
       </div>
-      {summary.cell_limit && <p className="text-[11px] text-muted-foreground">Long cell values are limited to {summary.cell_limit} characters.</p>}
+      {summary.cell_limit && <p className="shrink-0 text-[11px] text-muted-foreground">{t("Long cell values are limited to {count} characters.", { count: summary.cell_limit })}</p>}
     </>}
   </div>;
 }
