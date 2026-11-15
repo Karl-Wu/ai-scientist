@@ -78,6 +78,7 @@ before discarding them.
 ### Data tables & workbooks
 | Format | Extensions | Viewer |
 |---|---|---|
+| Legacy Excel | `xls` | Read-only worksheet preview with sheet selection, sampled search, sorting and plots |
 | Excel | `xlsx` | Worksheet grid with basic cell/formula editing; Data tools offers sampled search, sort and scatter plots |
 | Arrow IPC / Feather v2 | `arrow` `ipc` `feather` | File or stream schema, row sample and numeric scatter plots |
 | JSON Lines | `jsonl` `ndjson` | Sampled records as columns; nested values shown as JSON, with numeric scatter plots |

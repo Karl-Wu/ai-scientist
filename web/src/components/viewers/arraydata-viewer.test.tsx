@@ -89,15 +89,15 @@ it("switches datasets and slices with project scope and clears selection on file
   expect(String((fetcher.mock.calls[3] as unknown[])[0])).toContain("slice=0");
 });
 
-it("keeps sheet selection available after a failed request and retries", async () => {
+it.each(["xlsx", "xls"])("keeps %s sheet selection available after a failed request and retries", async (format) => {
   const { fireEvent } = await import("@testing-library/react");
-  const data = { format: "xlsx", kind: "table", file_size: 12, num_rows: 1, num_columns: 1,
+  const data = { format, kind: "table", file_size: 12, num_rows: 1, num_columns: 1,
     columns: [{ name: "value", dtype: "cell" }], head: [[1]], collections: ["Sheet 1", "Sheet 2"], selected: "Sheet 1" };
   const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(data)))
     .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Temporary read error" }), { status: 500 }))
     .mockImplementation(async () => new Response(JSON.stringify({ ...data, selected: "Sheet 2" })));
   vi.stubGlobal("fetch", fetcher);
-  render(<ArrayDataViewer path="book.xlsx" name="book.xlsx" content={null} />);
+  render(<ArrayDataViewer path={`book.${format}`} name={`book.${format}`} content={null} />);
   await waitFor(() => expect(screen.getByLabelText("Sheet")).toBeEnabled());
   fireEvent.change(screen.getByLabelText("Sheet"), { target: { value: "Sheet 2" } });
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Temporary read error"));

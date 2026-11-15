@@ -129,7 +129,7 @@ describe("new scientific data formats", () => {
       expect(fileCategory(name)).toBe("arraydata");
       expect(getViewerDef(fileCategory(name))?.loadMode).toBe("none");
     }
-    for (const name of ["data.arrow", "data.feather", "data.ipc", "data.jsonl", "data.ndjson", "study.sqlite", "study.sqlite3", "study.db"]) {
+    for (const name of ["study.xls", "study.XLS", "data.arrow", "data.feather", "data.ipc", "data.jsonl", "data.ndjson", "study.sqlite", "study.sqlite3", "study.db"]) {
       expect(fileCategory(name)).toBe("datatable");
       expect(getViewerDef(fileCategory(name))?.canEditSource).toBe(false);
     }

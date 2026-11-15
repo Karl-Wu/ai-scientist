@@ -76,7 +76,7 @@ export default function DataTable({ summary }: { summary: TableSummary }) {
     {(limited || summary.columns_truncated) && <p className="shrink-0 text-xs text-muted-foreground">
       {t("Showing the first {rows} rows and {columns} columns. Search, sorting, and plots use this preview only.", { rows: summary.head.length, columns: summary.columns.length })}
     </p>}
-    {summary.note && summary.format !== "xlsx" && <p className="shrink-0 text-[11px] leading-relaxed text-muted-foreground">{t(summary.note)}</p>}
+    {summary.note && !["xls", "xlsx"].includes(summary.format) && <p className="shrink-0 text-[11px] leading-relaxed text-muted-foreground">{t(summary.note)}</p>}
     {view === "plot" ? <div className="min-h-0 flex-1 space-y-3 overflow-auto rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-2">X axis<select className="max-w-52 rounded border bg-background px-2 py-1" value={x} onChange={e => setX(Number(e.target.value))}>

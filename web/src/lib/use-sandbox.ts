@@ -58,7 +58,7 @@ const STRUCTURE3D_EXTS = new Set(["pdb", "ent", "cif", "mmcif", "xyz", "gro", "p
 const MASSSPEC_EXTS = new Set(["mzml", "mzxml", "mgf", "jdx", "dx"]);
 
 const ARRAYDATA_EXTS = new Set(["h5", "hdf5", "parquet", "npy", "npz", "nc", "nc4", "cdf", "mat", "mtx", "fits", "fit", "fts"]);
-const DATATABLE_EXTS = new Set(["arrow", "feather", "ipc", "jsonl", "ndjson", "sqlite", "sqlite3", "db"]);
+const DATATABLE_EXTS = new Set(["xls", "arrow", "feather", "ipc", "jsonl", "ndjson", "sqlite", "sqlite3", "db"]);
 
 const PHYLO_EXTS = new Set(["nwk", "newick", "tree", "nhx"]);
 

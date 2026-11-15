@@ -1,4 +1,4 @@
-"""Read-only, bounded previews for XLSX, Arrow IPC/Feather, JSON Lines and SQLite.
+"""Read-only, bounded previews for XLS/XLSX, Arrow IPC/Feather, JSON Lines and SQLite.
 
 Usage: tables_helper.py summarize <path> [sheet-or-table] [unused-slice]
 Exit codes: 0 ok, 3 missing dependency, 4 missing file, 5 invalid/oversized input.
@@ -59,6 +59,46 @@ def choose(names, selected):
     if selected and selected not in names:
         raise ValueError("The selected sheet or table is no longer available")
     return selected or next(iter(names), "")
+
+
+def xls(path, selected):
+    need("xlrd")
+    import xlrd
+
+    if path.stat().st_size > MAX_BYTES:
+        raise ValueError("Workbook exceeds the 64 MiB preview limit")
+    book = xlrd.open_workbook(str(path), on_demand=True, logfile=sys.stderr)
+    try:
+        names = book.sheet_names()[:MAX_COLLECTIONS]
+        key = choose(names, selected)
+        if not key:
+            return table([], [], 0, collections=[], selected="")
+        sheet = book.sheet_by_name(key)
+        width = min(MAX_COLS, sheet.ncols)
+
+        def value(row, col):
+            entry = sheet.cell(row, col)
+            if entry.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+                return None
+            if entry.ctype == xlrd.XL_CELL_DATE:
+                date = xlrd.xldate_as_datetime(entry.value, book.datemode)
+                return str(date.time() if 0 <= entry.value < 1 else date)
+            if entry.ctype == xlrd.XL_CELL_BOOLEAN:
+                return bool(entry.value)
+            if entry.ctype == xlrd.XL_CELL_ERROR:
+                return xlrd.error_text_from_code.get(entry.value, "#ERROR")
+            return entry.value
+
+        headers = [value(0, col) for col in range(width)] if sheet.nrows else []
+        columns = [{"name": str(v)[:MAX_CELL] if v is not None else f"Column {i + 1}", "dtype": "cell"}
+                   for i, v in enumerate(headers)]
+        rows = [[value(row, col) for col in range(width)]
+                for row in range(1, min(sheet.nrows, MAX_ROWS + 2))]
+        return table(columns, rows, max(0, sheet.nrows - 1), num_columns=sheet.ncols,
+                     collections=names, selected=key,
+                     collections_truncated=book.nsheets > MAX_COLLECTIONS)
+    finally:
+        book.release_resources()
 
 
 def xlsx(path, selected):
@@ -212,7 +252,7 @@ def arrow(path, selected):
                      note="Arrow IPC file/stream and Feather v2. Charts use the displayed row sample.")
 
 
-DISPATCH = {"xlsx": xlsx, "arrow": arrow, "feather": arrow, "ipc": arrow,
+DISPATCH = {"xls": xls, "xlsx": xlsx, "arrow": arrow, "feather": arrow, "ipc": arrow,
             "jsonl": jsonlines, "ndjson": jsonlines, "sqlite": sqlite, "sqlite3": sqlite, "db": sqlite}
 
 

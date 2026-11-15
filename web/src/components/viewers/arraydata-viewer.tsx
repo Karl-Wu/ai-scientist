@@ -291,22 +291,22 @@ function DataPreview({ path, projectId, toolbarActions }: DataViewerProps) {
   return <div className="flex h-full min-h-0 flex-1 flex-col overflow-auto" aria-busy={loading}>
     {!summary && toolbarActions && <div className="flex shrink-0 justify-end gap-1 border-b px-4 py-2">{toolbarActions}</div>}
     {summary && <>
-      {summary.format !== "xlsx" && <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs">
+      {!["xls", "xlsx"].includes(summary.format) && <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs">
         <span className="font-semibold">{summary.format}</span>
         <span className="text-muted-foreground">{fmtBytes(summary.file_size)}</span>
       </div>}
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2 text-xs">
         {collections && collections.length > 0 && <label className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 text-muted-foreground">{t(summary.format === "xlsx" ? "Sheet" : "Table")}</span>
+          <span className="shrink-0 text-muted-foreground">{t(["xls", "xlsx"].includes(summary.format) ? "Sheet" : "Table")}</span>
           <span className="relative min-w-0">
-            <select aria-label={t(summary.format === "xlsx" ? "Sheet" : "Table")} className="h-8 w-full min-w-0 max-w-80 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8"
+            <select aria-label={t(["xls", "xlsx"].includes(summary.format) ? "Sheet" : "Table")} className="h-8 w-full min-w-0 max-w-80 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8"
               value={selection} disabled={loading} onChange={e => { setKey(e.target.value); setSlice(0); }}>
               {collections.map(name => <option key={name} value={name}>{name}</option>)}
             </select>
             <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           </span>
         </label>}
-        {summary.format === "xlsx" && <span className="text-muted-foreground">{fmtBytes(summary.file_size)}</span>}
+        {["xls", "xlsx"].includes(summary.format) && <span className="text-muted-foreground">{fmtBytes(summary.file_size)}</span>}
         {toolbarActions && <div className="ml-auto flex items-center gap-1">{toolbarActions}</div>}
         {summary.datasets && summary.datasets.length > 0 && <label className="flex min-w-0 items-center gap-2">Dataset
           <select aria-label="Dataset" className="min-w-0 max-w-96 rounded border bg-background px-2 py-1.5" value={selection}

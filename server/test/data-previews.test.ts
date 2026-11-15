@@ -7,7 +7,7 @@ import { helperPython } from "../src/helpers-env.ts";
 import { runSciHelper } from "../src/api/sci-helpers.ts";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "kady-data-previews-"));
-const depsOk = spawnSync(helperPython(), ["-c", "import numpy, scipy, h5py, netCDF4, pyarrow, openpyxl, astropy"], { stdio: "ignore" }).status === 0;
+const depsOk = spawnSync(helperPython(), ["-c", "import numpy, scipy, h5py, netCDF4, pyarrow, openpyxl, astropy, xlrd"], { stdio: "ignore" }).status === 0;
 beforeAll(() => {
   if (!depsOk) return;
   const generated = spawnSync(helperPython(), [path.join(__dirname, "fixtures/create-data-previews.py"), root], { encoding: "utf8" });
@@ -31,6 +31,25 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
     const second = await preview("tables", "study.xlsx", "Conditions");
     expect(second.head).toEqual([["control", 24]]);
     expect(second.num_rows).toBe(1);
+  });
+  it("reads legacy XLS sheets, Chinese text, dates and empty cells with bounded output", async () => {
+    const name = "legacy-workbook.xls";
+    fs.copyFileSync(path.join(__dirname, "fixtures", name), path.join(root, name));
+    const first = await preview("tables", name);
+    expect(first.collections).toEqual(["中文数据", "条件", "空表"]);
+    expect(first.format).toBe("xls");
+    expect(first.columns[0].name).toBe("名称");
+    expect(first.head).toHaveLength(200);
+    expect(first.num_rows).toBe(205);
+    expect(first.rows_truncated).toBe(true);
+    expect(first.head[0].slice(0, 5)).toEqual(["样本-1", 1.5, "2026-11-15 09:30:00", null, true]);
+    expect(first.head[0][5]).toHaveLength(512);
+    expect((await preview("tables", name, "条件")).head).toEqual([["对照组", 24]]);
+    expect((await preview("tables", name, "空表")).head).toEqual([]);
+    const missing = await runSciHelper("tables", "summarize", [path.join(root, name), "missing"]);
+    expect(missing.status).toBe(5);
+    fs.writeFileSync(path.join(root, "broken.xls"), "not a workbook");
+    expect((await runSciHelper("tables", "summarize", [path.join(root, "broken.xls")])).status).toBe(5);
   });
   it("bounds JSON Lines and preserves nested, missing and large integer values", async () => {
     const data = await preview("tables", "records.jsonl");
