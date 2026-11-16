@@ -10,7 +10,7 @@
  * (e.g. "…by condition:## Results"), which the stream concatenation can produce.
  */
 function separateGluedHeadings(md: string): string {
-  return md.replace(/([^\n])(#{1,6}\s+\S)/g, "$1\n\n$2");
+  return md.replace(/([^\s#\\|`])(#{1,6}\s+\S)/g, "$1\n\n$2");
 }
 
 /**

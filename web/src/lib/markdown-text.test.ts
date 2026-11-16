@@ -49,4 +49,18 @@ describe("normalizeMarkdown", () => {
       "…by condition:\n\n## Results",
     );
   });
+
+  it("preserves heading levels and hash characters in table headers", () => {
+    const markdown = [
+      "## 逐表候选映射",
+      "",
+      "| # | DW表 | 当前ODS候选 | 判断与主要限制 |",
+      "|---:|---|---|---|",
+      "| 1 | dw_person | ods_clinic_visit | 部分候选 |",
+    ].join("\n");
+    expect(normalizeMarkdown(markdown)).toBe(markdown);
+    expect(normalizeMarkdown("### Details\n\n|# | Name |\n|--|--|\n|1|Example|")).toBe(
+      "### Details\n\n|# | Name |\n|--|--|\n|1|Example|",
+    );
+  });
 });
