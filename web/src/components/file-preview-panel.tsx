@@ -311,7 +311,11 @@ function MarkdownViewer({
 }) {
   return (
     <div className="h-full overflow-auto p-6 text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-      <MessageResponse>{resolveMarkdownImageUrls(content, path, projectId)}</MessageResponse>
+      <MessageResponse
+        className="[&_table]:min-w-[48rem] [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top [&_td]:text-xs [&_td]:leading-[1.45] [&_th]:px-2 [&_th]:py-1.5 [&_th]:align-top [&_th]:text-xs [&_td_code]:whitespace-normal [&_td_code]:[overflow-wrap:anywhere]"
+      >
+        {resolveMarkdownImageUrls(content, path, projectId)}
+      </MessageResponse>
     </div>
   );
 }
