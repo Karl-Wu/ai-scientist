@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   PromptInputProvider,
+  PromptInput,
+  PromptInputTextarea,
   usePromptInputController,
 } from "./prompt-input";
 
@@ -65,4 +67,23 @@ describe("PromptInputProvider persistence state", () => {
       ),
     );
   });
+});
+
+
+it("lets table paste handlers intercept spreadsheet formats while keeping image paste fallback", () => {
+  const onPaste = vi.fn((event) => {
+    if (event.clipboardData.getData("text/html")) event.preventDefault();
+  });
+  render(<PromptInputProvider><PromptInput onSubmit={vi.fn()}>
+    <PromptInputTextarea onPaste={onPaste} /><ProviderProbe />
+  </PromptInput></PromptInputProvider>);
+  const textarea = screen.getByRole("textbox");
+  const image = new File(["image"], "image.png", { type: "image/png" });
+  fireEvent.paste(textarea, { clipboardData: {
+    getData: (format: string) => format === "text/html" ? "<table><tr><td>a</td></tr></table>" : "a",
+    items: [{ kind: "file", getAsFile: () => image }],
+  } });
+  expect(screen.getByTestId("attachments")).toHaveTextContent("0");
+  fireEvent.paste(textarea, { clipboardData: { getData: () => "", items: [{ kind: "file", getAsFile: () => image }] } });
+  expect(screen.getByTestId("attachments")).toHaveTextContent("1");
 });

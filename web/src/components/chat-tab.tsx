@@ -7,6 +7,8 @@ import { useInputHistory } from "@/lib/use-input-history";
 
 import { useLocale, useT } from "@/components/i18n-provider";
 import { ChatImage } from "@/components/chat-image";
+import { PastedTables } from "@/components/pasted-tables";
+import { ClipboardTableError, MAX_PASTED_TABLES, parseClipboardTable, uploadPastedTables, type PastedTable } from "@/lib/clipboard-table";
 import { AnswerActions, type OpenTask } from "@/components/answer-actions";
 import { useTaskResponses, type TaskResponse } from "@/lib/use-task-responses";
 
@@ -753,12 +755,16 @@ function ChatInput({
   projectId,
   currentSessionId,
   inputHistory,
+  pastedTables,
+  onPastedTablesChange,
   researchRefs,
   onResearchChange,
   delegation,
   onDelegationChange,
 }: {
   inputHistory: string[];
+  pastedTables: PastedTable[];
+  onPastedTablesChange: React.Dispatch<React.SetStateAction<PastedTable[]>>;
   isActiveTab: boolean;
   allFiles: string[];
   attachedFiles: string[];
@@ -870,6 +876,27 @@ function ChatInput({
     return () => window.clearTimeout(t);
   }, [attachError]);
 
+  const [tableSubmitting, setTableSubmitting] = useState(false);
+  const tableSubmittingRef = useRef(false);
+  const handleTablePaste: React.ClipboardEventHandler<HTMLTextAreaElement> = useCallback((event) => {
+    try {
+      const rows = parseClipboardTable(event.clipboardData.getData("text/html"), event.clipboardData.getData("text/plain"));
+      if (!rows) return;
+      event.preventDefault();
+      if (tableSubmittingRef.current) return;
+      if (pastedTables.length >= MAX_PASTED_TABLES) {
+        setAttachError(t("Attach up to {count} pasted tables per message.", { count: MAX_PASTED_TABLES }));
+        return;
+      }
+      onPastedTablesChange((current) => [...current, { id: crypto.randomUUID(), rows, firstRowHeader: rows.length > 1 }]);
+    } catch (error) {
+      event.preventDefault();
+      setAttachError(t(error instanceof ClipboardTableError
+        ? "This table is too large to paste. Upload the spreadsheet file instead."
+        : "Could not read the pasted table. Please upload the spreadsheet file instead."));
+    }
+  }, [pastedTables.length, onPastedTablesChange, t]);
+
   // Wrap onSubmit to convert inline image attachments and append attached
   // file paths and database/skills context, then clear chips. Returning
   // false keeps the composer text + attachments for a retry.
@@ -892,39 +919,57 @@ function ChatInput({
       const dbCtx = buildDatabaseContext(selectedDbs);
       const skillsCtx = buildSkillsContext(selectedSkills);
       const baseText = msg.text ?? "";
-      if (!baseText.trim() && attachedFiles.length === 0) {
+      if (!baseText.trim() && attachedFiles.length === 0 && pastedTables.length === 0) {
         if (msg.files.length > 0) {
           setAttachError("Add a short note to send with the image.");
         }
         return false;
       }
-      // Referenced chats are snapshotted now, so the message cites what they
-      // said when it was sent rather than whatever they say later.
-      const snapshots = researchRefs.some((r) => r.kind === "chat")
-        ? await withChatSnapshots(researchRefs, projectId)
-        : { refs: researchRefs, failed: [] };
-      if (snapshots.failed.length > 0) {
-        toast.warning(
-          `Couldn't snapshot ${snapshots.failed.length === 1 ? `"${snapshots.failed[0]}"` : `${snapshots.failed.length} chats`}`,
-          { description: "AI Scientist will search the full chat log instead." },
-        );
+      if (tableSubmittingRef.current) return false;
+      tableSubmittingRef.current = true;
+      setTableSubmitting(pastedTables.length > 0);
+      let accepted = false;
+      try {
+        // Referenced chats are snapshotted now, so the message cites what they
+        // said when it was sent rather than whatever they say later.
+        const snapshots = researchRefs.some((r) => r.kind === "chat")
+          ? await withChatSnapshots(researchRefs, projectId)
+          : { refs: researchRefs, failed: [] };
+        if (snapshots.failed.length > 0) {
+          toast.warning(
+            `Couldn't snapshot ${snapshots.failed.length === 1 ? `"${snapshots.failed[0]}"` : `${snapshots.failed.length} chats`}`,
+            { description: "AI Scientist will search the full chat log instead." },
+          );
+        }
+        const composerCtx = buildComposerContext({ delegation, research: snapshots.refs });
+        const images = await promptImagesFromParts(msg.files);
+        const paths = await uploadPastedTables(pastedTables, onUploadFiles, (id, path) => {
+          onPastedTablesChange((current) => current.map((table) => table.id === id ? { ...table, uploadedPath: path } : table));
+        });
+        const tableLinks = pastedTables.map((table, index) => {
+          const label = t("Pasted table: {rows} data rows × {columns} columns", { rows: table.rows.length - (table.firstRowHeader ? 1 : 0), columns: table.rows[0].length });
+          return `[${label}](${paths[index].split("/").map(encodeURIComponent).join("/")})`;
+        });
+        accepted = await onSend(baseText + refs + (tableLinks.length ? "\n\n" + tableLinks.join("\n") : "") + dbCtx + skillsCtx + composerCtx, intent, images);
+      } catch (error) {
+        if (!pastedTables.length) throw error;
+        setAttachError(t("Could not upload the pasted table. Your table is kept; please try again."));
+      } finally {
+        tableSubmittingRef.current = false;
+        setTableSubmitting(false);
       }
-      const composerCtx = buildComposerContext({ delegation, research: snapshots.refs });
-      const images = await promptImagesFromParts(msg.files);
-      // Only clear once the message is actually accepted: a full queue or a
-      // failed steer used to wipe the composer text and attachment chips.
-      const accepted = await onSend(baseText + refs + dbCtx + skillsCtx + composerCtx, intent, images);
       if (!accepted) {
         event?.preventDefault();
         return false;
       }
       onClearFiles();
+      onPastedTablesChange([]);
       // Research references and delegation are instructions for this one
       // message; pinned skills and data sources stay.
       onResearchChange([]);
       onDelegationChange(EMPTY_DELEGATION);
     },
-    [budgetBlocked, modelAvailability, modelAvailable, onSend, attachedFiles, onClearFiles, selectedDbs, selectedSkills, delegation, researchRefs, onResearchChange, onDelegationChange, projectId]
+    [budgetBlocked, modelAvailability, modelAvailable, onSend, attachedFiles, onClearFiles, selectedDbs, selectedSkills, delegation, researchRefs, onResearchChange, onDelegationChange, projectId, pastedTables, onPastedTablesChange, onUploadFiles, t]
   );
 
   // @ mention state
@@ -1234,6 +1279,8 @@ function ChatInput({
           className="@container/composer w-full min-w-0 rounded-xl border shadow-sm"
         >
           <ImageAttachmentsRow />
+          <PastedTables tables={pastedTables} disabled={tableSubmitting} onChange={onPastedTablesChange} />
+          {tableSubmitting && <p role="status" className="px-3 pt-1 text-xs text-muted-foreground">{t("Uploading pasted tables…")}</p>}
           <ContextChipsBar
             attachedFiles={attachedFiles}
             onRemoveFile={onRemoveFile}
@@ -1258,6 +1305,7 @@ function ChatInput({
                   : t("Ask AI Scientist anything… (@ for files, / for commands, + to add context)")
             }
             onChange={handleChange}
+            onPaste={handleTablePaste}
             onKeyDown={handleKeyDown}
           />
           {/* Narrow chat panes use a deliberate two-row toolbar: context and
@@ -1374,7 +1422,7 @@ function ChatInput({
                 <PromptInputSubmit
                   status={submitStatus as "streaming" | "error" | "ready"}
                   onStop={onStop}
-                  disabled={(budgetBlocked || !modelAvailable) && !isStreaming}
+                  disabled={(budgetBlocked || !modelAvailable || tableSubmitting) && !isStreaming}
                 />
               </InfoTooltip>
             </div>
@@ -1581,7 +1629,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
               const block = parseCommandBlock(text);
               return (
                 <>
-                  {block ? <CommandBlockChip block={block} /> : <MessageResponse>{text}</MessageResponse>}
+                  {block ? <CommandBlockChip block={block} /> : <MessageResponse onOpenFile={onOpenFile}>{text}</MessageResponse>}
                   {context && <SentContextChips context={context} />}
                 </>
               );
@@ -1901,6 +1949,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       0,
     ) ?? 0,
   );
+  const [pastedTables, setPastedTables] = useState<PastedTable[]>(() => initialWorkspaceState?.pastedTables ?? []);
   const [composerDraft, setComposerDraft] = useState<PromptInputProviderState>(
     () => initialWorkspaceState?.composer ?? { text: "", attachments: [] },
   );
@@ -2074,10 +2123,12 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       delegation,
       queuedMessages: messageQueue,
       composer: composerDraft,
+      pastedTables,
     });
   }, [
     attachedFiles,
     composerDraft,
+    pastedTables,
     delegation,
     researchRefs,
     messageQueue,
@@ -2519,6 +2570,8 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
             }}
             thinkingDisabled={thinkingDisabled}
             onUploadFiles={uploadFiles}
+            pastedTables={pastedTables}
+            onPastedTablesChange={setPastedTables}
             allSkills={allSkills}
             selectedSkills={selectedSkills}
             onSkillsChange={setSelectedSkills}

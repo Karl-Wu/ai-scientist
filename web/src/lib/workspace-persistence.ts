@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizePastedTables, type PastedTable } from "@/lib/clipboard-table";
 import type { Database } from "@/components/database-selector";
 import type { ModalInstance } from "@/components/compute-selector";
 import type { Model } from "@/components/model-selector";
@@ -74,6 +75,7 @@ export interface ChatWorkspaceState {
   delegation: DelegationChoice;
   queuedMessages: WorkspaceQueuedMessage[];
   composer: PromptDraftState;
+  pastedTables?: PastedTable[];
 }
 
 export interface SandboxWorkspaceState {
@@ -125,8 +127,11 @@ interface StoredQueuedMessage extends Omit<WorkspaceQueuedMessage, "images"> {
   images: StoredBlobRef[];
 }
 
+interface StoredTableDraft extends Omit<PastedTable, "rows"> { key: string }
+
 interface StoredChatState
-  extends Omit<ChatWorkspaceState, "queuedMessages" | "composer"> {
+  extends Omit<ChatWorkspaceState, "queuedMessages" | "composer" | "pastedTables"> {
+  pastedTables?: StoredTableDraft[];
   queuedMessages: StoredQueuedMessage[];
   composer: {
     text: string;
@@ -322,6 +327,12 @@ function sanitizeStoredChat(value: unknown): StoredChatState | undefined {
     researchRefs: normalizeResearchRefs(value.researchRefs),
     delegation: normalizeDelegation(value.delegation),
     queuedMessages,
+    ...(Array.isArray(value.pastedTables) ? { pastedTables: value.pastedTables.slice(0, 3).flatMap((table) =>
+      isRecord(table) && stringValue(table.id) && stringValue(table.key) ? [{
+        id: stringValue(table.id)!, key: stringValue(table.key)!, firstRowHeader: table.firstRowHeader !== false,
+        ...(stringValue(table.uploadedPath) ? { uploadedPath: stringValue(table.uploadedPath)! } : {}),
+      }] : [],
+    ) } : {}),
     composer: {
       text: typeof composer.text === "string" ? composer.text : "",
       attachments: sanitizeBlobRefs(composer.attachments),
@@ -576,6 +587,12 @@ async function storeProject(projectId: string, state: ProjectWorkspaceState): Pr
       tabs.push({ id: tab.id, title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}), ...(tab.sessionId ? { sessionId: tab.sessionId } : {}) });
       continue;
     }
+    const { pastedTables: rawTables, ...chat } = tab.chat;
+    const pastedTables: StoredTableDraft[] = normalizePastedTables(rawTables).map(({ rows, ...table }) => {
+      const key = `${prefix}${tab.id}:table:${table.id}`;
+      records.push({ key, blob: new Blob([JSON.stringify(rows)], { type: "application/json" }) });
+      return { ...table, key };
+    });
     const attachments: StoredBlobRef[] = [];
     for (const attachment of tab.chat.composer.attachments) {
       const key = `${prefix}${tab.id}:composer:${attachment.id}`;
@@ -605,7 +622,8 @@ async function storeProject(projectId: string, state: ProjectWorkspaceState): Pr
       title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
       ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       chat: {
-        ...tab.chat,
+        ...chat,
+        ...(pastedTables.length ? { pastedTables } : {}),
         queuedMessages,
         composer: { text: tab.chat.composer.text, attachments },
       },
@@ -617,6 +635,7 @@ async function storeProject(projectId: string, state: ProjectWorkspaceState): Pr
     for (const tab of tabs) {
       if (!tab.chat) continue;
       tab.chat.composer.attachments = [];
+      delete tab.chat.pastedTables;
       tab.chat.queuedMessages = tab.chat.queuedMessages.map((message) => ({
         ...message,
         images: [],
@@ -636,6 +655,14 @@ async function hydrateProject(stored: StoredProjectState): Promise<ProjectWorksp
         ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       });
       continue;
+    }
+    const { pastedTables: refs, ...chat } = tab.chat;
+    const pastedTables: PastedTable[] = [];
+    for (const ref of refs ?? []) {
+      const blob = await readBlob(ref.key);
+      if (!blob) continue;
+      try { pastedTables.push(...normalizePastedTables([{ ...ref, rows: JSON.parse(await blob.text()) }])); }
+      catch { /* A missing or corrupt draft must not block the rest of the workspace. */ }
     }
     const attachments: PromptDraftAttachment[] = [];
     for (const ref of tab.chat.composer.attachments) {
@@ -667,7 +694,8 @@ async function hydrateProject(stored: StoredProjectState): Promise<ProjectWorksp
       title: tab.title, ...(tab.titleIsCustom ? { titleIsCustom: true } : {}),
       ...(tab.sessionId ? { sessionId: tab.sessionId } : {}),
       chat: {
-        ...tab.chat,
+        ...chat,
+        ...(pastedTables.length ? { pastedTables } : {}),
         queuedMessages,
         composer: { text: tab.chat.composer.text, attachments },
       },
@@ -690,6 +718,9 @@ function projectMetadataFromState(
         ? {
             chat: {
               ...tab.chat,
+              pastedTables: tab.chat.pastedTables?.map(({ rows: _rows, ...table }) => ({
+                ...table, key: `${projectId}:${tab.id}:table:${table.id}`,
+              })),
               queuedMessages: tab.chat.queuedMessages.map((message) => ({
                 ...message,
                 images: message.images.map((image, index) => ({

@@ -1,30 +1,12 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
+import { parseDelimitedText } from "@/lib/delimited-text";
 
 export const CSV_PAGE_SIZE = 250;
 
 export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    const cells: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuotes) {
-        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
-        else if (ch === '"') inQuotes = false;
-        else current += ch;
-      } else if (ch === '"') inQuotes = true;
-      else if (ch === ",") { cells.push(current); current = ""; }
-      else current += ch;
-    }
-    cells.push(current);
-    rows.push(cells);
-  }
-  return rows;
+  return parseDelimitedText(text, ",", { skipEmptyLines: true });
 }
 
 /** Pagination bounds the DOM without sacrificing full-data search or copying. */
@@ -69,7 +51,7 @@ export function CsvViewer({ content }: { content: string }) {
           <thead><tr>{rows[0].map((cell, i) => <th scope="col" key={i} className="sticky top-0 border-b bg-muted px-3 py-1.5 text-left font-semibold">{cell}</th>)}</tr></thead>
           <tbody>{displayed.map((row, ri) => (
             <tr key={start + ri} className="border-b border-muted/50 hover:bg-muted/30">
-              {row.map((cell, ci) => <td key={ci} className="whitespace-nowrap px-3 py-1 text-muted-foreground">{cell}</td>)}
+              {row.map((cell, ci) => <td key={ci} className="whitespace-pre-wrap px-3 py-1 text-muted-foreground">{cell}</td>)}
             </tr>
           ))}</tbody>
         </table>

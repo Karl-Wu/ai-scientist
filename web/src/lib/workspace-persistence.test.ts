@@ -306,6 +306,17 @@ describe("workspace persistence schema", () => {
     ]);
   });
 
+  it("keeps pasted-table cell data out of localStorage, just like image payloads", async () => {
+    await saveProjectWorkspaceState("table-drafts", {
+      ...projectState,
+      tabs: [{ ...projectState.tabs[0], chat: { ...projectState.tabs[0].chat!,
+        pastedTables: [{ id: "table-1", rows: [["Private column"], ["private-cell-value-00123"]], firstRowHeader: true }],
+      } }],
+    });
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toContain("private-cell-value-00123");
+    expect(window.localStorage.getItem(WORKSPACE_STORAGE_KEY)).not.toContain("Private column");
+  });
+
   it("never places draft image payloads in localStorage", async () => {
     await saveProjectWorkspaceState("project-a", {
       ...projectState,
