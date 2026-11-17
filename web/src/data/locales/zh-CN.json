@@ -1,4 +1,8 @@
 {
+  "Image preview": "图片预览",
+  "Click to enlarge": "单击放大",
+  "Actual size": "原始尺寸",
+  "Fit to window": "适应窗口",
   "Showing the first {rows} rows and {columns} columns. Search, sorting, and plots use this preview only.": "仅显示前 {rows} 行、{columns} 列。搜索、排序和图表仅基于这些预览数据。",
   "Long cell values are limited to {count} characters.": "较长的单元格内容最多显示 {count} 个字符。",
   "{count} preview rows · total not scanned": "预览 {count} 行 · 未扫描总行数",

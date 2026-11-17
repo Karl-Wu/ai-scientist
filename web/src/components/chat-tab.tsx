@@ -6,6 +6,7 @@ import { useSessionModel } from "@/lib/use-session-model";
 import { useInputHistory } from "@/lib/use-input-history";
 
 import { useLocale, useT } from "@/components/i18n-provider";
+import { ChatImage } from "@/components/chat-image";
 
 import {
   Conversation,
@@ -1565,12 +1566,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             {message.images && message.images.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {message.images.map((img, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <ChatImage
                     key={i}
                     src={`data:${img.mimeType};base64,${img.data}`}
                     alt={`Attached image ${i + 1}`}
-                    className="max-h-56 max-w-64 rounded-lg border object-contain"
                   />
                 ))}
               </div>
