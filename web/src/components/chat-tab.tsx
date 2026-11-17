@@ -7,6 +7,8 @@ import { useInputHistory } from "@/lib/use-input-history";
 
 import { useLocale, useT } from "@/components/i18n-provider";
 import { ChatImage } from "@/components/chat-image";
+import { AnswerActions, type OpenTask } from "@/components/answer-actions";
+import { useTaskResponses, type TaskResponse } from "@/lib/use-task-responses";
 
 import {
   Conversation,
@@ -19,7 +21,6 @@ import {
   MessageContent,
   MessageResponse,
   MessageActions,
-  MessageAction,
   MessageToolbar,
 } from "@/components/ai-elements/message";
 import {
@@ -116,10 +117,8 @@ import {
 } from "@/components/ai-elements/speech-input";
 import {
   BookOpenIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  CopyIcon,
   DatabaseIcon,
   ImageIcon,
   ListOrderedIcon,
@@ -1532,7 +1531,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 /** Unchanged history rows keep their tool disclosures and skip token renders. */
 export const ChatMessageRow = memo(function ChatMessageRow({
   message, isStreaming, isLast, sessionId, projectId,
-  onViewInNotebook, onViewCompute, onOpenFile, onCopy, copied,
+  onViewInNotebook, onViewCompute, onOpenFile, onCopy, copied, response, onOpenTask, canFork,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
@@ -1544,11 +1543,14 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenFile?: (path: string) => void;
   onCopy: (id: string, content: string) => void;
   copied: boolean;
+  response?: TaskResponse;
+  canFork?: boolean;
+  onOpenTask?: OpenTask;
 }) {
   // Extension notices and compaction markers sit between the bubbles.
   if (message.role === "system") return <SystemCard message={message} />;
   return (
-    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined}>
+    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId}>
       <MessageContent>
         {message.role === "assistant" ? (
           <AssistantMessageBody
@@ -1595,16 +1597,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({
       {message.role === "assistant" && message.content && (
         <MessageToolbar>
           <MessageActions>
-            <MessageAction
-              tooltip="Copy"
-              onClick={() => onCopy(message.id, message.content)}
-            >
-              {copied ? (
-                <CheckIcon className="size-4" />
-              ) : (
-                <CopyIcon className="size-4" />
-              )}
-            </MessageAction>
+            <AnswerActions projectId={projectId} sessionId={sessionId} response={response}
+              canFork={canFork ?? !isStreaming} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask} />
           </MessageActions>
           {((typeof message.runCostUsd === "number" &&
             message.runCostUsd > 0) ||
@@ -1705,6 +1699,8 @@ export interface ChatTabProps {
   isActiveTab: boolean;
   /** Stored session to reopen into this tab (History menu / reload recovery). */
   initialSessionId?: string | null;
+  onOpenTask?: OpenTask;
+  focusResponse?: { entryId: string; nonce: number };
   /** Browser-persisted controls, queue, and composer state for this tab. */
   initialWorkspaceState?: ChatWorkspaceState;
   // Shared sandbox/state passed in (one instance for the whole project)
@@ -1737,6 +1733,8 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     isActive,
     isActiveTab,
     initialSessionId,
+    onOpenTask,
+    focusResponse,
     initialWorkspaceState,
     allFiles,
     sandboxReady,
@@ -2096,6 +2094,13 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   // Bubble meta up to parent so the page can drive the cost pill and tab
   // strip badges from the active tab.
   const sessionId = getSessionId();
+  const taskResponses = useTaskResponses(projectId, sessionId, isStreaming, messages);
+  useEffect(() => {
+    if (!isActive || !focusResponse) return;
+    const target = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-response-entry-id]") ?? [])
+      .find((element) => element.dataset.responseEntryId === focusResponse.entryId);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusResponse, isActive, taskResponses.byMessage]);
   useEffect(() => {
     const onModalJobFinished = (event: Event) => {
       const detail = (
@@ -2412,6 +2417,18 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
         !isActive && "hidden",
       )}
     >
+      {taskResponses.source && onOpenTask && <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-4 py-2 text-xs text-muted-foreground">
+        <span>{t("Created from")}</span>
+        <button type="button" className="min-w-0 max-w-[70%] truncate text-primary hover:underline"
+          onClick={() => onOpenTask(taskResponses.source!.id, taskResponses.source!.name, taskResponses.source!.entryId)}>
+          {taskResponses.source.name}
+        </button>
+        <span className="w-full text-[10px] @min-[640px]/chat:w-auto">{t("History inherited up to the selected answer")}</span>
+      </div>}
+      {taskResponses.error && <div className="flex shrink-0 items-center gap-2 px-4 py-1 text-xs text-muted-foreground">
+        {t("Could not load answer actions.")}
+        <button type="button" className="underline" onClick={() => void taskResponses.refresh()}>{t("Retry")}</button>
+      </div>}
       <Conversation className="flex-1">
         <ConversationContent className={cn("mx-auto w-full max-w-full px-4", userMessageCount > 1 && "@min-[640px]/chat:pl-5")}>
           {messages.length === 0 ? (
@@ -2439,6 +2456,9 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
                 onOpenFile={onOpenFile}
                 onCopy={handleCopy}
                 copied={copiedId === message.id}
+                response={taskResponses.byMessage.get(message.id)}
+                canFork={!isStreaming}
+                onOpenTask={onOpenTask}
               />
             ))
           )}

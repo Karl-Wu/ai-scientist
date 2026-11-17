@@ -29,6 +29,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { commandPreview } from "@/lib/command-blocks";
+import { notifyTaskResponsesChanged } from "@/lib/use-task-responses";
 import { resolveChatTitle, taskDisplayTitle } from "@/lib/chat-title";
 
 const CHAT_ACTIONS_CLASS =
@@ -148,10 +149,12 @@ function RecentChatsList({
     load();
     const interval = window.setInterval(load, 30_000);
     window.addEventListener("focus", load);
+    window.addEventListener("kady:tasks-changed", load);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("focus", load);
+      window.removeEventListener("kady:tasks-changed", load);
     };
   }, [openSessionKey, projectId]);
 
@@ -202,6 +205,7 @@ function RecentChatsList({
         setSessions((current) => current?.map((session) => session.id === sessionId ? { ...session, name } : session) ?? current);
       }
       if (target.tabId) onRenameTab(target.tabId, name);
+      notifyTaskResponsesChanged(projectId);
     } catch {
       toast.error(t("Could not rename task. Please try again."));
     } finally {
@@ -253,6 +257,7 @@ function RecentChatsList({
         if (tabs.length === 1) onNewTab();
         onCloseTab(tab.id);
       }
+      notifyTaskResponsesChanged(projectId);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not delete task. Please try again."));
     } finally {

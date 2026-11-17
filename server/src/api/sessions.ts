@@ -7,6 +7,7 @@
  * frame sourced from Pi's per-session usage accounting.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { registerTaskResponseRoutes } from "./task-responses.ts";
 import { activePaths, getProject, touchProject } from "../projects.ts";
 import { corsResponseHeaders } from "../cors.ts";
 import { currentProjectId } from "../scope.ts";
@@ -162,6 +163,7 @@ function streamRun(
 }
 
 export async function registerSessionRoutes(app: FastifyInstance): Promise<void> {
+  registerTaskResponseRoutes(app);
   app.post("/sessions", async () => {
     const session = await createSession(currentProjectId(), activePaths());
     return { id: session.sessionId, sessionFile: session.sessionFile };

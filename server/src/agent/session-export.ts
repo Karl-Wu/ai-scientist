@@ -92,7 +92,7 @@ export interface CompactionRow {
   timestamp?: string;
 }
 
-export type SessionEntryRow = MessageRow | CustomMessageRow | CompactionRow;
+export type SessionEntryRow = (MessageRow | CustomMessageRow | CompactionRow) & { id?: string };
 
 /**
  * Every entry the transcript view cares about, in file order: messages plus
@@ -134,7 +134,8 @@ export function readRows(file: string): MessageRow[] {
   return rows;
 }
 
-export function textOf(content: ContentPart[]): string {
+export function textOf(content: ContentPart[] | string): string {
+  if (typeof content === "string") return content.trim();
   return (content ?? [])
     .filter((c): c is TextPart => c.type === "text")
     .map((c) => c.text)

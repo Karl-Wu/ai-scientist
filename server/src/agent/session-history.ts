@@ -23,6 +23,8 @@ import {
 import { isParentWake } from "./subagent-wake.ts";
 
 export interface HistoryMessage {
+  /** Stable Pi entry at the end of this rendered answer. */
+  entryId?: string;
   /** `system` = an extension-injected custom message or a compaction marker. */
   role: "user" | "assistant" | "system";
   /** Prompt text (user) or rendered notice text (system). */
@@ -130,6 +132,12 @@ export function toHistory(file: string, sandboxRoot = ""): HistoryMessage[] {
       continue;
     }
     if (m.role !== "assistant") continue;
+    // Ensure even an empty final response updates the bubble boundary.
+    if (!assistant) {
+      assistant = { role: "assistant", frames: [], timestamp: m.timestamp };
+      out.push(assistant);
+    }
+    if (row.id) assistant.entryId = row.id;
     for (const part of m.content ?? []) {
       if (part.type === "thinking") {
         const t = (part as ThinkingPart).thinking;

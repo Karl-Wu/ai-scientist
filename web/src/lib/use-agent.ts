@@ -77,6 +77,7 @@ export interface CitationReport {
 
 export interface ChatMessage {
   id: string;
+  entryId?: string;
   /** `system` = an extension-injected notice (supervisor request, watchdog
    *  finding, scheduled-run completion) or a compaction marker. */
   role: "user" | "assistant" | "system";
@@ -458,6 +459,7 @@ export function applyFrameToTranscript(
 
 /** One transcript entry from GET /sessions/:id/history. */
 export interface HistoryItem {
+  entryId?: string;
   role: "user" | "assistant" | "system";
   content?: string;
   customType?: string;
@@ -582,6 +584,7 @@ function restoreHistory(
     }
     let message: ChatMessage = {
       id: nextId(),
+      entryId: item.entryId,
       role: "assistant",
       content: "",
       timestamp,

@@ -1611,5 +1611,16 @@
   "Earlier task": "之前的任务",
   "AI Scientist reads a compact snapshot of this task, taken when the message is sent.": "AI Scientist 会读取此任务的精简快照，快照在发送消息时生成。",
   "Used when AI Scientist generates figures and schematics, unless you ask for another model in the conversation. Only models priced per token are listed, so every image counts toward the project spend cap. Applies right away, including to open tasks.": "AI Scientist 生成插图和示意图时使用的模型，除非你在任务中指定其他模型。仅列出按 token 计费的模型，所有图像费用均计入项目支出上限。立即生效，包括已打开的任务。",
-  "You can have up to {count} tasks running at once. Close one to open a new one.": "最多可同时运行 {count} 个任务。请关闭一个任务后再新建。"
+  "You can have up to {count} tasks running at once. Close one to open a new one.": "最多可同时运行 {count} 个任务。请关闭一个任务后再新建。",
+  "Like": "赞",
+  "Dislike": "踩",
+  "New task from here": "从此处新建任务",
+  "Follow-up tasks": "后续任务",
+  "Tasks from this answer": "来自此回答的任务",
+  "Created from": "创建自",
+  "History inherited up to the selected answer": "已继承截至所选回答的对话历史",
+  "Could not save feedback. Please try again.": "无法保存评价，请重试。",
+  "Could not create the follow-up task. Please try again when the task is idle.": "无法创建后续任务，请在当前任务停止运行后重试。",
+  "Could not load answer actions.": "无法加载回答操作。",
+  "Close a task before opening another one. The new task is saved in the task list.": "请关闭一个任务后再打开其他任务。新任务已保存在任务列表中。"
 }

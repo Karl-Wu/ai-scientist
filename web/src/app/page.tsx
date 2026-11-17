@@ -956,6 +956,20 @@ function WorkspacePage({
     [tabsMeta],
   );
 
+  const [responseFocus, setResponseFocus] = useState<{ sessionId: string; entryId: string; nonce: number } | null>(null);
+  const openTask = useCallback((sessionId: string, title: string, entryId?: string) => {
+    const alreadyOpen = tabsRef.current.some((tab) => tab.sessionId === sessionId) ||
+      Object.values(tabsMeta).some((meta) => meta.sessionId === sessionId);
+    if (!alreadyOpen && tabsRef.current.length >= MAX_CHAT_TABS) {
+      toast.error(t("Close a task before opening another one. The new task is saved in the task list."));
+      return;
+    }
+    setChatNavigationOpen(true);
+    setView("chat");
+    openSession(sessionId, title);
+    if (entryId) setResponseFocus({ sessionId, entryId, nonce: Date.now() });
+  }, [openSession, tabsMeta, t]);
+
   // ------------------------------------------------------------------
   // Workflow launch — routes to the active chat tab via its imperative
   // handle while keeping the workflow catalogue open.
@@ -1450,6 +1464,8 @@ function WorkspacePage({
                 projectId={projectId}
                 tabId={t.id}
                 initialSessionId={t.sessionId ?? null}
+                onOpenTask={openTask}
+                focusResponse={responseFocus && responseFocus.sessionId === t.sessionId ? responseFocus : undefined}
                 initialWorkspaceState={tabWorkspaceStates[t.id]}
                 isActive={isActive && t.id === activeTabId}
                 isActiveTab={isActive && t.id === activeTabId}
