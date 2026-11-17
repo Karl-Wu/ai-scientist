@@ -1636,5 +1636,16 @@
   "Could not read the pasted table. Please upload the spreadsheet file instead.": "无法读取粘贴的表格，请直接上传表格文件。",
   "Pasted table: {rows} data rows × {columns} columns": "粘贴表格：{rows} 行数据 × {columns} 列",
   "Could not upload the pasted table. Your table is kept; please try again.": "表格上传或消息发送失败，已保留表格，请重试。",
-  "Uploading pasted tables…": "正在上传粘贴的表格…"
+  "Uploading pasted tables…": "正在上传粘贴的表格…",
+  "Edit original prompt": "编辑原文提示词",
+  "Edit original": "编辑原文",
+  "Prompt preview language": "提示词预览语言",
+  "Translated view": "译文",
+  "Original": "原文",
+  "Translation is for reading only. Execution uses the original prompt.": "译文仅供阅读，执行时使用原文。",
+  "The original prompt was edited. Showing the original; the stored translation no longer applies.": "原文已被编辑，现有译文不再适用，当前显示原文。",
+  "The prompt has changed. Translation needs updating; showing the original.": "原文已更新，译文待更新，当前显示原文。",
+  "No translation is available for this workflow yet; showing the original.": "此工作流暂无译文，当前显示原文。",
+  "Execution uses the original prompt.": "执行时使用原文。",
+  "Edits to the original prompt will be used for execution.": "对原文的编辑将用于实际执行。"
 }

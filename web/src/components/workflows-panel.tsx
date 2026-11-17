@@ -113,6 +113,7 @@ import { LanguageSelector } from "@/components/language-selector";
 import { useI18n, useT } from "@/components/i18n-provider";
 import type { Locale } from "@/lib/i18n";
 import workflowLocaleZh from "@/data/workflow-locales/zh-CN.json";
+import { workflowPromptTranslation } from "@/lib/workflow-prompt-preview";
 
 export type Workflow = {
   id: string;
@@ -129,7 +130,12 @@ const ALL_WORKFLOWS = workflowsData as Workflow[];
 const ZH_WORKFLOW_LOCALE = workflowLocaleZh as {
   categories: Record<string, string>;
   workflows: Record<string, string[]>;
+  placeholders: Record<string, string>;
 };
+
+function localizedPlaceholderLabel(label: string, locale: Locale) {
+  return locale === "zh-CN" ? ZH_WORKFLOW_LOCALE.placeholders[label] ?? label : label;
+}
 
 function localizedCategoryLabel(category: { id: string; label: string }, locale: Locale) {
   return locale === "zh-CN" ? ZH_WORKFLOW_LOCALE.categories[category.id] ?? category.label : category.label;
@@ -320,6 +326,9 @@ export function WorkflowLaunchDialog({
   const [sources, setSources] = useState("");
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null);
+  const [previewOverride, setPreviewOverride] = useState<"original" | "translation" | null>(null);
+  const previewMode = previewOverride ?? (locale === "en" ? "original" : "translation");
+  const translation = workflowPromptTranslation(workflow.id, workflow.prompt, locale);
 
   const updatePlaceholder = useCallback((key: string, value: string) => {
     setPlaceholderValues((prev) => ({ ...prev, [key]: value }));
@@ -339,6 +348,23 @@ export function WorkflowLaunchDialog({
     .every((ph) => placeholderValues[ph.key]?.trim());
 
   const finalPrompt = buildWorkflowPrompt(editedPrompt ?? assembledPrompt, inputFiles, sources, inputFolders);
+  const hasPromptEdits = editedPrompt !== null && editedPrompt !== assembledPrompt;
+  const showTranslation = locale !== "en" && previewMode === "translation" && !hasPromptEdits && translation.status === "available";
+  let previewPrompt = finalPrompt;
+  if (showTranslation && translation.status === "available") {
+    let translated = translation.text;
+    for (const ph of workflow.placeholders) {
+      translated = translated.replaceAll(`{${ph.key}}`, placeholderValues[ph.key]?.trim() || `[${localizedPlaceholderLabel(ph.label, locale)}]`);
+    }
+    // This value is read-only presentation. handleLaunch always receives finalPrompt.
+    previewPrompt = buildWorkflowPrompt(translated, inputFiles, sources, inputFolders, translation.copy);
+  }
+  const previewNotice = locale !== "en" && previewMode === "translation"
+    ? hasPromptEdits ? "The original prompt was edited. Showing the original; the stored translation no longer applies."
+      : translation.status === "stale" ? "The prompt has changed. Translation needs updating; showing the original."
+      : translation.status === "missing" ? "No translation is available for this workflow yet; showing the original."
+      : "Translation is for reading only. Execution uses the original prompt."
+    : "Execution uses the original prompt.";
 
   const handleLaunch = useCallback(() => {
     if (chatRunning || uploading || !canLaunch || selectedBudgetBlocked || !modelAvailable) return;
@@ -350,6 +376,7 @@ export function WorkflowLaunchDialog({
     setSources("");
     setEditedPrompt(null);
     setIsEditingPrompt(false);
+    setPreviewOverride(null);
   }, [finalPrompt, model, inputFiles, onLaunch, onOpenChange, chatRunning, uploading, canLaunch, selectedBudgetBlocked, modelAvailable]);
 
   const iconColor = CATEGORY_ICON_COLOR[workflow.category] ?? "text-muted-foreground";
@@ -390,14 +417,15 @@ export function WorkflowLaunchDialog({
               {workflow.placeholders.map((ph) => (
                 <div key={ph.key}>
                   <label className="mb-1.5 block text-xs font-medium text-foreground">
-                    {ph.label}
+                    {localizedPlaceholderLabel(ph.label, locale)}
                     {ph.required && <span className="ml-0.5 text-destructive">*</span>}
                   </label>
                   <input
                     type="text"
                     value={placeholderValues[ph.key] ?? ""}
                     onChange={(e) => updatePlaceholder(ph.key, e.target.value)}
-                    placeholder={ph.label}
+                    aria-label={localizedPlaceholderLabel(ph.label, locale)}
+                    placeholder={localizedPlaceholderLabel(ph.label, locale)}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/50"
                   />
                 </div>
@@ -408,33 +436,46 @@ export function WorkflowLaunchDialog({
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label className="text-xs font-medium text-muted-foreground">
-                {isEditingPrompt ? "Edit prompt" : t("Prompt preview")}
+                {isEditingPrompt ? t("Edit original prompt") : t("Prompt preview")}
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isEditingPrompt) {
-                    setEditedPrompt(editedPrompt ?? assembledPrompt);
-                  }
-                  setIsEditingPrompt(!isEditingPrompt);
-                }}
-                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <PencilIcon className="size-3" />
-                {isEditingPrompt ? t("Done") : t("Edit")}
-              </button>
+              <div className="flex items-center gap-2">
+                {locale !== "en" && <div role="group" aria-label={t("Prompt preview language")} className="flex rounded-md border p-0.5">
+                  {([['translation', t("Translated view")], ['original', t("Original")]] as const).map(([mode, label]) => (
+                    <button key={mode} type="button" disabled={isEditingPrompt} aria-pressed={previewMode === mode}
+                      onClick={() => setPreviewOverride(mode)}
+                      className={cn("rounded px-2 py-0.5 text-[11px] disabled:opacity-40", previewMode === mode ? "bg-muted text-foreground" : "text-muted-foreground")}>
+                      {label}
+                    </button>
+                  ))}
+                </div>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditingPrompt) {
+                      setEditedPrompt(editedPrompt ?? assembledPrompt);
+                    }
+                    setIsEditingPrompt(!isEditingPrompt);
+                  }}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <PencilIcon className="size-3" />
+                  {isEditingPrompt ? t("Done") : t("Edit original")}
+                </button>
+              </div>
             </div>
             {isEditingPrompt ? (
               <textarea
+                aria-label={t("Edit original prompt")}
                 value={editedPrompt ?? assembledPrompt}
                 onChange={(e) => setEditedPrompt(e.target.value)}
                 className="max-h-48 min-h-[5rem] w-full resize-y rounded-lg border bg-background px-3 py-2 text-xs leading-relaxed outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/30"
               />
             ) : (
-              <div className="max-h-32 overflow-y-auto rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                {finalPrompt}
+              <div aria-label={t("Prompt preview")} lang={showTranslation ? locale : undefined} className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                {previewPrompt}
               </div>
             )}
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground" aria-live="polite">{t(isEditingPrompt ? "Edits to the original prompt will be used for execution." : previewNotice)}</p>
           </div>
 
           <div className="flex items-center gap-2">
