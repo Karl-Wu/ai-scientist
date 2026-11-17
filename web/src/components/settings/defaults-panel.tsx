@@ -135,7 +135,7 @@ export function DefaultsPanel() {
       });
       setSaved(next);
       setDraft(draftFrom(next, instances));
-      setNotice("Saved. A project's next first chat starts with these; the image and verifier models apply right away.");
+      setNotice("Saved. A project's next first task starts with these; the image and verifier models apply right away.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Save failed");
     } finally {
@@ -146,10 +146,10 @@ export function DefaultsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader
-        title={t("Defaults for new chats")}
+        title={t("Defaults for new tasks")}
         description={
           <>
-            {t("What a project's first chat tab starts with. A new tab opened next to an existing one copies that tab's choices instead, and runs AI Scientist starts on its own (schedules, system turns) reuse the project's latest chat model, falling back to this default. Specialists have their own default under")}{" "}
+            {t("What a project's first task starts with. A new tab opened next to an existing one copies that tab's choices instead, and runs AI Scientist starts on its own (schedules, system turns) reuse the project's latest task model, falling back to this default. Specialists have their own default under")}{" "}
             <SettingsLink tab="specialists">{t("Specialists")}</SettingsLink>.
           </>
         }
@@ -162,7 +162,7 @@ export function DefaultsPanel() {
         <p className="text-xs text-muted-foreground" role="status">
           {t("Loading…")}{" "}</p>
       ) : (
-        <SettingsCard title={t("New chat")}>
+        <SettingsCard title={t("New task")}>
           <div className="grid gap-4">
             <div className="grid gap-1.5">
               <label htmlFor="default-model" className="text-xs font-medium">
@@ -272,7 +272,7 @@ function VerifierModelField({ value, onChange }: { value: string; onChange: (val
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          {t("Specialists that check work run on this model, so a result is reviewed by a different model than the one that produced it. A specialist that pins its own model keeps it. Applies to the next delegation, including in open chats; verifier runs count toward the project spend cap like any other.")}{" "}</p>
+          {t("Specialists that check work run on this model, so a result is reviewed by a different model than the one that produced it. A specialist that pins its own model keeps it. Applies to the next delegation, including in open tasks; verifier runs count toward the project spend cap like any other.")}{" "}</p>
       )}
       {agents.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
@@ -358,7 +358,7 @@ function ImageModelField({
         </p>
       ) : (
         <p className="text-[11px] text-muted-foreground">
-          {t("Used when AI Scientist generates figures and schematics, unless you ask for another model in chat. Only models priced per token are listed, so every image counts toward the project spend cap. Applies right away, including to open chats.")}{" "}</p>
+          {t("Used when AI Scientist generates figures and schematics, unless you ask for another model in the conversation. Only models priced per token are listed, so every image counts toward the project spend cap. Applies right away, including to open tasks.")}{" "}</p>
       )}
     </div>
   );

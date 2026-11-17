@@ -4,7 +4,7 @@ import { useT, useLocale } from "@/components/i18n-provider";
 import { SubagentFleetPanel } from "./subagent-fleet-panel";
 
 /**
- * Project "Tasks" tab: pi-subagents durable schedules (recurring or
+ * Project "Automated runs" tab: pi-subagents durable schedules (recurring or
  * one-shot specialist runs that fire from AI Scientist's resident session, even with
  * no chat tab open) and missions (durable records of delegated work).
  * Schedules are created conversationally ("run the QC pipeline every 6h");
@@ -171,11 +171,11 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
       {dialog}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold">{t("Tasks")}</h3>
+          <h3 className="text-base font-semibold">{t("Automated runs")}</h3>
           <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            {t("Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one (“re-run the QC report every 6 hours”); they fire from a resident session even with no chat open and pause automatically when the project spend limit is reached.")}</p>
+            {t("Recurring and one-shot specialist runs, plus durable missions. Ask AI Scientist to create one (“re-run the QC report every 6 hours”); they fire from a resident task even with no task open and pause automatically when the project spend limit is reached.")}</p>
         </div>
-        <Button type="button" size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" title={t("Refresh tasks")} onClick={() => void refresh()} aria-label={t("Refresh tasks")}>
+        <Button type="button" size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" title={t("Refresh automated runs")} onClick={() => void refresh()} aria-label={t("Refresh automated runs")}>
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -200,7 +200,7 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
             <p className="text-xs text-muted-foreground">{t("Loading…")}</p>
           ) : schedules.length === 0 ? (
             <p className="rounded-lg bg-muted/30 px-3 py-4 text-xs leading-relaxed text-muted-foreground">
-              {t("No scheduled tasks yet. In a chat: “every night at 2am, have the data validator re-check user_data and log a notebook entry”.")}</p>
+              {t("No scheduled tasks yet. In a task: “every night at 2am, have the data validator re-check user_data and log a notebook entry”.")}</p>
           ) : (
             schedules.map((s) => {
               const expanded = open[s.id] ?? false;

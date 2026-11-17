@@ -243,7 +243,7 @@ export function ProjectView({
       const confirmed = await confirm({
         title: `Delete "${project.name}"?`,
         description:
-          t("Its sandbox files and chats will be permanently removed. This cannot be undone."),
+          t("Its sandbox files and tasks will be permanently removed. This cannot be undone."),
         confirmLabel: t("Delete project"),
         destructive: true,
       });
@@ -313,7 +313,7 @@ export function ProjectView({
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
               {t("Choose a project")}</h1>
             <p className="text-sm leading-relaxed text-muted-foreground md:text-base">
-              {t("Each project keeps its files, chats, notebook, and research settings separate.")}</p>
+              {t("Each project keeps its files, tasks, notebook, and research settings separate.")}</p>
           </div>
           <Button onClick={openCreate}>
             <PlusIcon data-icon="inline-start" />

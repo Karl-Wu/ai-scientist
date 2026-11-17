@@ -99,7 +99,7 @@ export function SessionCostPill({
                 ? t("Project billable cost {cost} of {limit}", { cost: formatUsd(projectTotal), limit: formatUsd(limitUsd) })
                 : t("Project billable cost {cost}", { cost: formatUsd(projectTotal) }),
               heldUsd > 0 ? t("including {held} held for work in progress", { held: formatUsd(heldUsd) }) : "",
-              t("session billable cost {cost}", { cost: formatUsd(sessionTotal) }),
+              t("task billable cost {cost}", { cost: formatUsd(sessionTotal) }),
               (summary.subscriptionTokens ?? 0) > 0
                 ? t("{tokens} subscription tokens", { tokens: formatTokens(summary.subscriptionTokens ?? 0) })
                 : "",
@@ -124,7 +124,7 @@ export function SessionCostPill({
                 )}
               </span>
               <span className="flex items-baseline gap-1">
-                <span className="text-muted-foreground">{t("sess")}</span>
+                <span className="text-muted-foreground">{t("task")}</span>
                 <span className="font-semibold">{formatUsd(sessionTotal)}</span>
               </span>
               {(summary.subscriptionTokens ?? 0) > 0 ? (
@@ -177,7 +177,7 @@ export function SessionCostPill({
               )}
             </div>
             <div className="text-muted-foreground mt-0.5 text-xs">
-              {t(projectSummary.sessionCount === 1 ? "{tokens} tokens across {count} session" : "{tokens} tokens across {count} sessions", {
+              {t(projectSummary.sessionCount === 1 ? "{tokens} tokens across {count} task" : "{tokens} tokens across {count} tasks", {
                 tokens: formatTokens(projectSummary.totalTokens), count: projectSummary.sessionCount,
               })}
             </div>
@@ -223,7 +223,7 @@ export function SessionCostPill({
 
         <div className="border-b p-4">
           <div className="text-muted-foreground text-xs uppercase tracking-wide">
-            {t("This session")}
+            {t("This task")}
           </div>
           <div className="mt-1 font-mono text-xl font-semibold tabular-nums">
             {formatUsd(sessionTotal)}

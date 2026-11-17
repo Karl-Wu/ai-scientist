@@ -837,7 +837,7 @@ function OrganizeFilesButton({ onOrganize }: { onOrganize: () => void }) {
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-semibold leading-tight">{t("Organize the sandbox with AI Scientist?")}</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("Starts a run in the active chat with its current model. AI Scientist proposes a folder layout, moves files into it (nothing is deleted), and updates paths in scripts and notebooks that referenced the moved files.")}</p>
+              {t("Starts a run in the active task with its current model. AI Scientist proposes a folder layout, moves files into it (nothing is deleted), and updates paths in scripts and notebooks that referenced the moved files.")}</p>
           </div>
         </div>
         <div className="mt-3 flex justify-end gap-2">

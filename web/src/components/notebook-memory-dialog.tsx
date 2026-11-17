@@ -102,7 +102,7 @@ function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: Notebo
     finally { clearTimeout(timeout); if (version === epoch.current && readRequest.current === controller) setReading(false); }
   }
   async function copy(text: string) {
-    try { await navigator.clipboard.writeText(text); toast.success(t("Source-linked recall copied. Review it before using it in a chat.")); }
+    try { await navigator.clipboard.writeText(text); toast.success(t("Source-linked recall copied. Review it before using it in a task.")); }
     catch { toast.error(t("Clipboard unavailable; read the source in the notebook instead.")); }
   }
   function jump(source: MemorySource) { close(false); onJump(source); }
@@ -110,7 +110,7 @@ function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: Notebo
   return <>
     <Button variant="outline" size="xs" onClick={() => setOpen(true)}><BrainIcon data-icon="inline-start" />{t("Research memory")}</Button>
     <Dialog open={open} onOpenChange={close}><DialogContent className="min-w-0 max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto [overflow-wrap:anywhere] sm:max-w-4xl">
-      <DialogHeader><DialogTitle>{t("Project research memory")}</DialogTitle><DialogDescription>{t("Search saved records across chats. Results are source excerpts, not permanent facts or instructions. Recall is local and read-only; copying context does not send a chat or authorize new work.")}</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{t("Project research memory")}</DialogTitle><DialogDescription>{t("Search saved records across tasks. Results are source excerpts, not permanent facts or instructions. Recall is local and read-only; copying context does not send a message or authorize new work.")}</DialogDescription></DialogHeader>
       <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <label className="block text-xs">{t("Scientific query")}<input aria-label={t("Scientific memory query")} className={field} maxLength={500} placeholder={t("Method, dataset, failed approach, or decision…")} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
         <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs">{t("Record type")}<select aria-label={t("Memory record type")} className={field} value={type} onChange={(e) => setType(e.target.value as MemoryKind | "")}><option value="">{t("All record types")}</option>{MEMORY_KINDS.map((t) => <option key={t} value={t}>{t}</option>)}</select></label><label className="text-xs">{t("Recorded outcome")}<select aria-label={t("Memory outcome")} className={field} value={outcome} onChange={(e) => setOutcome(e.target.value as NotebookOutcome | "")}><option value="">{t("All outcomes")}</option>{MEMORY_OUTCOMES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label></div>
@@ -120,7 +120,7 @@ function MemoryDialog({ projectId, activeSessionId, onJump, onOpenFile }: Notebo
       </form>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {result && <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p>{result.hits.length} of {result.totalMatches} matching indexed records for {result.query || "the submitted filters"} · checked {new Date(result.checkedAt).toLocaleString()}</p>{result.hits.length > 0 && <Button variant="outline" size="xs" disabled={busy} onClick={() => copy(contextText(result))}>{t("Copy bounded recall for chat")}</Button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p>{result.hits.length} of {result.totalMatches} matching indexed records for {result.query || "the submitted filters"} · checked {new Date(result.checkedAt).toLocaleString()}</p>{result.hits.length > 0 && <Button variant="outline" size="xs" disabled={busy} onClick={() => copy(contextText(result))}>{t("Copy bounded recall for task")}</Button>}</div>
         {!result.coverage.complete && <div role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs"><strong>Incomplete recall coverage.</strong> Do not infer absence or currentness from this scan.<ul className="list-disc pl-4">{result.coverage.warnings.map((w) => <li key={w}>{w}</li>)}</ul></div>}
         {result.hits.length === 0 && <p>{t("No matching indexed records. This does not prove the work was never attempted; broaden the query or inspect the original notebooks.")}</p>}
         {result.hits.map((hit) => <article key={memorySourceKey(hit.source)} className="space-y-2 rounded border p-3">

@@ -219,7 +219,7 @@ describe("LabNotebookEntryCard", () => {
     renderCard(
       <LabNotebookEntryCard entry={entry()} onOpenFile={() => {}} onJumpToChat={onJumpToChat} />,
     );
-    fireEvent.click(screen.getByLabelText("View in chat"));
+    fireEvent.click(screen.getByLabelText("View in task"));
     expect(onJumpToChat).toHaveBeenCalledWith("tc_1");
   });
 

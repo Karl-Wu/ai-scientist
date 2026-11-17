@@ -243,7 +243,7 @@ function ScopedSkillsPanel({ projectId }: { projectId: string }) {
       if (result.conflicts.length > 0) {
         parts.push(t("skipped {v0} (already installed)", { v0: result.conflicts.join(", ") }));
       }
-      return t("{v0}. New chat tabs pick them up.", { v0: parts.join("; ") });
+      return t("{v0}. New tasks pick them up.", { v0: parts.join("; ") });
     });
   }, [closePanes, picked, preview, run, scope, t, projectId]);
 

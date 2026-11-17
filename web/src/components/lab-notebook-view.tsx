@@ -336,7 +336,7 @@ export function LabNotebookView({
 
   // --- Header actions ---
   // Export follows the scope toggle, like Print does. Exporting the active
-  // session while "All chats" is on screen silently hands back a different
+  // session while "All tasks" is on screen silently hands back a different
   // (much smaller) document than the one the user is looking at.
   async function handleExport(format: NotebookExportFormat) {
     const target =
@@ -346,7 +346,7 @@ export function LabNotebookView({
           ? { path: `/sessions/${encodeURIComponent(sessionId)}/notebook/export`, name: sessionId }
           : null;
     if (!target) {
-      toast.error(t("Start a chat before exporting its journal."));
+      toast.error(t("Start a task before exporting its journal."));
       return;
     }
     try {
@@ -498,7 +498,7 @@ export function LabNotebookView({
             </p>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {scope === "project"
-                ? t("Findings from every chat in this project collect here.")
+                ? t("Findings from every task in this project collect here.")
                 : "AI Scientist’s journal — entries appear here as it works, linking hypotheses to evidence and decisions."}
             </p>
           </div>

@@ -45,7 +45,7 @@ describe("project research memory", () => {
     render(<NotebookMemoryDialog {...props} />); await search();
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
-    fireEvent.click(screen.getByRole("button", { name: "Copy bounded recall for chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy bounded recall for task" }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const copied = writeText.mock.calls[0][0]; const data = JSON.parse(copied);
     expect(new TextEncoder().encode(copied).length).toBeLessThanOrEqual(16 * 1024);

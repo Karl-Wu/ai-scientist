@@ -33,7 +33,7 @@ const PAPERCLIP_KEY_DEF: KeyDef = {
   placeholder: "gxl_…",
   keysUrl: "https://paperclip.gxl.ai/keys",
   hint: "Checked with Paperclip before it is saved. The connector reads the key from .env by name, so it is never copied into the connector settings.",
-  savedNote: "Saved. New chat tabs can search Paperclip — no restart needed.",
+  savedNote: "Saved. New tasks can search Paperclip — no restart needed.",
 };
 
 /**

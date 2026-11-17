@@ -102,7 +102,7 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
       const confirmed = await confirm({
         title: t('Delete "{name}"?', { name: project.name }),
         description:
-          t("Its sandbox files and chats will be permanently removed. This cannot be undone."),
+          t("Its sandbox files and tasks will be permanently removed. This cannot be undone."),
         confirmLabel: t("Delete project"),
         destructive: true,
       });

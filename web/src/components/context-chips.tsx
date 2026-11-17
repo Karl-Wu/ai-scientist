@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import type { ReactNode } from "react";
 import {
   XIcon,
@@ -107,6 +109,7 @@ function ComposerContextChips({
   onResearchChange?: (refs: ResearchRef[]) => void;
   onDelegationChange?: (next: DelegationChoice) => void;
 }) {
+  const t = useT();
   const { delegation, research } = context;
   const scope = onResearchChange ? "Applies to the next message only." : null;
   return (
@@ -176,7 +179,7 @@ function ComposerContextChips({
       )}
       {research.map((ref) => {
         const key = researchRefKey(ref);
-        const label = ref.kind === "chat" ? "Earlier chat" : RECORD_KIND_LABELS[ref.type];
+        const label = ref.kind === "chat" ? t("Earlier task") : RECORD_KIND_LABELS[ref.type];
         return (
           <Chip
             key={key}
@@ -193,7 +196,7 @@ function ComposerContextChips({
                 {ref.title}
                 <br />
                 {ref.kind === "chat"
-                  ? "AI Scientist reads a compact snapshot of this chat, taken when the message is sent."
+                  ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
                   : "AI Scientist reads this record with notebook_search before relying on it."}{" "}
                 {scope}
               </>

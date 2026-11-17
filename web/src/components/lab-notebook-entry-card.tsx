@@ -301,8 +301,8 @@ export function LabNotebookEntryCard({
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => onJumpToChat(entry.id)}
-                  title={t("View in chat")}
-                  aria-label={t("View in chat")}
+                  title={t("View in task")}
+                  aria-label={t("View in task")}
                   className="rounded-full text-muted-foreground"
                 >
                   <MessageSquareTextIcon />

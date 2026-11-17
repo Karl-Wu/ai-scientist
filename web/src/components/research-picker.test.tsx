@@ -80,7 +80,7 @@ describe("ResearchPickerBody", () => {
   it("offers earlier chats, excluding this one and empty ones, and deselects", async () => {
     const picked: ResearchRef = { kind: "chat", sessionId: "older", title: "Run QC on counts.csv" };
     const { onChange, user } = setup([picked]);
-    await user.click(screen.getByRole("radio", { name: "Chats" }));
+    await user.click(screen.getByRole("radio", { name: "Tasks" }));
     const row = await screen.findByRole("checkbox", { name: /Run QC on counts.csv/ });
     expect(row).toHaveAttribute("aria-checked", "true");
     expect(screen.queryByText("This chat")).toBeNull();

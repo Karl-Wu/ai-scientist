@@ -33,7 +33,7 @@ export function SubagentFleetPanel({ projectId }: { projectId: string }) {
     }).catch((e) => { if (!cancelled) setError(e.message); });
     void load();
     // A chat started after this panel mounted (or the first schedule's host)
-    // would otherwise stay invisible until "Refresh chats".
+    // would otherwise stay invisible until "Refresh tasks".
     const timer = setInterval(() => { if (!document.hidden) void load(); }, 15_000);
     return () => { cancelled = true; clearInterval(timer); };
   }, [projectId, sessionRefresh]);
@@ -105,13 +105,13 @@ export function SubagentFleetPanel({ projectId }: { projectId: string }) {
       </div>
       <div className="flex min-w-0 items-center gap-1.5 @min-[36rem]/fleet:max-w-[50%]">
         <div className="relative flex min-w-0 flex-1 @min-[36rem]/fleet:max-w-64">
-          <select aria-label={t("Fleet chat")} value={sessionId} onChange={(e) => setSessionId(e.target.value)} className="h-8 w-full min-w-0 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8 text-xs">
-            {!sessions.length && <option value="">{t("No chats yet")}</option>}
+          <select aria-label={t("Task selection")} value={sessionId} onChange={(e) => setSessionId(e.target.value)} className="h-8 w-full min-w-0 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8 text-xs">
+            {!sessions.length && <option value="">{t("No tasks yet")}</option>}
             {sessions.map((s) => <option key={s.id} value={s.id}>{commandPreview(s.name)}</option>)}
           </select>
           <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
         </div>
-        <Button size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" aria-label={t("Refresh chats")} title={t("Refresh chats")} onClick={() => setSessionRefresh((n) => n + 1)}>
+        <Button size="sm" variant="ghost" className="size-8 shrink-0 p-0 text-muted-foreground" aria-label={t("Refresh tasks")} title={t("Refresh tasks")} onClick={() => setSessionRefresh((n) => n + 1)}>
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -119,7 +119,7 @@ export function SubagentFleetPanel({ projectId }: { projectId: string }) {
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     {notice && <p role="status" className="whitespace-pre-wrap text-xs">{notice}</p>}
     {snapshot?.fleet?.entries.map((entry) => <div key={entry.key} className="text-xs"><span className="font-medium">{entry.agent}</span> · {entry.model || "Inherited model"} · {entry.tokens.total.toLocaleString()} tokens{entry.goal && <p className="text-muted-foreground">{entry.goal}</p>}</div>)}
-    {!runs.length && <p className="rounded-lg bg-muted/30 px-3 py-3 text-xs leading-relaxed text-muted-foreground">{snapshot ? t("No specialist runs in this chat.") : sessionId ? t("Loading specialists…") : t("Start a chat to view its specialists.")}</p>}
+    {!runs.length && <p className="rounded-lg bg-muted/30 px-3 py-3 text-xs leading-relaxed text-muted-foreground">{snapshot ? t("No specialist runs in this task.") : sessionId ? t("Loading specialists…") : t("Start a task to view its specialists.")}</p>}
     {runs.map((run) => <div key={run.id} className="space-y-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium">{run.label}</span><span className="text-xs">{t(run.state)}</span></div>
       {run.startedAt && <p className="text-xs text-muted-foreground">{Math.max(0, Math.round(((run.endedAt || Date.now()) - run.startedAt) / 1000))}s elapsed{run.activity?.currentTool ? ` · ${run.activity.currentTool}` : ""}</p>}

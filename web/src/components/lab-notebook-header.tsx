@@ -303,7 +303,7 @@ export function LabNotebookHeader({
                   title={
                     canExport
                       ? undefined
-                      : t("Start a chat before exporting its journal")
+                      : t("Start a task before exporting its journal")
                   }
                 >
                   <DownloadIcon data-icon="inline-start" />
@@ -342,8 +342,8 @@ export function LabNotebookHeader({
           value={scope}
           onChange={onScopeChange}
           options={[
-            { value: "session", label: t("This chat") },
-            { value: "project", label: t("All chats") },
+            { value: "session", label: t("This task") },
+            { value: "project", label: t("All tasks") },
           ]}
         />
         {scope === "session" && hasEntries && (

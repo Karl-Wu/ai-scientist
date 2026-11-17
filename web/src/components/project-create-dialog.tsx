@@ -104,7 +104,7 @@ export function ProjectCreateDialog({
         <DialogHeader>
           <DialogTitle>{t("New project")}</DialogTitle>
           <DialogDescription>
-            {t("Each project has its own sandbox, chat history and settings. You can change everything later in Settings → Project.")}</DialogDescription>
+            {t("Each project has its own sandbox, conversation history and settings. You can change everything later in Settings → Project.")}</DialogDescription>
         </DialogHeader>
         <form
           className="flex flex-col gap-3"

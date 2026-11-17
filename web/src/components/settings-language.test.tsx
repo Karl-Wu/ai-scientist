@@ -36,7 +36,7 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 it.each([
   ["providers", <ProvidersPanel />, "模型提供商", "添加提供商"],
-  ["defaults", <DefaultsPanel />, "新会话默认设置", "保存默认设置"],
+  ["defaults", <DefaultsPanel />, "新任务默认设置", "保存默认设置"],
   ["general", <ProjectSettingsPanel projectId="p1" />, "项目设置 · Original project", "常规与预算"],
   ["skills", <SkillsPanel />, "技能", "新建技能"],
   ["prompts", <PromptsPanel />, "提示词模板", "新建模板"],

@@ -102,7 +102,7 @@ function ProjectNavigation({
     { id: "files", label: t("Files"), hint: t("Browse and manage project files"), Icon: FilesIcon, color: "text-blue-500" },
     { id: "workflows", label: t("Workflows"), hint: t("Browse and launch scientific workflows"), Icon: WorkflowIcon, color: "text-violet-500" },
     { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-amber-500" },
-    { id: "automation", label: t("Tasks"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
+    { id: "automation", label: t("Automated runs"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
 
 
@@ -1159,7 +1159,7 @@ function WorkspacePage({
               <>
                 <b>{t(chatNavigationOpen ? "Hide left navigation" : "Show left navigation")}</b>
                 <br />
-                {t("Show or hide New chat, Recent chats, and Workflows.")}</>
+                {t("Show or hide New task, Recent tasks, and Workflows.")}</>
             }
           >
             <button

@@ -36,7 +36,7 @@ beforeEach(() => { modelState.availability = "available"; modelState.billable = 
 describe("workflow data sources", () => {
   it("blocks launching into a running chat and explains how to continue", () => {
     const onLaunch = setup({ chatRunning: true });
-    expect(screen.getByRole("status")).toHaveTextContent(/chat is running|当前会话正在运行/);
+    expect(screen.getByRole("status")).toHaveTextContent(/task is running|当前任务正在运行/);
     expect(screen.getByRole("button", { name: "Run workflow" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Run workflow" }));
     expect(onLaunch).not.toHaveBeenCalled();

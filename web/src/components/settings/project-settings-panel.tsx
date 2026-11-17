@@ -347,7 +347,7 @@ function GuardCard({ projectId }: { projectId: string }) {
     <SettingsCard
       id="safety"
       title={t("Raw-data guard")}
-      description={t("Applies to AI Scientist and to background specialists, in open chats too. A heuristic guard, not a security boundary — see docs/data-guard.md.")}
+      description={t("Applies to AI Scientist and to background specialists, in open tasks too. A heuristic guard, not a security boundary — see docs/data-guard.md.")}
     >
       {!initial ? (
         error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>
@@ -458,7 +458,7 @@ function CompactionCard({ projectId }: { projectId: string }) {
     <SettingsCard
       id="context"
       title={t("Context compaction")}
-      description={t("Compaction summarizes older messages when a conversation nears the model's context window. AI Scientist puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every chat in this project, including open ones; use “Compact now” in a chat to run it by hand.")}
+      description={t("Compaction summarizes older messages when a conversation nears the model's context window. AI Scientist puts its own state block (plan, notebook, results, environment) ahead of the summary. Applies to every task in this project, including open ones; use “Compact now” in a task to run it by hand.")}
     >
       {!initial ? (
         error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>

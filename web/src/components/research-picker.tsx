@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n-provider";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpenIcon,
@@ -62,7 +64,7 @@ function relativeTime(value: string | number): string {
 
 function chatTitle(s: SessionListItem): string {
   const raw = (s.name ?? commandPreview(s.firstMessage ?? "")).replace(/\s+/g, " ").trim();
-  return raw || "Untitled chat";
+  return raw || "Untitled task";
 }
 
 /** Latest project notebook entries that nothing later amends. */
@@ -127,6 +129,7 @@ export function ResearchPickerBody({
   onChange: (refs: ResearchRef[]) => void;
   autoFocus?: boolean;
 }) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("records");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<MemoryKind | "all">("all");
@@ -247,16 +250,16 @@ export function ResearchPickerBody({
           placeholder={
             mode === "records"
               ? "Search notebook entries, plans and notes…"
-              : "Filter earlier chats…"
+              : t("Filter earlier tasks…")
           }
-          aria-label={mode === "records" ? "Search research records" : "Filter earlier chats"}
+          aria-label={mode === "records" ? "Search research records" : t("Filter earlier tasks")}
           className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
         />
         <div className="flex shrink-0 rounded-md border p-0.5" role="radiogroup" aria-label="Research source">
           {(
             [
               { id: "records", label: "Records", icon: BookOpenIcon },
-              { id: "chats", label: "Chats", icon: MessagesSquareIcon },
+              { id: "chats", label: t("Tasks"), icon: MessagesSquareIcon },
             ] as const
           ).map(({ id, label, icon: Icon }) => (
             <button
@@ -322,8 +325,8 @@ export function ResearchPickerBody({
           <div className="px-6 py-8 text-center text-xs text-muted-foreground">
             {mode === "chats"
               ? query.trim()
-                ? "No matching chats."
-                : "No other chats in this project yet."
+                ? t("No matching tasks.")
+                : t("No other tasks in this project yet.")
               : idleRecords
                 ? "No notebook entries yet. AI Scientist records hypotheses, methods and findings here as it works."
                 : "No matching records."}
@@ -389,7 +392,7 @@ export function ResearchPickerBody({
         <span className="text-[10px] text-muted-foreground">
           {mode === "records"
             ? "AI Scientist reads picked records with notebook_search before relying on them."
-            : "AI Scientist reads a compact snapshot of each picked chat, taken when you send."}
+            : t("AI Scientist reads a compact snapshot of each picked task, taken when you send.")}
         </span>
         {selected.length > 0 && (
           <button

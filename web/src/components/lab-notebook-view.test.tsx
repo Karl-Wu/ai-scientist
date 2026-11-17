@@ -84,7 +84,7 @@ const baseProps = {
 /** Most component tests exercise chat-scoped features; opt into that scope explicitly. */
 function render(ui: Parameters<typeof rtlRender>[0]) {
   const result = rtlRender(ui);
-  fireEvent.click(screen.getByRole("button", { name: /this chat/i }));
+  fireEvent.click(screen.getByRole("button", { name: /this task/i }));
   return result;
 }
 
@@ -113,7 +113,7 @@ describe("LabNotebookView", () => {
     routeFetch((url) => url === "/projects/default/notebook" ? failed ? errJson(500) : okJson({ entries: [e({ title: "Recovered project" })] }) : undefined);
     rtlRender(<LabNotebookView {...baseProps} sessionId={null} />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("refresh failed"));
-    expect(screen.getByRole("button", { name: "All chats" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "All tasks" })).toHaveAttribute("aria-pressed", "true");
     failed = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(screen.getByText("Recovered project")).toBeInTheDocument());
@@ -388,7 +388,7 @@ describe("LabNotebookView", () => {
 
   it("disables Export in chat scope until the chat has a session", async () => {
     rtlRender(<LabNotebookView {...baseProps} sessionId={null} liveEntries={[e({})]} />);
-    fireEvent.click(screen.getByRole("button", { name: /this chat/i }));
+    fireEvent.click(screen.getByRole("button", { name: /this task/i }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /export/i })).toBeDisabled(),
     );
@@ -489,7 +489,7 @@ describe("LabNotebookView", () => {
       }
     });
     rtlRender(<LabNotebookView {...baseProps} />);
-    expect(screen.getByRole("button", { name: /all chats/i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /all tasks/i })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -540,8 +540,8 @@ describe("LabNotebookView", () => {
       const { rerender } = render(<LabNotebookView {...baseProps} liveEntries={[e({})]} focusEntry={focusEntry} />);
       await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
       scrollSpy.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "All chats" }));
-      fireEvent.click(screen.getByRole("button", { name: "This chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "All tasks" }));
+      fireEvent.click(screen.getByRole("button", { name: "This task" }));
       rerender(<LabNotebookView {...baseProps} sessionId="s2" liveEntries={[]} focusEntry={focusEntry} />);
       await new Promise((r) => setTimeout(r, 50));
       expect(scrollSpy).not.toHaveBeenCalled();

@@ -365,7 +365,7 @@ export function ProvidersPanel({ section }: { section?: string }) {
     const ok = await confirm({
       title: t("Disconnect {v0}?", { v0: provider.accountLabel }),
       description:
-        t("Existing chats remain on disk, but new requests through this sign-in will stop working until you reconnect."),
+        t("Existing tasks remain on disk, but new requests through this sign-in will stop working until you reconnect."),
       confirmLabel: t("Disconnect"),
       destructive: true,
     });

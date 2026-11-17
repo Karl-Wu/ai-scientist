@@ -4,6 +4,13 @@ import { translate } from "./translations";
 import { relativeTime } from "./locale-time";
 
 describe("translation catalog", () => {
+  it("distinguishes tasks from automated runs in both languages", () => {
+    expect(translate("zh-CN", "New task")).toBe("新建任务");
+    expect(translate("zh-CN", "Tasks")).toBe("任务");
+    expect(translate("zh-CN", "Automated runs")).toBe("自动执行");
+    expect(translate("zh-CN", "This task")).toBe("当前任务");
+    expect(translate("en", "Automated runs")).toBe("Automated runs");
+  });
   it("falls back to source messages and interpolates values literally", () => {
     expect(translate("zh-CN", "Untranslated UI {name}", { name: "研究" })).toBe("Untranslated UI 研究");
     expect(translate("en", "Delete “{name}”?", { name: "$& <script>" })).toBe("Delete “$& <script>”?");

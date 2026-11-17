@@ -257,7 +257,7 @@ export function ModalJobsPanel({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            This chat
+            This task
           </button>
         </div>
       </header>
@@ -331,9 +331,9 @@ export function ModalJobsPanel({
                 <p className="text-xs font-medium">No Modal jobs</p>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   {effectiveScope === "session"
-                    ? "This chat has not submitted a durable compute job."
+                    ? "This task has not submitted a durable compute job."
                     : status === "all"
-                      ? "Jobs submitted by chats and specialists will appear here."
+                      ? "Jobs submitted by tasks and specialists will appear here."
                       : `No ${status} jobs match this filter.`}
                 </p>
               </div>

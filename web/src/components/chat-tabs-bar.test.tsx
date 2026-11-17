@@ -26,9 +26,9 @@ describe("historical chat deletion", () => {
     const tabs = [props.tabs[0], { id: "background", title: "Historical chat", sessionId: saved.id, isStreaming: true, userMessageCount: 1 }];
     const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={tabs} /></TooltipProvider>);
     await screen.findByText("Historical chat");
-    expect(screen.getByRole("status", { name: "Chat is running" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Task is running" })).toBeInTheDocument();
     view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[tabs[0], { ...tabs[1], isStreaming: false }]} /></TooltipProvider>);
-    expect(screen.queryByRole("status", { name: "Chat is running" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Task is running" })).not.toBeInTheDocument();
   });
 
   it("shows a saved meaningful title instead of an open tab's placeholder", async () => {
@@ -40,7 +40,7 @@ describe("historical chat deletion", () => {
   it("refreshes session metadata when a message is sent instead of waiting for polling", async () => {
     const initial = [{ ...props.tabs[0], sessionId: saved.id }];
     const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={initial} /></TooltipProvider>);
-    await screen.findByRole("button", { name: "Chat actions for Historical chat" });
+    await screen.findByRole("button", { name: "Task actions for Historical chat" });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     fetchMock.mockClear();
     view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...initial[0], userMessageCount: 1, isStreaming: true }]} /></TooltipProvider>);
@@ -50,7 +50,7 @@ describe("historical chat deletion", () => {
   it("offers Delete on unopened history and removes it after API success", async () => {
     const user = userEvent.setup();
     render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
-    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(await screen.findByRole("button", { name: "Task actions for Historical chat" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/sessions/saved-chat", { method: "DELETE" }, "project-a"));
     await waitFor(() => expect(screen.queryByText("Historical chat")).not.toBeInTheDocument());
@@ -63,7 +63,7 @@ describe("historical chat deletion", () => {
     } as Response));
     const user = userEvent.setup();
     render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
-    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(await screen.findByRole("button", { name: "Task actions for Historical chat" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Stop the running chat before deleting it"));
     expect(screen.getByText("Historical chat")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("draft conversation visibility", () => {
       { ...saved, id: "pending", name: "Waiting for first answer", messageCount: 1 },
     ] } as Response);
     render(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...props.tabs[0], title: "Chat 2", hasCompletedTurn: false }]} /></TooltipProvider>);
-    await screen.findByText("No chats yet.");
+    await screen.findByText("No tasks yet.");
     expect(screen.queryByText("Chat 1")).not.toBeInTheDocument();
     expect(screen.queryByText("Chat 2")).not.toBeInTheDocument();
     expect(screen.queryByText("Waiting for first answer")).not.toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("draft conversation visibility", () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [{ ...saved, name: "Analyze my data" }] } as Response);
     const tab = { ...props.tabs[0], sessionId: saved.id, title: "Analyze my data", userMessageCount: 1, isStreaming: true, hasCompletedTurn: false };
     const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={[tab]} /></TooltipProvider>);
-    await screen.findByText("No chats yet.");
+    await screen.findByText("No tasks yet.");
     expect(screen.queryByText("Analyze my data")).not.toBeInTheDocument();
     view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, isStreaming: false, hasCompletedTurn: true }]} /></TooltipProvider>);
     expect(await screen.findByText("Analyze my data")).toBeInTheDocument();
@@ -106,9 +106,9 @@ describe("saved chat names", () => {
     });
     const user = userEvent.setup();
     const view = render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
-    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(await screen.findByRole("button", { name: "Task actions for Historical chat" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename" }));
-    const input = screen.getByRole("textbox", { name: "Chat name" });
+    const input = screen.getByRole("textbox", { name: "Task name" });
     await user.clear(input);
     await user.type(input, "Renamed research{Enter}");
     expect(await screen.findByText("Renamed research")).toBeInTheDocument();
@@ -123,12 +123,12 @@ describe("saved chat names", () => {
     fetchMock.mockImplementation(async (_url, options) => ({ ok: options?.method !== "PATCH", json: async () => [saved] } as Response));
     const user = userEvent.setup();
     render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
-    await user.click(await screen.findByRole("button", { name: "Chat actions for Historical chat" }));
+    await user.click(await screen.findByRole("button", { name: "Task actions for Historical chat" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename" }));
-    const input = screen.getByRole("textbox", { name: "Chat name" });
+    const input = screen.getByRole("textbox", { name: "Task name" });
     await user.clear(input);
     await user.type(input, "Unsaved name{Enter}");
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Could not rename chat. Please try again."));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Could not rename task. Please try again."));
     expect(screen.getByText("Historical chat")).toBeInTheDocument();
   });
 });

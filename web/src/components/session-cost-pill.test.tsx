@@ -83,7 +83,7 @@ describe("SessionCostPill", () => {
       projectSummary={makeProjectSummary({ totalUsd: 2, totalTokens: 500, subscriptionTokens: 100, budget: { state: "exceeded", totalUsd: 5, spentUsd: 2, committedUsd: 5, reservedUsd: 2, inFlightUsd: 1, limitUsd: 4, ratio: 1.25 } })}
     /></I18nProvider>);
     const trigger = screen.getByRole("button", { name: /项目计费金额/ });
-    expect(trigger).toHaveTextContent("会话");
+    expect(trigger).toHaveTextContent("任务");
     await user.hover(trigger);
     expect(await screen.findByText("项目计费支出")).toBeInTheDocument();
     expect(screen.getByText(/为计算任务预留/)).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe("SessionCostPill", () => {
     const button = screen.getByRole("button");
     expect(button).toHaveTextContent("proj");
     expect(button).toHaveTextContent("$2.50");
-    expect(button).toHaveTextContent("sess");
+    expect(button).toHaveTextContent("task");
     expect(button).toHaveTextContent("$1.00");
     expect(button).not.toHaveTextContent("/");
   });

@@ -76,7 +76,7 @@ describe("Paperclip card", () => {
         expect.objectContaining({ method: "PUT", body: JSON.stringify({ paperclipApiKey: "gxl_test_key_6789" }) }),
       ),
     );
-    expect(await scope.findByText(/New chat tabs can search Paperclip/)).toBeInTheDocument();
+    expect(await scope.findByText(/New tasks can search Paperclip/)).toBeInTheDocument();
     expect(await scope.findByRole("status")).toHaveTextContent("Connector paperclip is on for every project.");
   });
 

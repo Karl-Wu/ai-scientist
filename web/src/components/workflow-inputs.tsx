@@ -71,7 +71,7 @@ export function WorkflowInputs({
   return <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
     <fieldset className="min-w-0 space-y-2">
       <legend className="text-xs font-medium">{t("Project sandbox")}</legend>
-      <p className="text-xs text-muted-foreground">{t("Choose files or folders already in this project, including results from earlier chats. These are on the machine running AI Scientist.")}</p>
+      <p className="text-xs text-muted-foreground">{t("Choose files or folders already in this project, including results from earlier tasks. These are on the machine running AI Scientist.")}</p>
       <div className="flex gap-2">
         <input aria-label="Search sandbox files and folders" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Search by name or path")} className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-xs" />
         {onRefreshFiles && <Button type="button" size="xs" variant="outline" disabled={refreshing} aria-label="Refresh sandbox files and folders" onClick={async () => {

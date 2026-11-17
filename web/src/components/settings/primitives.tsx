@@ -16,9 +16,9 @@ import { cn } from "@/lib/utils";
 export type AppliesTo = "new-chats" | "immediately" | "live-chats";
 
 const APPLIES_TEXT: Record<AppliesTo, string> = {
-  "new-chats": "Changes apply to new chat tabs; open chats keep what they started with.",
+  "new-chats": "Changes apply to new tasks; open tasks keep what they started with.",
   immediately: "Changes apply immediately — no restart needed.",
-  "live-chats": "Changes apply immediately, including in open chats.",
+  "live-chats": "Changes apply immediately, including in open tasks.",
 };
 
 export function SettingsHeader({

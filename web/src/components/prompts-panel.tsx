@@ -209,7 +209,7 @@ export function PromptsPanel() {
         description={
           <>
             {t("Reusable prompts that expand from")}{" "}<code>/name args</code> {" "}{t("in the composer. Type")}{" "}
-            <code>/</code> {t("in the chat to pick one; add arguments after the name (")}{" "}<code>/qc user_data/a.csv</code>{t(") and use")}{" "}<code>$1</code>, <code>$2</code>{t("… or")}{" "}
+            <code>/</code> {t("in the conversation to pick one; add arguments after the name (")}{" "}<code>/qc user_data/a.csv</code>{t(") and use")}{" "}<code>$1</code>, <code>$2</code>{t("… or")}{" "}
             <code>$ARGUMENTS</code> {t("in the body. A project template shadows a shared one of the same name.")}{" "}</>
         }
         appliesTo="immediately"

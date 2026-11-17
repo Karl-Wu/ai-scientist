@@ -186,7 +186,7 @@ export function WatchdogCard({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium">{t("Watchdog")}</div>
           <p className="text-[11px] text-muted-foreground">
-            {t("A second model reviews what the agent just did and steers findings into the chat: raw data touched, silent row drops, unlogged parameter changes, claims without evidence. Per project; applies to new chat tabs.")}{" "}</p>
+            {t("A second model reviews what the agent just did and steers findings into the task: raw data touched, silent row drops, unlogged parameter changes, claims without evidence. Per project; applies to new tasks.")}{" "}</p>
         </div>
         <Switch
           aria-label={t("Enable watchdog")}
@@ -205,7 +205,7 @@ export function WatchdogCard({ projectId }: { projectId: string }) {
               className="mt-1"
               label={t("Watchdog model")}
               value={settings.model}
-              emptyLabel="Inherit the chat's model"
+              emptyLabel="Inherit the task's model"
               disabled={saving}
               onChange={(model) => {
                 if (model !== settings.model) void update({ model });
@@ -219,7 +219,7 @@ export function WatchdogCard({ projectId }: { projectId: string }) {
               value={settings.thinking}
               onChange={(e) => void update({ thinking: e.target.value })}
             >
-              <option value="">{t("inherit from chat")}</option>
+              <option value="">{t("inherit from task")}</option>
               {THINKING_LEVELS.map((level) => (
                 <option key={level} value={level}>
                   {level}
@@ -331,7 +331,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
   return (
     <SettingsCard
       title={t("Default model for specialists")}
-      description={t("Used by every specialist that does not pin its own model. Inherit keeps each specialist on the model of the chat that launched it.")}
+      description={t("Used by every specialist that does not pin its own model. Inherit keeps each specialist on the model of the task that launched it.")}
     >
       {value === null ? (
         error ? <SettingsError>{error}</SettingsError> : <p className="text-[11px] text-muted-foreground">{t("Loading…")}</p>
@@ -340,7 +340,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
           <ModelField
             label={t("Default specialist model")}
             value={value}
-            emptyLabel="Inherit the chat's model"
+            emptyLabel="Inherit the task's model"
             disabled={saving}
             onChange={(next) => void change(next)}
           />
@@ -450,7 +450,7 @@ export function SubagentsPanel() {
     async (name: string) => {
       const ok = await confirm({
         title: t("Delete {v0}?", { v0: name }),
-        description: t("Removes .pi/agents/{name}.md from this project. Running chats keep the roster they started with.", { name }),
+        description: t("Removes .pi/agents/{name}.md from this project. Running tasks keep the roster they started with.", { name }),
         confirmLabel: "Delete",
         destructive: true,
       });
@@ -590,7 +590,7 @@ export function SubagentsPanel() {
               <ModelField
                 label={t("Specialist model")}
                 value={form.model}
-                emptyLabel="Inherit (specialist default or chat model)"
+                emptyLabel="Inherit (specialist default or task model)"
                 onChange={(model) => setForm({ ...form, model })}
               />
             </div>

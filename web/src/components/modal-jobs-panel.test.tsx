@@ -154,7 +154,7 @@ describe("ModalJobsPanel", () => {
         focusJob={{ id: "job-123", token: 1 }}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "This chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "This task" }));
     expect(onScopeChange).toHaveBeenCalledWith("session");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(hooks.cancel).toHaveBeenCalledOnce();

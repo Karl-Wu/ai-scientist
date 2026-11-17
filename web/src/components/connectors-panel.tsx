@@ -694,7 +694,7 @@ export function ConnectorsPanel() {
           {login.flow.status === "running" && (
             <>
               <p className="text-muted-foreground">
-                {t("Approve access in the browser window Pi opened. AI Scientist picks up the sign-in automatically; running chats reconnect on their next turn.")}{" "}</p>
+                {t("Approve access in the browser window Pi opened. AI Scientist picks up the sign-in automatically; running tasks reconnect on their next turn.")}{" "}</p>
               {login.flow.authorizationUrl && (
                 <a
                   href={login.flow.authorizationUrl}

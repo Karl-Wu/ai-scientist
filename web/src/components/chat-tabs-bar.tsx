@@ -29,7 +29,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { commandPreview } from "@/lib/command-blocks";
-import { resolveChatTitle } from "@/lib/chat-title";
+import { resolveChatTitle, taskDisplayTitle } from "@/lib/chat-title";
 
 const CHAT_ACTIONS_CLASS =
   "absolute right-1.5 top-1.5 z-10 rounded bg-background/95 p-1 text-muted-foreground opacity-0 pointer-events-none transition-[opacity,color,background-color] " +
@@ -203,7 +203,7 @@ function RecentChatsList({
       }
       if (target.tabId) onRenameTab(target.tabId, name);
     } catch {
-      toast.error(t("Could not rename chat. Please try again."));
+      toast.error(t("Could not rename task. Please try again."));
     } finally {
       setSavingName(false);
     }
@@ -211,7 +211,7 @@ function RecentChatsList({
   const renameInput = (
     <input
       ref={inputRef}
-      aria-label={t("Chat name")}
+      aria-label={t("Task name")}
       value={draftTitle}
       onChange={(event) => setDraftTitle(event.target.value)}
       onBlur={() => void commitRename()}
@@ -232,7 +232,7 @@ function RecentChatsList({
     if (tab?.isStreaming || deletingId) return;
     const ok = await confirm({
       title: t("Delete “{name}”?", { name: title }),
-      description: t("Remove this conversation and its chat history from Recent chats. Project files, notebook entries and cost records are kept."),
+      description: t("Remove this task and its conversation history from Recent tasks. Project files, notebook entries and cost records are kept."),
       confirmLabel: t("Delete"),
       destructive: true,
     });
@@ -244,7 +244,7 @@ function RecentChatsList({
         const response = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, projectId);
         if (!response.ok && response.status !== 404) {
           const body = await response.json().catch(() => null);
-          throw new Error(body?.detail ?? "Could not delete chat. Please try again.");
+          throw new Error(body?.detail ?? "Could not delete task. Please try again.");
         }
         deletedSessions.current.add(`${projectId}:${sessionId}`);
         setSessions((current) => current?.filter((session) => session.id !== sessionId) ?? current);
@@ -254,25 +254,26 @@ function RecentChatsList({
         onCloseTab(tab.id);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("Could not delete chat. Please try again."));
+      toast.error(error instanceof Error ? error.message : t("Could not delete task. Please try again."));
     } finally {
       setDeletingId(null);
     }
   };
 
   return (
-    <section className="mt-3 min-w-0" aria-label={t("Recent chats")}>
+    <section className="mt-3 min-w-0" aria-label={t("Recent tasks")}>
       {dialog}
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {t("Sessions")}</h2>
+        {t("Tasks")}</h2>
       {sessions === null && tabs.length === 0 ? (
-        <div className="px-2 py-2 text-[11px] text-muted-foreground">{t("Loading chats…")}</div>
+        <div className="px-2 py-2 text-[11px] text-muted-foreground">{t("Loading tasks…")}</div>
       ) : unpersistedTabs.length === 0 && recentSessions.length === 0 ? (
         <div className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          {t("No chats yet.")}</div>
+          {t("No tasks yet.")}</div>
       ) : (
         <div className="flex flex-col gap-0.5">
           {unpersistedTabs.map((tab) => {
+            const displayTitle = taskDisplayTitle(tab.title, tab.titleIsCustom, t);
             const isEditing = editingId === tab.id;
             const isActive = tab.id === activeTabId;
             return (
@@ -290,11 +291,11 @@ function RecentChatsList({
                     type="button"
                     onClick={() => onSelectTab(tab.id)}
                     onDoubleClick={() => startRename(tab.id, tab.title, tab.id, tab.sessionId)}
-                    title={t("{title} — double-click to rename", { title: tab.title })}
+                    title={t("{title} — double-click to rename", { title: displayTitle })}
                     className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                   >
-                    {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
-                    <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+                    {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Task is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
+                    <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
                   </button>
                 )}
                 {!isEditing && (
@@ -303,8 +304,8 @@ function RecentChatsList({
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          aria-label={t("Chat actions for {title}", { title: tab.title })}
-                          title={t("Chat actions")}
+                          aria-label={t("Task actions for {title}", { title: displayTitle })}
+                          title={t("Task actions")}
                           className={CHAT_ACTIONS_CLASS}
                         >
                           <MoreHorizontalIcon className="size-3.5" />
@@ -330,8 +331,9 @@ function RecentChatsList({
             );
           })}
           {recentSessions.map(({ session, tab }) => {
-            const title = sessionTitle(session, t("Untitled chat"));
-            const rowTitle = !session.name && tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
+            const title = sessionTitle(session, t("Untitled task"));
+            const resolvedTitle = !session.name && tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
+            const rowTitle = taskDisplayTitle(resolvedTitle, Boolean(session.name) || tab?.titleIsCustom, t);
             const isEditing = editingId === session.id;
             return (
               <div
@@ -352,7 +354,7 @@ function RecentChatsList({
                     className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                   >
                     {tab?.isStreaming && (
-                      <LoaderCircleIcon role="status" aria-label={t("Chat is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
+                      <LoaderCircleIcon role="status" aria-label={t("Task is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
                     )}
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{rowTitle}</span>
@@ -367,8 +369,8 @@ function RecentChatsList({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        aria-label={t("Chat actions for {title}", { title: rowTitle })}
-                        title={t("Chat actions")}
+                        aria-label={t("Task actions for {title}", { title: rowTitle })}
+                        title={t("Task actions")}
                         className={CHAT_ACTIONS_CLASS}
                       >
                         <MoreHorizontalIcon className="size-3.5" />
@@ -442,15 +444,15 @@ function ExportMenu({
       <InfoTooltip
         content={
           <>
-            <b>{t("Export session")}</b>
+            <b>{t("Export task")}</b>
             <br />
-            {t("Download a reproducible record of this chat — a runnable shell script of every command the agent ran, or a full lab notebook.")}</>
+            {t("Download a reproducible record of this task — a runnable shell script of every command the agent ran, or a full lab notebook.")}</>
         }
       >
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label={t("Export session")}
+            aria-label={t("Export task")}
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
               vertical && "w-full justify-start",
@@ -515,14 +517,13 @@ export function ChatTabsBar({
             <>
               <b>{t("Tab limit reached")}</b>
               <br />
-              You can have up to {maxTabs} chat tabs running at once. Close
-              one to open a new one.
+              {t("You can have up to {count} tasks running at once. Close one to open a new one.", { count: maxTabs })}
             </>
           ) : (
             <>
-              <b>{t("New chat")}</b>
+              <b>{t("New task")}</b>
               <br />
-              {t("Open another chat in this project.")}</>
+              {t("Open another task in this project.")}</>
           )
         }
       >
@@ -530,11 +531,11 @@ export function ChatTabsBar({
           onClick={onNew}
           type="button"
           disabled={atLimit}
-          aria-label={t("New chat tab")}
+          aria-label={t("New task")}
           className="flex h-9 shrink-0 items-center gap-2 rounded-lg bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-40"
         >
           <PlusIcon className="size-3.5" />
-          <span>{t("New chat")}</span>
+          <span>{t("New task")}</span>
         </button>
       </InfoTooltip>
       <div className="mt-2 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">

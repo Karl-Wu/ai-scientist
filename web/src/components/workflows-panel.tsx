@@ -452,8 +452,8 @@ export function WorkflowLaunchDialog({
         {chatRunning && (
           <p role="status" className="text-sm text-muted-foreground">
             {locale === "zh-CN"
-              ? "当前会话正在运行。请等待完成，或新建会话后启动工作流。"
-              : "This chat is running. Wait for it to finish or start a new chat before launching a workflow."}
+              ? "当前任务正在运行。请等待完成，或新建任务后启动工作流。"
+              : "This task is running. Wait for it to finish or start a new task before launching a workflow."}
           </p>
         )}
         <DialogFooter>
