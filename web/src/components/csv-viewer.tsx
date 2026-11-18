@@ -17,6 +17,13 @@ export function CsvViewer({ content }: { content: string }) {
   const [page, setPage] = useState(0);
   const [copyState, setCopyState] = useState("");
   const body = useMemo(() => rows.slice(1), [rows]);
+  const columnWidths = useMemo(() => (rows[0] ?? []).map((header, index) => {
+    // Estimate from a bounded sample so long descriptions cannot dominate the layout.
+    const textWidth = (value: string) => Array.from(value).reduce((width, char) => width + (/[^\x00-\xff]/.test(char) ? 12 : 7), 0);
+    const values = body.slice(0, 100).map((row) => row[index] ?? "");
+    const contentWidth = Math.max(0, ...values.map((value) => textWidth(value)));
+    return Math.max(80, Math.min(140, textWidth(header) + 16), Math.min(240, contentWidth + 16));
+  }), [rows, body]);
   const matches = useMemo(() => search
     ? body.filter((row) => row.some((cell) => cell.toLowerCase().includes(search)))
     : body, [body, search]);
@@ -47,11 +54,14 @@ export function CsvViewer({ content }: { content: string }) {
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto" aria-busy={query.trim().toLowerCase() !== search}>
-        <table className="w-full border-collapse text-xs">
-          <thead><tr>{rows[0].map((cell, i) => <th scope="col" key={i} className="sticky top-0 border-b bg-muted px-3 py-1.5 text-left font-semibold">{cell}</th>)}</tr></thead>
+        <table className="min-w-full table-fixed border-collapse text-xs leading-4" style={{ width: columnWidths.reduce((sum, width) => sum + width, 0) }}>
+          <colgroup>{columnWidths.map((width, i) => <col key={i} style={{ width }} />)}</colgroup>
+          <thead><tr>{rows[0].map((cell, i) => <th scope="col" key={i} className="sticky top-0 z-10 whitespace-normal border-b bg-muted px-2 py-1.5 text-left align-top font-semibold [overflow-wrap:anywhere]">{cell}</th>)}</tr></thead>
           <tbody>{displayed.map((row, ri) => (
             <tr key={start + ri} className="border-b border-muted/50 hover:bg-muted/30">
-              {row.map((cell, ci) => <td key={ci} className="whitespace-pre-wrap px-3 py-1 text-muted-foreground">{cell}</td>)}
+              {row.map((cell, ci) => <td key={ci} className="px-2 py-1 align-top text-muted-foreground">
+                <div title={cell} className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{cell}</div>
+              </td>)}
             </tr>
           ))}</tbody>
         </table>
