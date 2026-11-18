@@ -31,9 +31,17 @@ describe("table explorer views", () => {
     fireEvent.click(screen.getByRole("button", { name: "Source" }));
     expect(screen.getByText(/"id":"001"/)).toBeVisible();
   });
-  it("keeps non-tabular JSON in source view", () => {
-    render(<TableFileViewer name="config.json" content='{"theme":"dark"}' />);
-    expect(screen.getByText('{"theme":"dark"}')).toBeVisible();
+  it.each(['{"theme":"dark"}', '{"nested":{"counts":[1,2]}}', '[1,2,3]', '[{"id":1},null]', '{"unfinished":', 'null'])("keeps non-tabular or invalid JSON in source view without table chrome: %s", (content) => {
+    render(<TableFileViewer name="config.json" content={content} />);
+    expect(screen.getByText(content)).toBeVisible();
     expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByText("Table explorer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Source" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("uses the supplied source viewer directly for ordinary JSON", () => {
+    render(<TableFileViewer name="qc.json" content='{"count":38}' sourceView={<div>Source editor</div>} />);
+    expect(screen.getByText("Source editor")).toBeVisible();
+    expect(screen.queryByText("Table explorer")).toBeNull();
   });
 });

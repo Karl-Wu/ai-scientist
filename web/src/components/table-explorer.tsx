@@ -91,15 +91,18 @@ export function TableFileViewer({ content, name, sourceView }: { content: string
   const [source, setSource] = useState(false);
   const format = name.split(".").pop()?.toLowerCase() ?? "csv";
   const parsed = useMemo(() => { try { return { table: parseExplorerTable(content, format), error: null }; } catch (e) { return { table: null, error: (e as Error).message }; } }, [content, format]);
-  const unsupportedJson = format === "json" && parsed.error?.startsWith("Expected a JSON array");
-  const showSource = source || unsupportedJson;
+  // Non-tabular or invalid JSON belongs to the ordinary source viewer, without
+  // table-specific chrome. Object arrays retain the table/source toggle.
+  if (format === "json" && parsed.error) {
+    return sourceView ?? <pre className="h-full overflow-auto whitespace-pre p-3 text-xs">{content}</pre>;
+  }
   const error = content.startsWith("[Error:") ? content : parsed.error;
   return <div className="flex h-full min-h-0 flex-col overflow-hidden">
     <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2 sm:px-4">
       <span className="text-xs font-medium">{t("Table explorer")}</span>
-      <button type="button" className="rounded px-2 py-1 text-xs hover:bg-muted disabled:opacity-50" disabled={!!unsupportedJson} onClick={() => setSource(!source)}>{t(unsupportedJson ? "Source" : showSource ? "Table" : "Source")}</button>
+      <button type="button" className="rounded px-2 py-1 text-xs hover:bg-muted" onClick={() => setSource(!source)}>{t(source ? "Table" : "Source")}</button>
     </div>
-    {error && !showSource && <p role="alert" className="break-words p-3 text-xs text-muted-foreground">{t("Could not display this file as a table.")} {t(error)} {t("Use Source to inspect the original text or Download to access the complete file.")}</p>}
-    {showSource ? <div className="min-h-0 flex-1 overflow-auto">{sourceView ?? <pre className="whitespace-pre p-3 text-xs">{content}</pre>}</div> : !error && parsed.table && <TableExplorer table={parsed.table} original={content} name={name} />}
+    {error && !source && <p role="alert" className="break-words p-3 text-xs text-muted-foreground">{t("Could not display this file as a table.")} {t(error)} {t("Use Source to inspect the original text or Download to access the complete file.")}</p>}
+    {source ? <div className="min-h-0 flex-1 overflow-auto">{sourceView ?? <pre className="whitespace-pre p-3 text-xs">{content}</pre>}</div> : !error && parsed.table && <TableExplorer table={parsed.table} original={content} name={name} />}
   </div>;
 }
