@@ -39,9 +39,9 @@ async function version(request: PreviewRequest): Promise<string> {
   return JSON.stringify(await Promise.all([
     fileVersion(request.target),
     fileVersion(request.script),
-    // A live SQLite database may have newer committed data in its WAL.
-    ...(/\.(db|sqlite3?)$/i.test(request.target)
-      ? [fileVersion(`${request.target}-wal`).catch(() => "missing-wal")] : []),
+    // SQLite and DuckDB can have newer committed data in a sidecar WAL.
+    ...(/\.(db|sqlite3?|duckdb)$/i.test(request.target)
+      ? [fileVersion(`${request.target}${/\.duckdb$/i.test(request.target) ? ".wal" : "-wal"}`).catch(() => "missing-wal")] : []),
     ...[helperPython(), path.join(HELPERS_DIR, "pyproject.toml"), path.join(HELPERS_DIR, ".venv", "pyvenv.cfg"), path.join(HELPERS_DIR, "uv.lock")]
       .map((file) => fileVersion(file).catch(() => "missing")),
   ]));

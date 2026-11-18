@@ -129,7 +129,7 @@ describe("new scientific data formats", () => {
       expect(fileCategory(name)).toBe("arraydata");
       expect(getViewerDef(fileCategory(name))?.loadMode).toBe("none");
     }
-    for (const name of ["study.xls", "study.XLS", "data.arrow", "data.feather", "data.ipc", "data.jsonl", "data.ndjson", "study.sqlite", "study.sqlite3", "study.db"]) {
+    for (const name of ["study.xls", "study.XLS", "data.arrow", "data.feather", "data.ipc", "study.sqlite", "study.sqlite3", "study.db", "study.duckdb"]) {
       expect(fileCategory(name)).toBe("datatable");
       expect(getViewerDef(fileCategory(name))?.canEditSource).toBe(false);
     }
@@ -138,6 +138,10 @@ describe("new scientific data formats", () => {
       expect(getViewerDef(fileCategory(name))?.loadMode).toBe("none");
     }
     expect(fileCategory("config.json")).toBe("text");
+    for (const name of ["data.csv", "data.tsv", "data.JSONL", "data.ndjson"]) {
+      expect(fileCategory(name)).toBe("csv");
+      expect(getViewerDef(fileCategory(name))).toBeUndefined();
+    }
   });
   it("encodes dataset keys and slice indices with project scope", () => {
     const url = new URL(sciSummaryUrl("data.h5", "arrays", "owner", { key: "/a/b & c", slice: 3 }), "http://localhost");

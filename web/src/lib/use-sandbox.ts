@@ -58,7 +58,7 @@ const STRUCTURE3D_EXTS = new Set(["pdb", "ent", "cif", "mmcif", "xyz", "gro", "p
 const MASSSPEC_EXTS = new Set(["mzml", "mzxml", "mgf", "jdx", "dx"]);
 
 const ARRAYDATA_EXTS = new Set(["h5", "hdf5", "parquet", "npy", "npz", "nc", "nc4", "cdf", "mat", "mtx", "fits", "fit", "fts"]);
-const DATATABLE_EXTS = new Set(["xls", "arrow", "feather", "ipc", "jsonl", "ndjson", "sqlite", "sqlite3", "db"]);
+const DATATABLE_EXTS = new Set(["xls", "arrow", "feather", "ipc", "jsonl", "ndjson", "sqlite", "sqlite3", "db", "duckdb"]);
 
 const PHYLO_EXTS = new Set(["nwk", "newick", "tree", "nhx"]);
 
@@ -79,7 +79,7 @@ export function fileCategory(name: string): FileCategory {
   if (["docx", "pptx", "xlsx"].includes(ext)) return "office";
   if (ext === "pdf") return "pdf";
   if (ext === "md" || ext === "mdx") return "markdown";
-  if (ext === "csv") return "csv";
+  if (["csv", "tsv", "jsonl", "ndjson"].includes(ext)) return "csv";
   if (ext === "ipynb") return "notebook";
   if (FASTA_EXTS.has(ext)) return "fasta";
   if (BIOTABLE_EXTS.has(ext)) return "biotable";
@@ -443,7 +443,7 @@ export function useSandbox(
         });
         if (!isCurrent() || controller.signal.aborted || res.status === 304) return;
         const content = res.ok ? await res.text() : res.status === 413
-          ? "[Error: This file exceeds the preview size limit (8 MB for CSV, 512 KB for other text). Use Download to access the complete file.]"
+          ? "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
           : `[Error: ${res.status} ${res.statusText}]`;
         if (!isCurrent() || controller.signal.aborted) return;
         const nextEtag = res.ok ? res.headers.get("etag") : null;

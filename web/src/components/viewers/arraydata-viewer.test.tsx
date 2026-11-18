@@ -32,6 +32,22 @@ beforeEach(() => {
 });
 
 describe("ArrayDataViewer", () => {
+  it("shows schema-qualified DuckDB labels and keeps selectors for a blocked view", async () => {
+    const key = JSON.stringify(["研究", "summary"]);
+    const blocked = JSON.stringify(["main", "external"]);
+    const summary = { format: "duckdb", kind: "table", file_size: 10, num_rows: 1, num_columns: 1,
+      columns: [{ name: "id", dtype: "BIGINT" }], head: [["001"]], collections: [key, blocked],
+      collection_labels: { [key]: "研究.summary", [blocked]: "main.external [view]" }, selected: key };
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(summary)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...summary, selected: blocked, head: [], preview_error: "External access is disabled" })));
+    render(<ArrayDataViewer path="study.duckdb" name="study.duckdb" content={null} projectId="owner" />);
+    await screen.findByRole("option", { name: "研究.summary" });
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(screen.getByLabelText("Table"), { target: { value: blocked } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("External access is disabled");
+    expect(screen.getByLabelText("Table")).toBeEnabled();
+    expect(screen.getByRole("option", { name: "main.external [view]" })).toBeInTheDocument();
+  });
   it("renders shape/dtype and a stat for an ndarray summary", async () => {
     render(<ArrayDataViewer path="a.npy" name="a.npy" content={null} />);
     await waitFor(() => expect(screen.getByText(/3, 4/)).toBeInTheDocument());

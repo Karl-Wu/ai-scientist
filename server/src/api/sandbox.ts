@@ -42,9 +42,9 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ANNDATA_HELPER = path.join(__dirname, "..", "helpers", "anndata_helper.py");
 const MAX_PREVIEW_BYTES = 512_000;
-// CSV renders only 250 rows at a time. Allow useful research tables without
-// lifting the tighter bound for unpaginated text/code previews.
-const MAX_CSV_PREVIEW_BYTES = 8_000_000;
+// Text tables paginate the DOM. Read the complete bounded file so search,
+// profiles and exports agree; other text/code retains its smaller bound.
+const MAX_TABLE_PREVIEW_BYTES = 8_000_000;
 const MAX_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
 const TREE_EXCLUDED_DIRS = new Set(["__pycache__", "node_modules"]);
 
@@ -506,7 +506,7 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
       try {
         const stat = await file.stat({ bigint: true });
         if (!stat.isFile()) return reply.code(404).send("File not found");
-        const maxBytes = path.extname(target).toLowerCase() === ".csv" ? MAX_CSV_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
+        const maxBytes = [".csv", ".tsv", ".json", ".jsonl", ".ndjson"].includes(path.extname(target).toLowerCase()) ? MAX_TABLE_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
         if (stat.size > BigInt(maxBytes)) {
           return reply.code(413).send("File too large to preview");
         }

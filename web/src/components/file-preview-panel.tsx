@@ -2,7 +2,7 @@
 
 import { useT } from "@/components/i18n-provider";
 
-import { CsvViewer } from "./csv-viewer";
+import { TableFileViewer } from "./table-explorer";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { PdfViewer } from "@/components/pdf-viewer/pdf-viewer";
 import { KadyFileIcon } from "@/components/file-icon";
@@ -93,7 +93,7 @@ function categoryLabel(name: string): string {
   if (cat === "image") return "image";
   if (cat === "pdf") return "pdf";
   if (cat === "markdown") return "markdown";
-  if (cat === "csv") return "csv";
+  if (cat === "csv") return ext;
   if (cat === "notebook") return "jupyter";
   if (cat === "latex") return "latex";
   if (cat === "fasta") return ext === "fastq" || ext === "fq" ? "fastq" : "fasta";
@@ -381,7 +381,7 @@ function FileViewer({
   if (cat === "markdown") {
     return <MarkdownViewer path={path} content={content} projectId={projectId} />;
   }
-  if (cat === "csv") return <CsvViewer key={path} content={content} />;
+  if (cat === "csv" || name?.toLowerCase().endsWith(".json")) return <TableFileViewer key={path} content={content} name={name ?? path} sourceView={<ReadOnlyCodeView content={content} name={name ?? "text"} className="h-full" />} />;
   if (cat === "notebook") return (
     <NotebookViewer
       content={content}
@@ -1959,7 +1959,7 @@ export function FilePreviewPanel({
           <div className={cn(
             "flex-1 min-h-0",
             // These viewers manage their own scroll internally
-            cat === "pdf" || cat === "notebook" || cat === "fasta" || cat === "biotable" || cat === "anndata" || regDef?.managesOwnScroll
+            cat === "csv" || selectedName?.toLowerCase().endsWith(".json") || cat === "pdf" || cat === "notebook" || cat === "fasta" || cat === "biotable" || cat === "anndata" || regDef?.managesOwnScroll
               ? ""
               : "overflow-auto bg-muted/10"
           )}>

@@ -15,7 +15,7 @@ Previews render in the browser and, for binary/scientific formats, in Python hel
 | PDF | `pdf` | Paged viewer with selectable user highlights/notes and live expert annotations from lead or delegated AI agents |
 | Markdown | `md` `mdx` | Rendered, with LaTeX math and Mermaid diagrams |
 | Jupyter notebooks | `ipynb` | Cells with rich outputs — images, HTML tables, tracebacks |
-| CSV | `csv` | Sortable table |
+| Text tables | `csv` `tsv` `json` (object arrays) `jsonl` `ndjson` | Table explorer: pagination, search, sorting, schema profiles, histograms, filtered CSV export and source view |
 | LaTeX | `tex` `latex` | Split-pane editor with autocomplete, outline & spell check, two-way SyncTeX pdf.js preview, inline compile diagnostics, AI fix/edit, and Ask Kady handoff |
 | Anything else | any text file | Syntax-highlighted, **editable** source |
 
@@ -78,17 +78,16 @@ before discarding them.
 ### Data tables & workbooks
 | Format | Extensions | Viewer |
 |---|---|---|
-| Legacy Excel | `xls` | Read-only worksheet preview with sheet selection, sampled search, sorting and plots |
-| Excel | `xlsx` | Worksheet grid with basic cell/formula editing; Data tools offers sampled search, sort and scatter plots |
-| Arrow IPC / Feather v2 | `arrow` `ipc` `feather` | File or stream schema, row sample and numeric scatter plots |
-| JSON Lines | `jsonl` `ndjson` | Sampled records as columns; nested values shown as JSON, with numeric scatter plots |
-| SQLite | `sqlite` `sqlite3` `db` | Read-only ordinary-table selector, row sample, search / sort and numeric scatter plots |
+| Legacy Excel | `xls` | Read-only worksheet preview with sheet selection, Table Explorer with sampled search, sorting, schema profiles, histograms and filtered preview export |
+| Excel | `xlsx` | Worksheet grid with basic cell/formula editing; Table Explorer offers sampled search, sorting, schema profiles, histograms and filtered preview export |
+| Arrow IPC / Feather v2 | `arrow` `ipc` `feather` | File/stream schema and Table Explorer over a bounded row sample |
+| DuckDB | `duckdb` | Read-only schema-qualified table/view selector with Table Explorer; external file/network access and extension loading disabled |
+| SQLite | `sqlite` `sqlite3` `db` | Read-only ordinary-table selector with Table Explorer over a bounded row sample |
 
 The read-only Data tools tables show up to **200 rows × 50 columns**; search, sorting and plots use only
-that sample. Large cell text is capped at 512 characters. Where a format lacks
+that sample. Pagination (100 rows by default) navigates the sample, not the whole source file. Export filtered preview exports matching sample rows only; Copy preview CSV copies the loaded sample. Native column types appear alongside inferred types in Schema. Large cell text is capped at 512 characters. Where a format lacks
 a cheap exact row count, the viewer explicitly reports that the total was not
-scanned. SQLite views and virtual tables are excluded. JSON Lines columns are
-inferred from displayed records. Charts omit missing/nonnumeric pairs; empty
+scanned. SQLite views and virtual tables are excluded. DuckDB views that require external access show a preview error while keeping the collection selector available. A database held open by another writing process may need to be closed before preview. Charts omit missing/nonnumeric pairs; empty
 cells and booleans are not treated as zero.
 
 Numeric arrays show a line plot for vectors and a heatmap for matrices. For
@@ -121,7 +120,7 @@ HDF5 external links and external/virtual dataset storage are not followed.
 ## Notes
 
 - **View-only vs. editable.** Office documents open in the built-in Office workspace (details below). Plain text and code are editable in place (⌘S to save); images can be annotated. The rich scientific viewers above are view-only — edit the underlying file with the agent or download it.
-- **Text preview limits.** CSV files up to 8 MB show 250 rows per page with full-file search. Other text previews are limited to 512 KB. Larger files remain downloadable and available to the agent for analysis.
+- **Text table explorer.** CSV, TSV, JSON object arrays, JSONL and NDJSON load complete files up to 8 MB and display 100 rows per page by default (select 10, 25, 50, 100 or 250). Search and sort cover all loaded rows; histograms and filtered CSV exports use all matching rows, not just the visible page. Schema profiles describe the complete loaded file. Empty/whitespace-only cells, absent fields and JSON null are missing; zero and false are values. Leading-zero identifiers and integers beyond JavaScript’s safe range stay text. Numeric inference is descriptive, not a data-dictionary guarantee. JSON nested values remain JSON text, and non-tabular JSON opens as source. Source view and Copy original preserve file text. Files over the byte limit, or tables over 1,000 columns / 1,000,000 cells, are rejected explicitly rather than silently truncated. Download remains available. Other text previews retain a 512 KB limit.
 - **Reveal from chat.** When Kady references a file, line, or notebook cell, clicking it opens the file and jumps to that spot.
 - **Provenance.** The preview header's **Provenance** button shows which tool call produced the file, what it read, its lineage back to uploaded data, and whether notebook citations are still current. See [Provenance](./provenance.md).
 - **Missing dependency?** If the helper environment for a particular format hasn't finished installing, the viewer shows a friendly "preview unavailable" message instead of failing — reopen the file once setup completes.
@@ -192,3 +191,19 @@ Runtime sources and attribution: [ZetaOffice](https://zetaoffice.net/),
 [ZetaJS (MIT)](https://github.com/allotropia/zetajs), and
 [LibreOffice licensing and source](https://www.libreoffice.org/about-us/licenses/).
 The vendored ZetaJS bridge includes its MIT license in `web/public/office/`.
+
+### Distribution views
+All Table Explorer formats share the same distribution controls. Numeric columns
+show histograms and min/mean/max. Text and categorical columns show the 20 most
+frequent exact values plus an explicit combined remainder. Boolean values are
+counted as true/false (case-insensitive). Missing values are counted separately;
+percentages use all matching rows, including missing values. A numeric or date
+column can also be explicitly displayed as value frequencies, useful for coded
+categories. This display choice does not modify source data or schema types.
+
+Valid ISO calendar dates and full ISO timestamps are inferred as dates; ambiguous
+slash dates, invalid days and numeric identifiers remain text. Dates are grouped
+by day, month or year using the calendar date written in the source, without
+browser timezone conversion. Periods without records are omitted. More than 200
+date groups require a coarser grouping or a filter; counts are never silently
+truncated. Existing full-file versus bounded-preview scope still applies.

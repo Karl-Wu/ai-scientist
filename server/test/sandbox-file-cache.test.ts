@@ -11,6 +11,16 @@ const get = (etag?: string) => app.inject({ method: "GET", url: "/sandbox/file?p
 beforeEach(() => { fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); ensureProjectExists("default"); });
 afterAll(async () => { await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); });
 describe("conditional file previews", () => {
+  it("loads full text tables across first-phase formats and rejects oversized inputs", async () => {
+    for (const ext of ["tsv", "json", "jsonl", "ndjson"]) {
+      const target = path.join(resolvePaths("default").sandbox, `data.${ext}`);
+      const getTable = () => app.inject({ method: "GET", url: `/sandbox/file?path=data.${ext}`, headers: { "x-project-id": "default" } });
+      fs.writeFileSync(target, " ".repeat(600_000));
+      expect((await getTable()).body).toHaveLength(600_000);
+      fs.writeFileSync(target, " ".repeat(8_000_001));
+      expect((await getTable()).statusCode).toBe(413);
+    }
+  });
   it("previews paginated research CSVs up to 8 MB while retaining the text limit", async () => {
     const csv = path.join(resolvePaths("default").sandbox, "research.CSV");
     const readCsv = () => app.inject({ method: "GET", url: "/sandbox/file?path=research.CSV", headers: { "x-project-id": "default" } });

@@ -301,7 +301,7 @@ function DataPreview({ path, projectId, toolbarActions }: DataViewerProps) {
           <span className="relative min-w-0">
             <select aria-label={t(["xls", "xlsx"].includes(summary.format) ? "Sheet" : "Table")} className="h-8 w-full min-w-0 max-w-80 appearance-none truncate rounded-md border bg-background pl-2.5 pr-8"
               value={selection} disabled={loading} onChange={e => { setKey(e.target.value); setSlice(0); }}>
-              {collections.map(name => <option key={name} value={name}>{name}</option>)}
+              {collections.map(name => <option key={name} value={name}>{summary.kind === "table" ? summary.collection_labels?.[name] ?? name : name}</option>)}
             </select>
             <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           </span>

@@ -64,8 +64,8 @@ it("forwards selections and isolates cached dataset/slice variants", async () =>
   expect(run).toHaveBeenCalledTimes(3);
 });
 
-it("invalidates SQLite previews when the WAL changes without changing the main file", async () => {
-  const target = path.join(root, "wal.sqlite");
+it.each([["sqlite", "-wal"], ["duckdb", ".wal"]])("invalidates %s previews when the WAL changes without changing the main file", async (extension, suffix) => {
+  const target = path.join(root, `wal.${extension}`);
   const script = path.join(root, "wal.py");
   await fs.writeFile(target, "database");
   await fs.writeFile(script, "script");
@@ -74,7 +74,7 @@ it("invalidates SQLite previews when the WAL changes without changing the main f
   await getPreview(request);
   await getPreview(request);
   expect(run).toHaveBeenCalledTimes(1);
-  await fs.writeFile(`${target}-wal`, "transaction");
+  await fs.writeFile(`${target}${suffix}`, "transaction");
   await getPreview(request);
   expect(run).toHaveBeenCalledTimes(2);
 });

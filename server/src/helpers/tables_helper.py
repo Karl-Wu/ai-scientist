@@ -252,8 +252,53 @@ def arrow(path, selected):
                      note="Arrow IPC file/stream and Feather v2. Charts use the displayed row sample.")
 
 
+def duckdb_preview(path, selected):
+    need("duckdb")
+    import duckdb
+
+    connection = duckdb.connect(str(path), read_only=True, config={
+        "enable_external_access": "false",
+        "autoinstall_known_extensions": "false", "autoload_known_extensions": "false",
+        "allow_unsigned_extensions": "false", "allow_community_extensions": "false",
+        "memory_limit": "128MB", "threads": "1", "max_temp_directory_size": "0B",
+    })
+    try:
+        connection.execute("SET lock_configuration = true")
+        entries = connection.execute(
+            "SELECT table_schema, table_name, table_type FROM information_schema.tables "
+            "WHERE table_catalog = current_database() AND table_schema NOT IN ('information_schema', 'pg_catalog') "
+            "ORDER BY table_schema, table_name LIMIT ?", [MAX_COLLECTIONS + 1]
+        ).fetchall()
+        records = {json.dumps([schema, name], ensure_ascii=False, separators=(",", ":")): (schema, name, kind)
+                   for schema, name, kind in entries[:MAX_COLLECTIONS]}
+        names = list(records)
+        key = choose(names, selected)
+        labels = {token: f"{schema}.{name}" + (" [view]" if kind == "VIEW" else "")
+                  for token, (schema, name, kind) in records.items()}
+        if not key:
+            return table([], [], 0, collections=[], selected="", collection_labels={})
+        schema, name, _kind = records[key]
+        quote = lambda ident: '"' + ident.replace('"', '""') + '"'
+        qualified = f"{quote(schema)}.{quote(name)}"
+        try:
+            fields = connection.execute(f"SELECT * FROM {qualified} LIMIT 0").description
+            columns = [{"name": field[0], "dtype": str(field[1])} for field in fields[:MAX_COLS]]
+            expressions = [f"'[binary: ' || octet_length({quote(col['name'])}) || ' bytes]'"
+                           if col['dtype'] == 'BLOB' else f"substr(CAST({quote(col['name'])} AS VARCHAR), 1, {MAX_CELL})" for col in columns]
+            rows = connection.execute(f"SELECT {', '.join(expressions)} FROM {qualified} LIMIT ?", [MAX_ROWS + 1]).fetchall()
+            return table(columns, rows, len(rows) if len(rows) <= MAX_ROWS else None, num_columns=len(fields),
+                         collections=names, collection_labels=labels, selected=key,
+                         collections_truncated=len(entries) > MAX_COLLECTIONS,
+                         note="Read-only DuckDB preview. External file access and extension loading are disabled.")
+        except duckdb.Error as exc:
+            return table([], [], None, collections=names, collection_labels=labels, selected=key,
+                         collections_truncated=len(entries) > MAX_COLLECTIONS, preview_error=str(exc))
+    finally:
+        connection.close()
+
+
 DISPATCH = {"xls": xls, "xlsx": xlsx, "arrow": arrow, "feather": arrow, "ipc": arrow,
-            "jsonl": jsonlines, "ndjson": jsonlines, "sqlite": sqlite, "sqlite3": sqlite, "db": sqlite}
+            "jsonl": jsonlines, "ndjson": jsonlines, "sqlite": sqlite, "sqlite3": sqlite, "db": sqlite, "duckdb": duckdb_preview}
 
 
 def main():
