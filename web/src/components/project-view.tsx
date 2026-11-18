@@ -267,11 +267,11 @@ export function ProjectView({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/brand/ai-scientist.svg?v=2"
-            alt="AI Scientist"
+            alt="DeepexiScience"
             className="size-7 object-contain"
           />
           <span className="flex flex-col items-start pt-0.5">
-            <span className="text-sm font-semibold leading-4 tracking-tight text-foreground/80">AI Scientist</span>
+            <span className="text-sm font-semibold leading-4 tracking-tight text-foreground/80">DeepexiScience</span>
             <span className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground/70">Powered by DeepWorks</span>
           </span>
         </div>

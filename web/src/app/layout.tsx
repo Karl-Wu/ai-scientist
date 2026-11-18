@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Scientist",
+  title: "DeepexiScience",
   description: "A research workspace for scientists, biologists, and research experts.",
   icons: { icon: "/brand/ai-scientist.svg?v=2" },
 };
