@@ -1733,5 +1733,7 @@
   "Only ISO dates are inferred. Dates are grouped as written, without timezone conversion. Periods without records are omitted.": "仅自动识别 ISO 日期格式。按原文日历日期分组，不进行时区换算；无记录的时间段不显示。",
   "Display as": "显示方式",
   "Automatic": "自动",
-  "More than 200 date groups. Filter rows or choose a coarser date grouping.": "日期分组超过 200 个，请筛选数据或选择更粗的日期分组。"
+  "More than 200 date groups. Filter rows or choose a coarser date grouping.": "日期分组超过 200 个，请筛选数据或选择更粗的日期分组。",
+  "Previous": "上一页",
+  "Next": "下一页"
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { TableDistribution } from "./table-distribution";
 import { useT } from "@/components/i18n-provider";
 import { columnProfile, filterSortTable, parseExplorerTable, TABLE_PAGE_SIZE, tableCsv, type ExplorerTable } from "@/lib/table-explorer";
@@ -45,20 +46,6 @@ export function TableExplorer({ table, original, name = "data.csv", scope, sourc
         </>}</p>
       {message && <span role="status">{message}</span>}
     </div>
-    <div className="flex shrink-0 flex-wrap items-center gap-2 text-muted-foreground" aria-live="polite">
-      {t("{count} matching rows", { count: rows.length.toLocaleString() })}
-      {view === "table" && <>
-        <label className="ml-auto flex items-center gap-1.5">{t("Rows per page")}
-          <select aria-label={t("Rows per page")} value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goToPage(0); }} className="h-7 rounded-md border bg-background pl-2 pr-6 text-foreground">
-            {[10, 25, 50, 100, 250].map(size => <option key={size} value={size}>{size}</option>)}
-          </select>
-        </label>
-        <span>{t("Showing {from}–{to}", { from: rows.length ? start + 1 : 0, to: Math.min(start + pageSize, rows.length) })}</span>
-        <button type="button" className={button} disabled={current === 0} onClick={() => goToPage(current - 1)}>{t("Previous")}</button>
-        <span>{t("Page {page} of {pages}", { page: current + 1, pages })}</span>
-        <button type="button" className={button} disabled={current + 1 >= pages} onClick={() => goToPage(current + 1)}>{t("Next")}</button>
-      </>}
-    </div>
     <div ref={viewport} className="min-h-0 flex-1 overflow-auto rounded-lg border" aria-busy={query !== search}>
       {view === "table" && <>
         <table className="min-w-full table-fixed border-collapse text-xs leading-4" style={{ width: widths.reduce((a, b) => a + b, 0) }}>
@@ -79,6 +66,23 @@ export function TableExplorer({ table, original, name = "data.csv", scope, sourc
         </table>
       </div>}
       {view === "distribution" && <TableDistribution table={table} rows={rows} types={profiles.map(profile => profile.type)} />}
+    </div>
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-2.5 text-muted-foreground" aria-live="polite">
+      {t("{count} matching rows", { count: rows.length.toLocaleString() })}
+      {view === "table" && <>
+        <label className="ml-auto flex items-center gap-1.5">{t("Rows per page")}
+          <span className="relative">
+            <select aria-label={t("Rows per page")} value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); goToPage(0); }} className="h-7 appearance-none rounded-md border bg-background pl-2 pr-8 text-foreground">
+              {[10, 25, 50, 100, 250].map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2" aria-hidden />
+          </span>
+        </label>
+        <span>{t("Showing {from}–{to}", { from: rows.length ? start + 1 : 0, to: Math.min(start + pageSize, rows.length) })}</span>
+        <button type="button" className={`${button} flex size-7 items-center justify-center !p-0`} aria-label={t("Previous")} title={t("Previous")} disabled={current === 0} onClick={() => goToPage(current - 1)}><ChevronLeftIcon className="size-3.5" aria-hidden /></button>
+        <span>{t("Page {page} of {pages}", { page: current + 1, pages })}</span>
+        <button type="button" className={`${button} flex size-7 items-center justify-center !p-0`} aria-label={t("Next")} title={t("Next")} disabled={current + 1 >= pages} onClick={() => goToPage(current + 1)}><ChevronRightIcon className="size-3.5" aria-hidden /></button>
+      </>}
     </div>
   </div>;
 }
