@@ -1,6 +1,7 @@
 "use client";
 
 import { useSettingsT as useT } from "@/components/settings/use-settings-t";
+import { toast } from "sonner";
 
 /**
  * Settings → Project → General: everything that belongs to one project,
@@ -16,6 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   getProjectCompaction,
+  getProjectLocation,
+  openProjectFolder,
+  type ProjectLocation,
   getProjectGuardPolicy,
   getProjectInstructionsStatus,
   putProjectCompaction,
@@ -87,6 +91,44 @@ function generalFrom(project: Project): GeneralDraft {
     spendLimit:
       project.spendLimitUsd === null || project.spendLimitUsd === undefined ? "" : String(project.spendLimitUsd),
   };
+}
+
+function LocationCard({ projectId }: { projectId: string }) {
+  const t = useT();
+  const [location, setLocation] = useState<ProjectLocation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    getProjectLocation(projectId).then((value) => { if (active) setLocation(value); })
+      .catch(() => { if (active) setError("Could not load project location."); });
+    return () => { active = false; };
+  }, [projectId]);
+  return <SettingsCard title={t("Project location")}>
+    <SettingsError>{error ? t(error) : null}</SettingsError>
+    {!location && !error && <p className="text-xs text-muted-foreground">{t("Loading…")}</p>}
+    {location && <div className="grid gap-3">
+      {([
+        ["Project folder", location.root],
+        ["Working folder", location.sandbox],
+        ["Uploaded files folder", location.uploads],
+      ] as const).map(([label, value]) => <div key={label} className="grid gap-1">
+        <span className="text-xs font-medium">{t(label)}</span>
+        <div className="flex min-w-0 items-start gap-2">
+          <code className="min-w-0 flex-1 select-text break-all rounded-md bg-muted px-2 py-1.5 text-xs">{value}</code>
+          <Button type="button" variant="outline" size="sm" className="h-7 shrink-0 text-xs" aria-label={t("Copy {folder} path", { folder: t(label) })}
+            onClick={async () => {
+              try { await navigator.clipboard.writeText(value); toast.success(t("Path copied")); }
+              catch { toast.error(t("Could not copy path. Select and copy it manually.")); }
+            }}>{t("Copy path")}</Button>
+        </div>
+      </div>)}
+      <p className="text-xs text-muted-foreground">{t("These folders are on the computer running the app. Renaming the project keeps its location.")}</p>
+      <div><Button type="button" variant="outline" size="sm" onClick={async () => {
+        try { await openProjectFolder(projectId); }
+        catch (error) { toast.error(t((error as Error).message)); }
+      }}>{t("Open project folder")}</Button></div>
+    </div>}
+  </SettingsCard>;
 }
 
 function GeneralCard({ project }: { project: Project }) {
@@ -537,6 +579,7 @@ export function ProjectSettingsPanel({ projectId }: { projectId: string }) {
         // Remount per project so no card shows the previous project's draft.
         <div key={project.id} className="flex flex-col gap-4">
           <GeneralCard project={project} />
+          <LocationCard projectId={project.id} />
           <InstructionsCard projectId={project.id} />
           <GuardCard projectId={project.id} />
           <CompactionCard projectId={project.id} />

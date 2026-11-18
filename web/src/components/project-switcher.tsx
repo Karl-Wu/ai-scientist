@@ -1,6 +1,7 @@
 "use client";
 
 import { useT } from "@/components/i18n-provider";
+import { toast } from "sonner";
 
 import {
   ArchiveIcon,
@@ -29,7 +30,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ProjectCreateDialog } from "@/components/project-create-dialog";
-import { DEFAULT_PROJECT_ID, type Project } from "@/lib/projects";
+import { DEFAULT_PROJECT_ID, openProjectFolder, type Project } from "@/lib/projects";
 import { openSettings } from "@/lib/settings-nav";
 import { useProjects } from "@/lib/use-projects";
 import { cn } from "@/lib/utils";
@@ -203,6 +204,14 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
               )}
               <CommandSeparator />
               <CommandGroup>
+                <CommandItem value="__open_project_folder__" onSelect={async () => {
+                  setPopoverOpen(false);
+                  try { await openProjectFolder(activeProjectId); }
+                  catch (error) { toast.error(t((error as Error).message)); }
+                }} className="gap-2">
+                  <FolderIcon className="size-4" />
+                  {t("Open project folder")}
+                </CommandItem>
                 {onOpenProjectView && (
                   <CommandItem
                     value="__view_all_projects__"

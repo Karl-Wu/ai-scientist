@@ -3,6 +3,8 @@
  * Costs and sandbox/init endpoints are added in later phases.
  */
 import type { FastifyInstance } from "fastify";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { DEFAULT_PROJECT_ID } from "../config.ts";
 import {
   createProject,
@@ -44,6 +46,30 @@ import {
 } from "../agent/guard-policy.ts";
 
 export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
+  app.get<{ Params: { projectId: string } }>("/projects/:projectId/location", async (req, reply) => {
+    if (!getProject(req.params.projectId)) return reply.code(404).send({ detail: "Project not found" });
+    const paths = resolvePaths(req.params.projectId);
+    return { root: paths.root, sandbox: paths.sandbox, uploads: paths.uploadDir };
+  });
+
+  app.post<{ Params: { projectId: string } }>("/projects/:projectId/open-folder", async (req, reply) => {
+    if (!getProject(req.params.projectId)) return reply.code(404).send({ detail: "Project not found" });
+    // Only a browser connecting locally may trigger the host's desktop UI.
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.ip)) {
+      return reply.code(403).send({ detail: "Folder opening is available only on the computer running the app. Copy the path from project settings." });
+    }
+    const root = resolvePaths(req.params.projectId).root;
+    const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer.exe" : "xdg-open";
+    try {
+      await promisify(execFile)(command, [root], { timeout: 10_000 });
+      return { ok: true };
+    } catch (error) {
+      // Windows Explorer commonly exits with 1 even when the folder opened.
+      if (process.platform === "win32" && (error as { code?: unknown }).code === 1) return { ok: true };
+      return reply.code(503).send({ detail: "Could not open the file manager. Copy the path from project settings." });
+    }
+  });
+
   app.get("/projects", async () => listProjects());
 
   app.get("/projects/activity", async (_req, reply) => {

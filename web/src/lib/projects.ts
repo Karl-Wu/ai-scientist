@@ -211,6 +211,20 @@ export function apiFetch(
 // Project CRUD
 // ---------------------------------------------------------------------------
 
+export interface ProjectLocation { root: string; sandbox: string; uploads: string }
+export async function getProjectLocation(id: string): Promise<ProjectLocation> {
+  const res = await apiFetch(`/projects/${encodeURIComponent(id)}/location`);
+  if (!res.ok) throw new Error("Could not load project location.");
+  return res.json();
+}
+export async function openProjectFolder(id: string): Promise<void> {
+  const res = await apiFetch(`/projects/${encodeURIComponent(id)}/open-folder`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || "Could not open the file manager. Copy the path from project settings.");
+  }
+}
+
 export async function listProjects(): Promise<Project[]> {
   const res = await apiFetch("/projects");
   if (!res.ok) throw new Error(`listProjects ${res.status}`);

@@ -1647,5 +1647,18 @@
   "The prompt has changed. Translation needs updating; showing the original.": "原文已更新，译文待更新，当前显示原文。",
   "No translation is available for this workflow yet; showing the original.": "此工作流暂无译文，当前显示原文。",
   "Execution uses the original prompt.": "执行时使用原文。",
-  "Edits to the original prompt will be used for execution.": "对原文的编辑将用于实际执行。"
+  "Edits to the original prompt will be used for execution.": "对原文的编辑将用于实际执行。",
+  "Project location": "项目位置",
+  "Project folder": "项目目录",
+  "Working folder": "工作目录",
+  "Uploaded files folder": "上传文件目录",
+  "Copy {folder} path": "复制{folder}路径",
+  "Path copied": "路径已复制",
+  "Copy path": "复制路径",
+  "Open project folder": "打开项目文件夹",
+  "Could not load project location.": "无法加载项目位置。",
+  "Could not copy path. Select and copy it manually.": "无法复制路径，请手动选中并复制。",
+  "These folders are on the computer running the app. Renaming the project keeps its location.": "这些目录位于运行应用的电脑上，修改项目名称不会改变目录位置。",
+  "Folder opening is available only on the computer running the app. Copy the path from project settings.": "仅支持在运行应用的电脑上打开文件夹。请从项目设置中复制路径。",
+  "Could not open the file manager. Copy the path from project settings.": "无法打开文件管理器，请从项目设置中复制路径。"
 }
