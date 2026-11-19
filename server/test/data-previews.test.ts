@@ -24,7 +24,7 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
   it("switches XLSX sheets, bounds rows and does not evaluate formulas", async () => {
     const first = await preview("tables", "study.xlsx");
     expect(first.collections).toEqual(["Measurements", "Conditions"]);
-    expect(first.head).toHaveLength(200);
+    expect(first.head).toHaveLength(5000);
     expect(first.head[0]).toEqual(["sample-0", 0, null]);
     expect(first.rows_truncated).toBe(true);
     expect(first.num_rows).toBeNull();
@@ -39,9 +39,9 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
     expect(first.collections).toEqual(["中文数据", "条件", "空表"]);
     expect(first.format).toBe("xls");
     expect(first.columns[0].name).toBe("名称");
-    expect(first.head).toHaveLength(200);
+    expect(first.head).toHaveLength(205);
     expect(first.num_rows).toBe(205);
-    expect(first.rows_truncated).toBe(true);
+    expect(first.rows_truncated).toBe(false);
     expect(first.head[0].slice(0, 5)).toEqual(["样本-1", 1.5, "2026-11-15 09:30:00", null, true]);
     expect(first.head[0][5]).toHaveLength(512);
     expect((await preview("tables", name, "条件")).head).toEqual([["对照组", 24]]);
@@ -53,7 +53,7 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
   });
   it("bounds JSON Lines and preserves nested, missing and large integer values", async () => {
     const data = await preview("tables", "records.jsonl");
-    expect(data.head).toHaveLength(200);
+    expect(data.head).toHaveLength(5000);
     expect(data.rows_truncated).toBe(true);
     expect(data.num_rows).toBeNull();
     const types = await preview("tables", "types.jsonl");
@@ -68,7 +68,7 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
     const data = await preview("tables", "study.db");
     expect(data.collections).toEqual(["measurements", 'quoted"table']);
     expect(data.head[0]).toEqual(["sample-0", 0, "[binary: 3 bytes]"]);
-    expect(data.head).toHaveLength(200);
+    expect(data.head).toHaveLength(5000);
     expect((await preview("tables", "study.db", 'quoted"table')).head).toEqual([[42]]);
     expect(fs.readFileSync(path.join(root, "study.db"))).toEqual(before);
     expect((await runSciHelper("tables", "summarize", [path.join(root, "study.db"), "hidden_view"])).status).toBe(5);
@@ -87,16 +87,18 @@ describe.runIf(depsOk)("bounded scientific data previews", () => {
   });
   it.each(["data.arrow", "data.ipc", "data.feather"])("reads a bounded sample across record batches in %s", async name => {
     const data = await preview("tables", name);
-    expect(data.head).toHaveLength(200);
+    expect(data.head).toHaveLength(5000);
     expect(data.head[199]).toEqual([199, 99.5]);
+    expect(data.head[4999]).toEqual([4999, 2499.5]);
     expect(data.rows_truncated).toBe(true);
     expect(data.columns.map((col: { name: string }) => col.name)).toEqual(["sample", "value"]);
   });
   it("samples Parquet batches while retaining the metadata row count", async () => {
     const data = await preview("arrays", "data.parquet");
-    expect(data.num_rows).toBe(205);
-    expect(data.head).toHaveLength(200);
+    expect(data.num_rows).toBe(5005);
+    expect(data.head).toHaveLength(5000);
     expect(data.head[199]).toEqual(["199", "99.5"]);
+    expect(data.head[4999]).toEqual(["4999", "2499.5"]);
   });
   it("selects NumPy slices and emits strict JSON for nonfinite values", async () => {
     const cube = await preview("arrays", "cube.npy", "", 1);

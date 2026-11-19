@@ -13,7 +13,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-MAX_ROWS = 200
+MAX_ROWS = 5_000
 MAX_COLS = 50
 MAX_CELL = 512
 MAX_COLLECTIONS = 100

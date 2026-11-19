@@ -16,6 +16,7 @@ MAX_ARRAYS = 100
 MAX_BYTES = 64 * 1024 * 1024
 MAX_SIDE = 128
 MAX_LINE = 1024
+MAX_TABLE_ROWS = 5_000
 NUMERIC = set("biuf")
 
 
@@ -191,13 +192,20 @@ def summarize_parquet(path, key="", index=0):
     with pq.ParquetFile(path) as file:
         schema = file.schema_arrow
         names = schema.names[:50]
-        batch = next(file.iter_batches(batch_size=201, columns=names), None)
+        batches = file.iter_batches(batch_size=MAX_TABLE_ROWS, columns=names)
         columns = [{"name": field.name, "dtype": str(field.type)} for field in list(schema)[:50]]
         def cell(v):
             if v is None:
                 return None
             return str(v)[:512]
-        head = [] if batch is None else [[cell(v) for v in row] for row in zip(*(col.to_pylist() for col in batch.columns))][:200]
+        head = []
+        for batch in batches:
+            for row in zip(*(col.to_pylist() for col in batch.columns)):
+                head.append([cell(v) for v in row])
+                if len(head) >= MAX_TABLE_ROWS:
+                    break
+            if len(head) >= MAX_TABLE_ROWS:
+                break
         return {"format": "parquet", "kind": "table", "num_rows": file.metadata.num_rows,
                 "num_columns": len(schema), "columns": columns, "head": head,
                 "rows_truncated": file.metadata.num_rows > len(head), "columns_truncated": len(schema) > 50,

@@ -16,7 +16,7 @@ import duckdb, sys
 c=duckdb.connect(sys.argv[1])
 c.execute('CREATE SCHEMA "研究"')
 c.execute('CREATE TABLE "研究"."quoted""table" AS SELECT 9007199254740993::BIGINT id, \'001\' code, false flag, repeat(\'x\',1000) note')
-c.execute('CREATE TABLE main.measurements AS SELECT i, i*0.5 AS measurement FROM range(205) t(i)')
+c.execute('CREATE TABLE main.measurements AS SELECT i, i*0.5 AS measurement FROM range(5005) t(i)')
 c.execute('CREATE VIEW "研究".local_view AS SELECT * FROM main.measurements')
 c.execute("CREATE VIEW main.external_view AS SELECT * FROM read_csv('"+sys.argv[2].replace("'", "''")+"')")
 c.close()
@@ -35,7 +35,7 @@ describe.runIf(available)("DuckDB read-only previews", () => {
     const data = JSON.parse(result.stdout);
     expect(data.collections).toContain(JSON.stringify(["研究", 'quoted"table']));
     expect(data.collection_labels[JSON.stringify(["研究", "local_view"])]).toContain("[view]");
-    expect(data.head).toHaveLength(200);
+    expect(data.head).toHaveLength(5000);
     expect(data.rows_truncated).toBe(true);
     const quoted = await preview(JSON.stringify(["研究", 'quoted"table']));
     expect(quoted.status, quoted.stderr).toBe(0);
@@ -44,7 +44,7 @@ describe.runIf(available)("DuckDB read-only previews", () => {
     expect(row[3]).toHaveLength(512);
     const view = await preview(JSON.stringify(["研究", "local_view"]));
     expect(view.status, view.stderr).toBe(0);
-    expect(JSON.parse(view.stdout).head).toHaveLength(200);
+    expect(JSON.parse(view.stdout).head).toHaveLength(5000);
     expect(fs.readFileSync(file)).toEqual(before);
   });
   it("rejects external file reads and unlisted selection strings", async () => {

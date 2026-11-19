@@ -84,7 +84,7 @@ before discarding them.
 | DuckDB | `duckdb` | Read-only schema-qualified table/view selector with Table Explorer; external file/network access and extension loading disabled |
 | SQLite | `sqlite` `sqlite3` `db` | Read-only ordinary-table selector with Table Explorer over a bounded row sample |
 
-The read-only Data tools tables show up to **200 rows × 50 columns**; search, sorting and plots use only
+The read-only Data tools tables show up to **5,000 rows × 50 columns**; search, sorting and plots use only
 that sample. Pagination (100 rows by default) navigates the sample, not the whole source file. Export filtered preview exports matching sample rows only; Copy preview CSV copies the loaded sample. Native column types appear alongside inferred types in Schema. Large cell text is capped at 512 characters. Where a format lacks
 a cheap exact row count, the viewer explicitly reports that the total was not
 scanned. SQLite views and virtual tables are excluded. DuckDB views that require external access show a preview error while keeping the collection selector available. A database held open by another writing process may need to be closed before preview. Charts omit missing/nonnumeric pairs; empty
