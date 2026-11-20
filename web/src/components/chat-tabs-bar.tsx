@@ -39,6 +39,8 @@ const CHAT_ACTIONS_CLASS =
   "hover:bg-muted-foreground/10 hover:text-foreground " +
   "[@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto";
 
+const TASK_LIST_RETRY_MS = 1_000;
+
 export interface ChatTabDescriptor {
   id: string;
   title: string;
@@ -73,9 +75,10 @@ interface SessionListItem {
   name: string | null;
   created: string | number;
   modified: string | number;
+  messageCount: number;
   firstMessage?: string | null;
-  visibleInHistory: boolean;
-  isRunning: boolean;
+  visibleInHistory?: boolean;
+  isRunning?: boolean;
 }
 
 function sessionTitle(s: SessionListItem, untitled: string): string {
@@ -105,6 +108,7 @@ function RecentChatsList({
   const t = useT();
   const locale = useLocale();
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -126,7 +130,9 @@ function RecentChatsList({
   useEffect(() => {
     let cancelled = false;
     let latestRequest = 0;
-    const load = () => {
+    let retryTimer: number | undefined;
+    const load = (canRetry: boolean) => {
+      window.clearTimeout(retryTimer);
       const request = ++latestRequest;
       const revision = listRevision.current;
       const isCurrent = () => !cancelled && request === latestRequest && revision === listRevision.current;
@@ -138,26 +144,32 @@ function RecentChatsList({
         .then((list: SessionListItem[]) => {
           if (!isCurrent()) return;
           const sorted = [...list]
-            .filter((s) => s.visibleInHistory && !deletedSessions.current.has(`${projectId}:${s.id}`))
+            // An older backend may still serve requests while the UI reloads.
+            .filter((s) => (s.visibleInHistory ?? s.messageCount > 1) && !deletedSessions.current.has(`${projectId}:${s.id}`))
             .sort(
               (a, b) =>
                 new Date(b.modified).getTime() - new Date(a.modified).getTime(),
             );
           setSessions(sorted);
+          setLoadFailed(false);
         })
         .catch(() => {
-          if (isCurrent()) setSessions((current) => current ?? []);
+          if (!isCurrent()) return;
+          if (canRetry) retryTimer = window.setTimeout(() => load(false), TASK_LIST_RETRY_MS);
+          else setLoadFailed(true);
         });
     };
-    load();
-    const interval = window.setInterval(load, 30_000);
-    window.addEventListener("focus", load);
-    window.addEventListener("kady:tasks-changed", load);
+    const refresh = () => load(true);
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("kady:tasks-changed", refresh);
     return () => {
       cancelled = true;
+      window.clearTimeout(retryTimer);
       window.clearInterval(interval);
-      window.removeEventListener("focus", load);
-      window.removeEventListener("kady:tasks-changed", load);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("kady:tasks-changed", refresh);
     };
   }, [openSessionKey, projectId]);
 
@@ -262,7 +274,9 @@ function RecentChatsList({
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {t("Tasks")}</h2>
       {sessions === null ? (
-        <div className="px-2 py-2 text-[11px] text-muted-foreground">{t("Loading tasks…")}</div>
+        <div className="px-2 py-2 text-[11px] text-muted-foreground">
+          {loadFailed ? t("Could not load tasks.") : t("Loading tasks…")}
+        </div>
       ) : recentSessions.length === 0 ? (
         <div className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
           {t("No tasks yet.")}</div>

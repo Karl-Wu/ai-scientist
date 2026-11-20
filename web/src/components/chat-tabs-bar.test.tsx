@@ -72,6 +72,35 @@ describe("historical chat deletion", () => {
 });
 
 describe("draft conversation visibility", () => {
+  it("reopens saved tasks when the backend returns the older session payload after restart", async () => {
+    const legacy = { id: saved.id, name: saved.name, created: saved.created, modified: saved.modified, messageCount: 2 };
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [
+      legacy,
+      { ...legacy, id: "legacy-empty", name: "Empty draft", messageCount: 0 },
+      { ...saved, id: "hidden", name: "Explicitly hidden", visibleInHistory: false },
+    ] } as Response);
+    render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+    await userEvent.click(await screen.findByText("Historical chat"));
+    expect(props.onOpenSession).toHaveBeenCalledWith(saved.id, "Historical chat");
+    expect(screen.queryByText("Empty draft")).not.toBeInTheDocument();
+    expect(screen.queryByText("Explicitly hidden")).not.toBeInTheDocument();
+  });
+
+  it("retries an unavailable session list without displaying an empty project", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 503 }));
+      render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+      await act(async () => {});
+      expect(screen.getByText("Loading tasks…")).toBeInTheDocument();
+      expect(screen.queryByText("No tasks yet.")).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(screen.getByText("Historical chat")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hides empty drafts and inputs that the backend has not saved", async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [
       { ...saved, id: "empty", name: "Chat 1", messageCount: 0, visibleInHistory: false },
