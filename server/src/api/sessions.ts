@@ -170,18 +170,40 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get("/sessions", async () => {
+    const projectId = currentProjectId();
     const paths = activePaths();
     const infos = await listSessions(paths);
     // Kady-owned resident sessions (the scheduler host) are not chats.
     const hidden = schedulerSessionId(paths);
-    return infos.filter((i) => i.id !== hidden).map((i) => ({
-      id: i.id,
-      name: i.name ?? null,
-      created: i.created,
-      modified: i.modified,
-      messageCount: i.messageCount,
-      firstMessage: i.firstMessage,
-    }));
+    const running = new Set(runBroker.activeForProject(projectId).map((run) => run.sessionId));
+    return infos.filter((i) => i.id !== hidden).map((i) => {
+      let visibleInHistory = i.messageCount > 1;
+      let firstMessage = i.firstMessage;
+      if (i.messageCount === 1) {
+        // Pi counts all roles; qualify a one-message file using the same
+        // user-message rules as history (which also skips synthetic wake prompts).
+        try {
+          const userMessage = toHistory(i.path, paths.sandbox).find((message) => message.role === "user");
+          if (userMessage) {
+            visibleInHistory = true;
+            firstMessage = userMessage.content ?? "";
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          // A concurrently removed session will disappear on the next listing.
+        }
+      }
+      return {
+        id: i.id,
+        name: i.name ?? null,
+        created: i.created,
+        modified: i.modified,
+        messageCount: i.messageCount,
+        firstMessage,
+        visibleInHistory,
+        isRunning: running.has(i.id),
+      };
+    });
   });
 
   app.patch<{ Params: { id: string }; Body: { name?: unknown } }>("/sessions/:id", async (req, reply) => {

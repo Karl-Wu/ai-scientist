@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,7 +8,7 @@ import { toast } from "sonner";
 vi.mock("@/lib/projects", () => ({ apiFetch: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/components/ui/confirm-dialog", () => ({ useConfirm: () => ({ confirm: async () => true, dialog: null }) }));
-const saved = { id: "saved-chat", name: "Historical chat", created: Date.now(), modified: Date.now(), messageCount: 2 };
+const saved = { id: "saved-chat", name: "Historical chat", created: Date.now(), modified: Date.now(), messageCount: 2, visibleInHistory: true, isRunning: false };
 const fetchMock = vi.mocked(apiFetch);
 const props = {
   projectId: "project-a", tabs: [{ id: "blank", title: "New chat", isStreaming: false, userMessageCount: 0 }],
@@ -72,27 +72,42 @@ describe("historical chat deletion", () => {
 });
 
 describe("draft conversation visibility", () => {
-  it("hides empty open tabs and empty or user-only saved sessions", async () => {
+  it("hides empty drafts and inputs that the backend has not saved", async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => [
-      { ...saved, id: "empty", name: "Chat 1", messageCount: 0 },
-      { ...saved, id: "pending", name: "Waiting for first answer", messageCount: 1 },
+      { ...saved, id: "empty", name: "Chat 1", messageCount: 0, visibleInHistory: false },
     ] } as Response);
-    render(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...props.tabs[0], title: "Chat 2", hasCompletedTurn: false }]} /></TooltipProvider>);
+    const tabs = [
+      { ...props.tabs[0], title: "Chat 2", hasCompletedTurn: false },
+      { ...props.tabs[0], id: "unsaved", title: "Rejected submission", userMessageCount: 1, hasCompletedTurn: true },
+    ];
+    render(<TooltipProvider><ChatTabsBar {...props} tabs={tabs} /></TooltipProvider>);
     await screen.findByText("No tasks yet.");
     expect(screen.queryByText("Chat 1")).not.toBeInTheDocument();
     expect(screen.queryByText("Chat 2")).not.toBeInTheDocument();
-    expect(screen.queryByText("Waiting for first answer")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rejected submission")).not.toBeInTheDocument();
   });
 
-  it("publishes the meaningful title only after the first turn completes", async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => [{ ...saved, name: "Analyze my data" }] } as Response);
-    const tab = { ...props.tabs[0], sessionId: saved.id, title: "Analyze my data", userMessageCount: 1, isStreaming: true, hasCompletedTurn: false };
+  it("shows a first prompt as soon as it is saved and can reopen it after remounting", async () => {
+    const pending = { ...saved, name: null, firstMessage: "Analyze my data", messageCount: 1, isRunning: true };
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] } as Response);
+    const tab = { ...props.tabs[0], sessionId: saved.id, userMessageCount: 1, isStreaming: true, hasCompletedTurn: false };
     const view = render(<TooltipProvider><ChatTabsBar {...props} tabs={[tab]} /></TooltipProvider>);
     await screen.findByText("No tasks yet.");
-    expect(screen.queryByText("Analyze my data")).not.toBeInTheDocument();
-    view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, isStreaming: false, hasCompletedTurn: true }]} /></TooltipProvider>);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [pending] } as Response);
+    act(() => { window.dispatchEvent(new Event("kady:tasks-changed")); });
     expect(await screen.findByText("Analyze my data")).toBeInTheDocument();
-    view.rerender(<TooltipProvider><ChatTabsBar {...props} tabs={[{ ...tab, userMessageCount: 2, hasCompletedTurn: true }]} /></TooltipProvider>);
+    expect(screen.getAllByText("Analyze my data")).toHaveLength(1);
+    expect(screen.getByRole("status", { name: "Task is running" })).toBeInTheDocument();
+
+    view.unmount();
+    render(<TooltipProvider><ChatTabsBar {...props} /></TooltipProvider>);
+    await userEvent.click(await screen.findByText("Analyze my data"));
+    expect(props.onOpenSession).toHaveBeenCalledWith(saved.id, "Analyze my data");
+    expect(screen.getByRole("status", { name: "Task is running" })).toBeInTheDocument();
+
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [{ ...pending, isRunning: false }] } as Response);
+    act(() => { window.dispatchEvent(new Event("kady:tasks-changed")); });
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Task is running" })).not.toBeInTheDocument());
     expect(screen.getByText("Analyze my data")).toBeInTheDocument();
   });
 });

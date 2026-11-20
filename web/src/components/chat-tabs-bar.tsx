@@ -28,9 +28,8 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
-import { commandPreview } from "@/lib/command-blocks";
 import { notifyTaskResponsesChanged } from "@/lib/use-task-responses";
-import { resolveChatTitle, taskDisplayTitle } from "@/lib/chat-title";
+import { suggestedChatTitle, taskDisplayTitle } from "@/lib/chat-title";
 
 const CHAT_ACTIONS_CLASS =
   "absolute right-1.5 top-1.5 z-10 rounded bg-background/95 p-1 text-muted-foreground opacity-0 pointer-events-none transition-[opacity,color,background-color] " +
@@ -74,18 +73,16 @@ interface SessionListItem {
   name: string | null;
   created: string | number;
   modified: string | number;
-  messageCount: number;
   firstMessage?: string | null;
+  visibleInHistory: boolean;
+  isRunning: boolean;
 }
 
 function sessionTitle(s: SessionListItem, untitled: string): string {
-  if (s.name?.trim()) return s.name;
-  const raw = commandPreview(s.firstMessage ?? "").replace(/\s+/g, " ").trim();
-  if (!raw) return untitled;
-  return raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
+  return s.name?.trim() || suggestedChatTitle(s.firstMessage ?? undefined) || untitled;
 }
 
-/** Unified list of open tabs and saved conversations, ordered by recent activity. */
+/** Saved conversations, linked to an existing tab when it is open. */
 function RecentChatsList({
   projectId,
   tabs,
@@ -117,7 +114,7 @@ function RecentChatsList({
   const deletedSessions = useRef(new Set<string>());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const openSessionKey = tabs.map((tab) => `${tab.sessionId ?? tab.id}:${tab.userMessageCount}:${tab.isStreaming}:${tab.hasCompletedTurn}`).join("\u0000");
+  const openSessionKey = tabs.map((tab) => `${tab.sessionId ?? tab.id}:${tab.isStreaming}`).join("\u0000");
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -128,14 +125,20 @@ function RecentChatsList({
 
   useEffect(() => {
     let cancelled = false;
+    let latestRequest = 0;
     const load = () => {
+      const request = ++latestRequest;
       const revision = listRevision.current;
+      const isCurrent = () => !cancelled && request === latestRequest && revision === listRevision.current;
       apiFetch("/sessions", {}, projectId)
-        .then((r) => (r.ok ? r.json() : []))
+        .then((r) => {
+          if (!r.ok) throw new Error("Could not load tasks");
+          return r.json();
+        })
         .then((list: SessionListItem[]) => {
-          if (cancelled || revision !== listRevision.current) return;
+          if (!isCurrent()) return;
           const sorted = [...list]
-            .filter((s) => s.messageCount > 0 && !deletedSessions.current.has(`${projectId}:${s.id}`))
+            .filter((s) => s.visibleInHistory && !deletedSessions.current.has(`${projectId}:${s.id}`))
             .sort(
               (a, b) =>
                 new Date(b.modified).getTime() - new Date(a.modified).getTime(),
@@ -143,7 +146,7 @@ function RecentChatsList({
           setSessions(sorted);
         })
         .catch(() => {
-          if (!cancelled && revision === listRevision.current) setSessions([]);
+          if (isCurrent()) setSessions((current) => current ?? []);
         });
     };
     load();
@@ -161,19 +164,10 @@ function RecentChatsList({
   const openBySessionId = new Map(
     tabs.flatMap((tab) => tab.sessionId ? [[tab.sessionId, tab] as const] : []),
   );
-  // Preserve draft/run recovery, but only publish completed chats in history.
-  const saved = (sessions ?? []).filter((session) =>
-    openBySessionId.get(session.id)?.hasCompletedTurn ?? session.messageCount > 1,
-  );
-  const savedIds = new Set(saved.map((session) => session.id));
-  const unpersistedTabs = [...tabs]
-    .filter((tab) => tab.hasCompletedTurn ?? (tab.userMessageCount > 0 && !tab.isStreaming))
-    .filter((tab) => !tab.sessionId || !savedIds.has(tab.sessionId))
-    .reverse();
-  const recentSessions = saved.map((session) => ({
-    session,
-    tab: openBySessionId.get(session.id),
-  }));
+  const recentSessions = (sessions ?? []).map((session) => {
+    const tab = openBySessionId.get(session.id);
+    return { session, tab, isRunning: tab?.isStreaming || session.isRunning };
+  });
   const startRename = (id: string, title: string, tabId?: string, sessionId?: string | null) => {
     if (savingName) return;
     editTarget.current = { title, tabId, sessionId };
@@ -232,8 +226,8 @@ function RecentChatsList({
       maxLength={120}
     />
   );
-  const deleteChat = async (title: string, tab?: ChatTabDescriptor, sessionId = tab?.sessionId) => {
-    if (tab?.isStreaming || deletingId) return;
+  const deleteChat = async (title: string, sessionId: string, tab?: ChatTabDescriptor) => {
+    if (deletingId) return;
     const ok = await confirm({
       title: t("Delete “{name}”?", { name: title }),
       description: t("Remove this task and its conversation history from Recent tasks. Project files, notebook entries and cost records are kept."),
@@ -241,18 +235,15 @@ function RecentChatsList({
       destructive: true,
     });
     if (!ok) return;
-    const deletionKey = sessionId ?? tab?.id ?? title;
-    setDeletingId(deletionKey);
+    setDeletingId(sessionId);
     try {
-      if (sessionId) {
-        const response = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, projectId);
-        if (!response.ok && response.status !== 404) {
-          const body = await response.json().catch(() => null);
-          throw new Error(body?.detail ?? "Could not delete task. Please try again.");
-        }
-        deletedSessions.current.add(`${projectId}:${sessionId}`);
-        setSessions((current) => current?.filter((session) => session.id !== sessionId) ?? current);
+      const response = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }, projectId);
+      if (!response.ok && response.status !== 404) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail ?? "Could not delete task. Please try again.");
       }
+      deletedSessions.current.add(`${projectId}:${sessionId}`);
+      setSessions((current) => current?.filter((session) => session.id !== sessionId) ?? current);
       if (tab) {
         if (tabs.length === 1) onNewTab();
         onCloseTab(tab.id);
@@ -270,74 +261,16 @@ function RecentChatsList({
       {dialog}
       <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {t("Tasks")}</h2>
-      {sessions === null && tabs.length === 0 ? (
+      {sessions === null ? (
         <div className="px-2 py-2 text-[11px] text-muted-foreground">{t("Loading tasks…")}</div>
-      ) : unpersistedTabs.length === 0 && recentSessions.length === 0 ? (
+      ) : recentSessions.length === 0 ? (
         <div className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
           {t("No tasks yet.")}</div>
       ) : (
         <div className="flex flex-col gap-0.5">
-          {unpersistedTabs.map((tab) => {
-            const displayTitle = taskDisplayTitle(tab.title, tab.titleIsCustom, t);
-            const isEditing = editingId === tab.id;
-            const isActive = tab.id === activeTabId;
-            return (
-              <div
-                key={tab.id}
-                className={cn(
-                  "group/chat-row relative flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors",
-                  isActive
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                )}
-              >
-                {isEditing ? renameInput : (
-                  <button
-                    type="button"
-                    onClick={() => onSelectTab(tab.id)}
-                    onDoubleClick={() => startRename(tab.id, tab.title, tab.id, tab.sessionId)}
-                    title={t("{title} — double-click to rename", { title: displayTitle })}
-                    className="flex w-full min-w-0 flex-1 items-center gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
-                  >
-                    {tab.isStreaming && <LoaderCircleIcon role="status" aria-label={t("Task is running")} aria-hidden={false} className="size-3 shrink-0 animate-spin text-primary" />}
-                    <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
-                  </button>
-                )}
-                {!isEditing && (
-                  <>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={t("Task actions for {title}", { title: displayTitle })}
-                          title={t("Task actions")}
-                          className={CHAT_ACTIONS_CLASS}
-                        >
-                          <MoreHorizontalIcon className="size-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="right" className="min-w-36">
-                        <DropdownMenuItem onSelect={() => startRename(tab.id, tab.title, tab.id, tab.sessionId)}>
-                          <PencilIcon className="size-3.5" />
-                          {t("Rename")}</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          disabled={tab.isStreaming || deletingId !== null}
-                          onSelect={() => void deleteChat(tab.title, tab)}
-                        >
-                          <Trash2Icon className="size-3.5" />
-                          {t("Delete")}</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
-              </div>
-            );
-          })}
-          {recentSessions.map(({ session, tab }) => {
+          {recentSessions.map(({ session, tab, isRunning }) => {
             const title = sessionTitle(session, t("Untitled task"));
-            const resolvedTitle = !session.name && tab ? resolveChatTitle(tab.title, title, tab.titleIsCustom) : title;
+            const resolvedTitle = !session.name && tab?.titleIsCustom ? tab.title : title;
             const rowTitle = taskDisplayTitle(resolvedTitle, Boolean(session.name) || tab?.titleIsCustom, t);
             const isEditing = editingId === session.id;
             return (
@@ -353,18 +286,18 @@ function RecentChatsList({
                 {isEditing ? renameInput : (
                   <button
                     type="button"
-                    title={`${rowTitle} · ${tab?.isStreaming ? t("Running") : relativeTime(session.modified, locale)}`}
+                    title={`${rowTitle} · ${isRunning ? t("Running") : relativeTime(session.modified, locale)}`}
                     onClick={() => tab ? onSelectTab(tab.id) : onOpenSession(session.id, title)}
                     onDoubleClick={() => startRename(session.id, rowTitle, tab?.id, session.id)}
                     className="flex w-full min-w-0 flex-1 items-start gap-1 text-left group-hover/chat-row:pr-6 group-focus-within/chat-row:pr-6 [@media(hover:none)]:pr-6"
                   >
-                    {tab?.isStreaming && (
+                    {isRunning && (
                       <LoaderCircleIcon role="status" aria-label={t("Task is running")} aria-hidden={false} className="mt-0.5 size-3 shrink-0 animate-spin text-primary" />
                     )}
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{rowTitle}</span>
                       <span className="text-[10px] text-muted-foreground/75">
-                        {relativeTime(session.modified, locale)}
+                        {isRunning ? t("Running") : relativeTime(session.modified, locale)}
                       </span>
                     </span>
                   </button>
@@ -389,8 +322,8 @@ function RecentChatsList({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
-                        disabled={tab?.isStreaming || deletingId !== null}
-                        onSelect={() => void deleteChat(rowTitle, tab, session.id)}
+                        disabled={isRunning || deletingId !== null}
+                        onSelect={() => void deleteChat(rowTitle, session.id, tab)}
                       >
                         <Trash2Icon className="size-3.5" />
                         {t("Delete")}</DropdownMenuItem>
