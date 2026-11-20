@@ -1,16 +1,17 @@
 "use client";
 
-import { useT } from "@/components/i18n-provider";
+import { useLocale, useT } from "@/components/i18n-provider";
 
 import {
   BookOpenIcon,
-  BrainIcon,
   CheckIcon,
   ChevronRightIcon,
+  ClockIcon,
   FileEditIcon,
   FileIcon,
   FilePlusIcon,
   FolderTreeIcon,
+  HelpCircleIcon,
   ImagePlusIcon,
   SearchIcon,
   ServerCogIcon,
@@ -20,7 +21,7 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { memo, useState } from "react";
+import { memo } from "react";
 
 import {
   Collapsible,
@@ -170,10 +171,53 @@ function summarize(
 }
 
 function StatusDot({ status }: { status: ActivityItem["status"] }) {
-  if (status === "running") return <Spinner className="size-3 shrink-0" />;
-  if (status === "error")
-    return <XIcon className="size-3 shrink-0 text-destructive" />;
-  return <CheckIcon className="size-3 shrink-0 text-emerald-500" />;
+  const t = useT();
+  if (status === "running") return <Spinner aria-label={t("Running")} className="size-3 shrink-0" />;
+  const label = t(status === "error" ? "Failed" : status === "unknown" ? "Status unknown" : "Completed");
+  const Icon = status === "error" ? XIcon : status === "unknown" ? HelpCircleIcon : CheckIcon;
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex shrink-0">
+      <Icon aria-hidden="true" className={cn("size-3.5", {
+        "text-destructive": status === "error",
+        "text-muted-foreground": status === "unknown",
+        "text-emerald-600 dark:text-emerald-400": status === "complete",
+      })} />
+    </span>
+  );
+}
+
+function toolStartTime(startedAt: number | undefined): Date | null {
+  const time = startedAt === undefined ? null : new Date(startedAt);
+  return time && Number.isFinite(time.getTime()) ? time : null;
+}
+
+function ToolStartedAt({ time }: { time: Date }) {
+  const locale = useLocale();
+  const t = useT();
+  return <span title={time.toLocaleString(locale)}>{t("Started {time}", { time: time.toLocaleTimeString(locale) })}</span>;
+}
+
+function formatToolDuration(durationMs: number | undefined, locale: string): string | null {
+  if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0) return null;
+  const unit = durationMs < 1000 ? "millisecond" : durationMs < 60_000 ? "second" : "minute";
+  const value = durationMs / (unit === "millisecond" ? 1 : unit === "second" ? 1000 : 60_000);
+  return new Intl.NumberFormat(locale, { style: "unit", unit, maximumFractionDigits: 1 }).format(value);
+}
+
+export function ToolTiming({ item, className }: { item: ActivityItem; className?: string }) {
+  const locale = useLocale();
+  const t = useT();
+  const time = toolStartTime(item.startedAt);
+  const duration = formatToolDuration(item.durationMs, locale);
+  const unknownStatus = item.status === "unknown";
+  if (!time && !duration && !unknownStatus) return null;
+  return (
+    <span className={cn("flex flex-wrap items-baseline gap-x-2 text-[11px] tabular-nums text-muted-foreground", className)}>
+      {time && <ToolStartedAt time={time} />}
+      {duration && <span>{duration}</span>}
+      {unknownStatus && <span>{t("Status unknown")}</span>}
+    </span>
+  );
 }
 
 function fullArgs(args: unknown): string {
@@ -192,64 +236,59 @@ function fullArgs(args: unknown): string {
   return String(args);
 }
 
-const ToolCard = memo(function ToolCard({ item }: { item: ActivityItem }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
+function ToolCallPreview({ item }: { item: ActivityItem }) {
   // A read of a SKILL.md is Pi's skill activation — surface the skill's name
   // instead of a generic file read (the path stays visible under Input). The
   // server resolves the frontmatter name; the path-derived name is a fallback.
   const skill = item.skillName ?? skillNameFromRead(item.toolName, item.args);
   const name = skill ? "skill" : (item.toolName ?? item.label);
   const summary = skill ?? summarize(item.toolName, item.args, item.result, item.replyWorkflowScript);
-  // A generated image is the point of the call: keep it visible while the
-  // card is collapsed instead of behind the disclosure.
-  const inlineImages = item.toolName === "generate_image";
+  return (
+    <>
+      {skill ? <WandSparklesIcon className="size-3.5 shrink-0 text-muted-foreground" /> : <ToolIcon toolName={item.toolName} />}
+      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className={cn("min-w-0 shrink-0 truncate font-medium text-foreground", summary ? "max-w-[50%]" : "max-w-full")}>{name}</span>
+        {summary && <span className="min-w-0 truncate font-mono text-muted-foreground">{summary}</span>}
+      </span>
+    </>
+  );
+}
+
+const ToolCard = memo(function ToolCard({ item, inlineImages }: { item: ActivityItem; inlineImages: boolean }) {
+  const t = useT();
+  const locale = useLocale();
   const args = fullArgs(item.args);
+  const time = toolStartTime(item.startedAt);
+  const duration = formatToolDuration(item.durationMs, locale);
   const hasDetail = Boolean(
-    args ||
+    time || args ||
       item.result ||
-      item.resultImages?.length ||
-      item.resultImagesTruncated,
+      (!inlineImages && (item.resultImages?.length || item.resultImagesTruncated)),
   );
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} data-tool-call-id={item.id}>
+    <Collapsible data-tool-call-id={item.id}>
       <CollapsibleTrigger
         disabled={!hasDetail}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-left text-xs transition-colors",
-          hasDetail && "hover:bg-muted/60",
-          item.status === "error" && "border-destructive/40",
+          "group flex min-h-8 w-full items-center gap-2.5 rounded-md border bg-muted/30 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors enabled:hover:bg-muted/60",
+          item.status === "error" && "border-destructive/30 bg-destructive/5 enabled:hover:bg-destructive/10",
         )}
       >
-        {hasDetail ? (
-          <ChevronRightIcon
-            className={cn(
-              "size-3 shrink-0 text-muted-foreground transition-transform",
-              open && "rotate-90",
-            )}
-          />
-        ) : (
-          <span className="size-3 shrink-0" />
-        )}
-        {skill ? (
-          <WandSparklesIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ToolIcon toolName={item.toolName} />
-        )}
-        <span className="font-medium text-foreground">{name}</span>
-        {summary && (
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-            {summary}
+        <ToolCallPreview item={item} />
+        {duration && (
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap tabular-nums" title={t("Duration")}>
+            <ClockIcon aria-hidden="true" className="size-3.5" />
+            {duration}
           </span>
         )}
-        <span className={cn(!summary && "ml-auto")}>
-          <StatusDot status={item.status} />
-        </span>
+        <StatusDot status={item.status} />
+        <ChevronRightIcon aria-hidden="true" className={cn("size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90", !hasDetail && "invisible")} />
       </CollapsibleTrigger>
       {hasDetail && (
         <CollapsibleContent>
           <div className="mt-1 space-y-1.5 rounded-md border bg-background p-2">
+            {time && <div className="text-[11px] tabular-nums text-muted-foreground"><ToolStartedAt time={time} /></div>}
             {args && (
               <div>
                 <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -283,14 +322,6 @@ const ToolCard = memo(function ToolCard({ item }: { item: ActivityItem }) {
             )}
           </div>
         </CollapsibleContent>
-      )}
-      {inlineImages && (
-        <div className="mt-1">
-          <ToolResultImages
-            images={item.resultImages ?? []}
-            truncated={item.resultImagesTruncated}
-          />
-        </div>
       )}
     </Collapsible>
   );
@@ -385,71 +416,48 @@ export function NotebookEntryChip({
   );
 }
 
-/** The collapsible list of tool calls the agent made during a turn. */
+/** A single disclosure for consecutive tool calls within the transcript. */
 export function ToolActivityList({
   activities,
-  compactHistory = false,
+  current = false,
 }: {
   activities: ActivityItem[];
-  /** Older turns keep only a one-line summary until the user opens them. */
-  compactHistory?: boolean;
+  current?: boolean;
 }) {
-  if (!activities.length) return null;
-  const hidden = compactHistory ? activities : activities.slice(0, -1);
-  const latest = compactHistory ? [] : activities.slice(-1);
-  const failed = hidden.filter((item) => item.status === "error").length;
-  const running = hidden.filter((item) => item.status === "running").length;
-  const completed = hidden.filter((item) => item.status === "complete").length;
+  const t = useT();
+  const latest = activities.at(-1);
+  if (!latest) return null;
+  const running = activities.some((item) => item.status === "running");
+  const failed = activities.filter((item) => item.status === "error").length;
+  const unknown = activities.filter((item) => item.status === "unknown").length;
+  const inlineImages = activities.length === 1 && latest.toolName === "generate_image";
 
   return (
     <div className="my-1 space-y-1">
-      {hidden.length > 0 && (
-        <Collapsible>
-          <CollapsibleTrigger
-            className={cn(
-              "group flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground",
-              failed > 0 && "text-destructive",
-            )}
-          >
-            <ChevronRightIcon className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-            <span className="font-medium">Earlier activity</span>
-            <span className="min-w-0 flex-1 truncate">
-              {hidden.length} {hidden.length === 1 ? "step" : "steps"}
-              {completed > 0 ? ` · ${completed} completed` : ""}
-              {running > 0 ? ` · ${running} running` : ""}
-              {failed > 0 ? ` · ${failed} failed` : ""}
-            </span>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="space-y-1 border-l-2 border-muted pl-2">
-              {hidden.map((item) => <ToolCard key={item.id} item={item} />)}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-      {latest.map((item) => <ToolCard key={item.id} item={item} />)}
+      <Collapsible>
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60">
+          <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+          {current ? (
+            <ToolCallPreview item={latest} />
+          ) : (
+            <>
+              <WrenchIcon aria-hidden="true" className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {t(activities.length === 1 ? "Ran 1 tool call" : "Ran {count} tool calls", { count: activities.length })}
+                {failed > 0 && <span className="text-destructive"> · {t("{count} failed", { count: failed })}</span>}
+                {unknown > 0 && ` · ${t("{count} of unknown status", { count: unknown })}`}
+              </span>
+            </>
+          )}
+          {running ? <Spinner aria-label={t("Tool calls running")} className="size-3 shrink-0" /> : current && <StatusDot status={latest.status} />}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-1 space-y-1 border-l-2 border-muted pl-2">
+            {activities.map((item) => <ToolCard key={item.id} item={item} inlineImages={inlineImages} />)}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+      {inlineImages && <ToolResultImages images={latest.resultImages ?? []} truncated={latest.resultImagesTruncated} />}
     </div>
-  );
-}
-
-/** Collapsible "thinking" disclosure for an assistant message's reasoning. */
-export function ReasoningBlock({ reasoning }: { reasoning: string }) {
-  const [open, setOpen] = useState(false);
-  if (!reasoning.trim()) return null;
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
-        <ChevronRightIcon
-          className={cn("size-3 transition-transform", open && "rotate-90")}
-        />
-        <BrainIcon className="size-3.5" />
-        <span>Reasoning</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1 border-l-2 border-muted pl-3 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
-          {reasoning}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   );
 }

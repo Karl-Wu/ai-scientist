@@ -25,8 +25,11 @@ export interface ActivityItem {
   id: string;
   label: string;
   detail?: string;
-  status: "running" | "complete" | "error";
+  status: "running" | "complete" | "error" | "unknown";
   timestamp: number;
+  /** Server observation time and elapsed time, when available. */
+  startedAt?: number;
+  durationMs?: number;
   /** Raw tool name (e.g. "bash", "write") for icon + summary rendering. */
   toolName?: string;
   /** Frontmatter skill name when this read is a skill activation (server-resolved). */
@@ -50,7 +53,8 @@ export interface ActivityItem {
 }
 
 export type AssistantMessageSegment =
-  | { type: "text"; content: string }
+  | { type: "text"; content: string; blockId?: string }
+  | { type: "reasoning"; content: string }
   | { type: "activity"; activityId: string };
 
 // Retained for backwards-compatible imports; citation verification is deferred
@@ -91,6 +95,7 @@ export interface ChatMessage {
   activities?: ActivityItem[];
   /** Stream-ordered assistant prose and tool references. */
   segments?: AssistantMessageSegment[];
+  summary?: { blockId: string; confirmed: boolean; executionMs?: number };
   reasoning?: string;
   modelVersion?: string;
   timestamp: number;
@@ -189,19 +194,21 @@ function existingSegments(message: ChatMessage): AssistantMessageSegment[] {
   ];
 }
 
-function appendTextSegment(
+function appendContentSegment(
   segments: AssistantMessageSegment[],
   text: string,
+  type: "text" | "reasoning" = "text",
+  blockId?: string,
 ): AssistantMessageSegment[] {
   if (!text) return segments;
   const last = segments[segments.length - 1];
-  if (last?.type === "text") {
+  if (last?.type === type && (!blockId || (last.type === "text" && last.blockId === blockId))) {
     return [
       ...segments.slice(0, -1),
       { ...last, content: last.content + text },
     ];
   }
-  return [...segments, { type: "text", content: text }];
+  return [...segments, type === "text" && blockId ? { type, content: text, blockId } : { type, content: text }];
 }
 
 /** Apply one SSE frame to the in-progress assistant message. */
@@ -213,14 +220,38 @@ export function applyFrameToMessage(
   switch (frame.type) {
     case "text_delta": {
       const delta = frame.delta ?? "";
+      const blockId = typeof frame.blockId === "string" ? frame.blockId : undefined;
       return {
         ...message,
         content: message.content + delta,
-        segments: appendTextSegment(existingSegments(message), delta),
+        segments: appendContentSegment(existingSegments(message), delta, "text", blockId),
       };
     }
-    case "thinking_delta":
-      return { ...message, reasoning: (message.reasoning ?? "") + (frame.delta ?? "") };
+    case "message_start":
+      return frame.role === "assistant" && message.summary ? { ...message, summary: undefined } : message;
+    case "message_end":
+      return frame.summaryEligible === false && message.summary ? { ...message, summary: undefined } : message;
+    case "summary_candidate": {
+      if (typeof frame.blockId !== "string") return message;
+      const executionMs = typeof frame.executionMs === "number" && Number.isFinite(frame.executionMs) && frame.executionMs >= 0
+        ? frame.executionMs : undefined;
+      return { ...message, summary: { blockId: frame.blockId, confirmed: frame.confirmed === true, executionMs } };
+    }
+    case "done":
+      return message.summary ? {
+        ...message, summary: frame.outcome === "completed" ? { ...message.summary, confirmed: true } : undefined,
+      } : message;
+    case "thinking_delta": {
+      const delta = frame.delta ?? "";
+      const segments = existingSegments(message);
+      return {
+        ...message,
+        reasoning: (message.reasoning ?? "") + delta,
+        segments: frame.reasoningStart === true && delta
+          ? [...segments, { type: "reasoning", content: delta }]
+          : appendContentSegment(segments, delta, "reasoning"),
+      };
+    }
     case "tool_start": {
       const id = String(frame.toolCallId ?? frame.toolName ?? now);
       const label =
@@ -238,9 +269,12 @@ export function applyFrameToMessage(
           ? message.content + "\n\n"
           : message.content;
       const paragraphBreak = content.slice(message.content.length);
-      const segments = appendTextSegment(existingSegments(message), paragraphBreak);
+      const priorSegments = existingSegments(message);
+      const segments = priorSegments.at(-1)?.type === "text"
+        ? appendContentSegment(priorSegments, paragraphBreak) : priorSegments;
       return {
         ...message,
+        ...(message.summary ? { summary: undefined } : {}),
         content,
         activities: [
           ...activities,
@@ -249,6 +283,7 @@ export function applyFrameToMessage(
             label,
             status: "running" as const,
             timestamp: now,
+            ...(typeof frame.startedAt === "number" && Number.isFinite(frame.startedAt) ? { startedAt: frame.startedAt } : {}),
             toolName: frame.toolName ? String(frame.toolName) : undefined,
             skillName: typeof frame.skill === "string" ? frame.skill : undefined,
             args: frame.args,
@@ -309,6 +344,8 @@ export function applyFrameToMessage(
       next[idx] = {
         ...next[idx],
         status,
+        ...(typeof frame.durationMs === "number" && Number.isFinite(frame.durationMs) && frame.durationMs >= 0
+          ? { durationMs: frame.durationMs } : {}),
         result: typeof frame.result === "string" ? frame.result : next[idx].result,
         ...(scientificResult ? { scientificResult } : {}),
         ...(resultImages.length > 0 ? { resultImages } : {}),
@@ -343,8 +380,9 @@ export function applyFrameToMessage(
       const text = message.content ? `\n\n${errorText}` : errorText;
       return {
         ...message,
+        ...(message.summary ? { summary: undefined } : {}),
         content: message.content + text,
-        segments: appendTextSegment(existingSegments(message), text),
+        segments: appendContentSegment(existingSegments(message), text),
       };
     }
     default:
@@ -447,9 +485,17 @@ export function applyFrameToTranscript(
       steering: null,
     };
   }
+  // A notice or steering message can start a new bubble while a tool is
+  // running. Keep its result on the card where that call began.
+  const activityId = frame.type === "tool_end" ? frame.toolCallId
+    : frame.type === "permission_resolved" ? frame.requestId : undefined;
+  const owner = typeof activityId === "string"
+    ? messages.findLast((message) => message.activities?.some((activity) => activity.id === activityId))
+    : undefined;
+  const targetId = owner?.id ?? state.assistantId;
   let changed = false;
   const next = messages.map((m) => {
-    if (m.id !== state.assistantId) return m;
+    if (m.id !== targetId) return m;
     const applied = applyFrameToMessage(m, frame, now);
     if (applied !== m) changed = true;
     return applied;
@@ -597,7 +643,7 @@ function restoreHistory(
         ...message,
         activities: (message.activities ?? []).map((activity) =>
           activity.status === "running"
-            ? { ...activity, status: "complete" as const }
+            ? { ...activity, status: "unknown" as const }
             : activity,
         ),
       };
@@ -666,17 +712,14 @@ export function pruneEmptyTrailingAssistant(messages: ChatMessage[]): ChatMessag
   return messages;
 }
 
-function finishActivities(
-  messages: ChatMessage[],
-  status: ActivityItem["status"],
-): ChatMessage[] {
+function finishActivities(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message) =>
     message.role === "assistant" &&
     message.activities?.some((activity) => activity.status === "running")
       ? {
           ...message,
           activities: message.activities.map((activity) =>
-            activity.status === "running" ? { ...activity, status } : activity,
+            activity.status === "running" ? { ...activity, status: "unknown" } : activity,
           ),
         }
       : message,
@@ -843,7 +886,7 @@ export function useAgent(projectId?: string) {
   );
 
   const finalizeRun = useCallback((consumer: RunConsumer) => {
-    consumer.transcript = finishActivities(consumer.transcript, "complete");
+    consumer.transcript = finishActivities(consumer.transcript);
     messagePublisher.publish(consumer.transcript);
     setPendingSteers([]);
     setPendingFollowUps([]);
@@ -852,12 +895,10 @@ export function useAgent(projectId?: string) {
   }, [messagePublisher]);
 
   const failRun = useCallback((consumer: RunConsumer, aborted: boolean) => {
-    consumer.transcript = finishActivities(
-      consumer.transcript,
-      aborted ? "complete" : "error",
-    ).map((message) =>
-      message.id === consumer.transcriptState.assistantId && !aborted && !message.content
-        ? { ...message, content: "Something went wrong. Please try again." }
+    consumer.transcript = finishActivities(consumer.transcript).map((message) =>
+      message.id === consumer.transcriptState.assistantId
+        ? { ...message, summary: undefined,
+            ...(!aborted && !message.content ? { content: "Something went wrong. Please try again." } : {}) }
         : message,
     );
     messagePublisher.publish(consumer.transcript);

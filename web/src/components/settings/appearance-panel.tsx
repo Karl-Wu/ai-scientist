@@ -6,12 +6,15 @@ import { useT } from "@/components/i18n-provider";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { setShowReasoningDetails, useShowReasoningDetails } from "@/lib/reasoning-display";
 import { cn } from "@/lib/utils";
 import { SettingsHeader } from "./primitives";
 
 export function AppearancePanel() {
   const t = useT();
   const { theme, setTheme } = useTheme();
+  const showReasoningDetails = useShowReasoningDetails();
 
   const options: { value: string; label: string; icon: typeof SunIcon }[] = [
     { value: "light", label: t("Light"), icon: SunIcon },
@@ -32,6 +35,20 @@ export function AppearancePanel() {
           <p className="text-xs text-muted-foreground">{t("Choose your interface language. Shared across browsers on this installation.")}</p>
         </div>
         <LanguageSelector id="interface-language" />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+        <div className="space-y-1">
+          <label htmlFor="show-reasoning-details" className="text-sm font-medium">{t("Show reasoning details")}</label>
+          <p id="reasoning-details-description" className="text-xs text-muted-foreground">
+            {t("Show collapsible reasoning details in current and past chats.")}
+          </p>
+        </div>
+        <Switch
+          id="show-reasoning-details"
+          aria-describedby="reasoning-details-description"
+          checked={showReasoningDetails}
+          onCheckedChange={setShowReasoningDetails}
+        />
       </div>
       <h3 className="text-sm font-medium">{t("Theme")}</h3>
       <div className="flex gap-2">

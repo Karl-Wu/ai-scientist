@@ -37,10 +37,12 @@ export interface ToolResultPart {
 export interface TextPart {
   type: "text";
   text: string;
+  textSignature?: string;
 }
 export interface ThinkingPart {
   type: "thinking";
   thinking: string;
+  redacted?: boolean;
 }
 type ContentPart = ToolCallPart | ToolResultPart | TextPart | ThinkingPart | { type: string };
 
@@ -55,6 +57,7 @@ export interface MessageRow {
     toolName?: string;
     details?: unknown;
     isError?: boolean;
+    stopReason?: string;
     timestamp?: number;
   };
 }
@@ -67,8 +70,24 @@ export function findSessionFile(paths: ProjectPaths, sessionId: string): string 
   if (!fs.existsSync(paths.sessionsDir)) return null;
   const match = fs
     .readdirSync(paths.sessionsDir)
-    .find((f) => f.endsWith(`_${sessionId}.jsonl`) || f === `${sessionId}.jsonl`);
+    .find((f) => isSessionFilename(f, sessionId));
   return match ? path.join(paths.sessionsDir, match) : null;
+}
+
+function isSessionFilename(file: string, sessionId: string): boolean {
+  return file.endsWith(`_${sessionId}.jsonl`) || file === `${sessionId}.jsonl`;
+}
+
+/** Archive prefixes the original basename with a timestamp. */
+export async function isArchivedSession(paths: ProjectPaths, sessionId: string): Promise<boolean> {
+  const trash = path.join(path.dirname(paths.sessionsDir), "sessions-trash");
+  try {
+    return (await fs.promises.readdir(trash)).some((name) =>
+      isSessionFilename(name.replace(/^\d+-/, ""), sessionId));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 /** Extension-injected message (`pi.sendMessage`); participates in LLM context. */

@@ -54,6 +54,7 @@ import {
 } from "../agent/notebook-annotations.ts";
 import { MethodsDraftError, runMethodsDraft } from "../agent/methods-draft.ts";
 import { runBroker, type RunHandle } from "../agent/run-broker.ts";
+import { readTaskTimeline, TASK_TIMELINE_MAX_PAGE } from "../agent/task-event-log.ts";
 import { deferSessionMessages } from "../agent/session-message-gate.ts";
 import {
   claimRun,
@@ -66,10 +67,11 @@ import {
 import { SandboxError } from "../sandbox-fs.ts";
 import {
   findSessionFile,
+  isArchivedSession,
   toNotebook,
   toShellScript,
 } from "../agent/session-export.ts";
-import { toHistory } from "../agent/session-history.ts";
+import { toHistory, withTaskObservations } from "../agent/session-history.ts";
 import {
   archiveSession,
   createSession,
@@ -263,9 +265,13 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
         reply.code(404);
         return { detail: "No such session" };
       }
-      const session = await getSession(currentProjectId(), paths, req.params.id);
+      const projectId = currentProjectId();
+      const sessionId = req.params.id;
+      const session = await getSession(projectId, paths, sessionId);
       return {
-        messages: toHistory(file, paths.sandbox),
+        messages: await withTaskObservations(
+          toHistory(file, paths.sandbox), paths, { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
+        ),
         contextUsage: session ? contextUsageForClient(session) ?? null : null,
       };
     } catch (err) {
@@ -534,6 +540,39 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     return { pending: pendingInterviewFor(currentProjectId(), req.params.id) };
   });
 
+  app.get<{ Params: { id: string }; Querystring: { after?: string; limit?: string; through?: string } }>(
+    "/sessions/:id/timeline",
+    async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const sessionId = req.params.id;
+      const projectId = currentProjectId();
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(sessionId)) {
+        return reply.code(400).send({ detail: "Invalid session id" });
+      }
+      const after = req.query.after === undefined ? 0 : Number(req.query.after);
+      const limit = req.query.limit === undefined ? 100 : Number(req.query.limit);
+      const through = req.query.through === undefined ? undefined : Number(req.query.through);
+      if (!Number.isSafeInteger(after) || after < 0 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > TASK_TIMELINE_MAX_PAGE ||
+          (through !== undefined && (!Number.isSafeInteger(through) || through < after))) {
+        return reply.code(400).send({ detail: "Invalid timeline cursor or limit" });
+      }
+      const paths = activePaths();
+      const isActive = () => isRunClaimed(projectId, sessionId);
+      // A process may die before Pi creates its transcript. A durable run
+      // can still be recovered by ID, except when its task was archived.
+      const hasSession = isActive() || Boolean(findSessionFile(paths, sessionId));
+      if (!hasSession && await isArchivedSession(paths, sessionId)) {
+        return reply.code(404).send({ detail: "No such session" });
+      }
+      const timeline = await readTaskTimeline(paths, { projectId, sessionId }, { after, limit, through }, isActive);
+      if (!hasSession && timeline.coverage === "legacy") {
+        return reply.code(404).send({ detail: "No such session" });
+      }
+      return timeline;
+    },
+  );
+
   // `?frames=0` returns metadata only (no replay buffer/baseline) so an idle
   // tab can poll cheaply for a run it did not start (system-initiated runs).
   app.get<{ Params: { id: string }; Querystring: { frames?: string } }>(
@@ -541,7 +580,15 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     async (req, reply) => {
       reply.header("Cache-Control", "no-store");
       const includeFrames = req.query.frames !== "0";
-      return runBroker.state(currentProjectId(), req.params.id, { includeFrames });
+      const projectId = currentProjectId();
+      const sessionId = req.params.id;
+      const state = runBroker.state(projectId, sessionId, { includeFrames });
+      if (!includeFrames || !state.run || state.run.baseline.messages.length === 0) return state;
+      const baseline = state.run.baseline;
+      const messages = await withTaskObservations(
+        baseline.messages, activePaths(), { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
+      );
+      return { ...state, run: { ...state.run, baseline: { ...baseline, messages } } };
     },
   );
 
@@ -876,6 +923,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
           images: parsedImages.images.map(({ data, mimeType }) => ({ data, mimeType })),
           baseline,
           session,
+          timeline: { paths, log: req.log, basePiEntryId: session.sessionManager?.getLeafId() ?? undefined },
           onCleanup: () => {
             if (savedToolNames !== null) {
               session.setActiveToolsByName(savedToolNames);

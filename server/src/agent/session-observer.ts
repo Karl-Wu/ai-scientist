@@ -35,7 +35,8 @@ import { toHistory } from "./session-history.ts";
 import { getModelRuntime } from "./session-registry.ts";
 import { deferSessionMessages } from "./session-message-gate.ts";
 
-export type ObservedSession = PipelineSession & Pick<AgentSession, "abort" | "sendCustomMessage" | "sendUserMessage">;
+export type ObservedSession = PipelineSession & Pick<AgentSession, "abort" | "sendCustomMessage" | "sendUserMessage">
+  & { sessionManager?: Pick<AgentSession["sessionManager"], "getLeafId"> };
 
 export interface SessionObserverContext {
   projectId: string;
@@ -104,11 +105,13 @@ export function attachSessionObserver({
         // instead of replaying an empty baseline plus this frame.
         baseline: { messages: [], contextUsage: null },
         session,
+        timeline: { paths, log, basePiEntryId: session.sessionManager?.getLeafId() ?? undefined },
       });
     } catch (err) {
       log.warn({ err }, "could not publish idle custom message");
       return;
     }
+    opened.timeline?.observe(ev, [frame]);
     opened.handle.publish(frame);
     opened.abandon();
   };
@@ -133,12 +136,14 @@ export function attachSessionObserver({
         images: [],
         baseline,
         session,
+        timeline: { paths, log, basePiEntryId: session.sessionManager?.getLeafId() ?? undefined },
       });
     } catch (err) {
       claim.release();
       log.error({ err }, "could not adopt an extension-initiated turn");
       return;
     }
+    if (ev.type !== "agent_start") opened.timeline?.lateObserver();
     const settled = new Promise<void>((resolve, reject) => {
       active = { settle: resolve, fail: reject };
     });

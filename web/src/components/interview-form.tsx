@@ -13,6 +13,7 @@ import { CheckIcon, ClipboardListIcon, UploadIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MessageResponse } from "@/components/ai-elements/message";
+import { useT } from "@/components/i18n-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -521,6 +522,7 @@ export function InterviewCard({
   sessionId: string | null;
   projectId?: string;
 }) {
+  const t = useT();
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
   const payload = useMemo(() => parseInterviewPayload(item.args), [item.args]);
@@ -593,7 +595,11 @@ export function InterviewCard({
         <ClipboardListIcon className="size-4 shrink-0 text-primary" />
         <span className="text-sm font-semibold">{payload.title}</span>
         {finished ? (
-          item.status === "error" ? (
+          item.status === "unknown" ? (
+            <Badge variant="outline" className="ml-auto h-5 text-[10px]">
+              {t("Status unknown")}
+            </Badge>
+          ) : item.status === "error" ? (
             <Badge variant="outline" className="ml-auto h-5 text-[10px] text-destructive">
               expired
             </Badge>
@@ -612,7 +618,7 @@ export function InterviewCard({
         <p className="text-xs text-muted-foreground">{payload.description}</p>
       )}
 
-      {finished && item.status !== "error" ? (
+      {item.status === "unknown" ? null : item.status === "complete" ? (
         <SubmittedSummary payload={payload} result={item.result} />
       ) : item.status === "error" ? (
         <p className="text-xs text-muted-foreground">

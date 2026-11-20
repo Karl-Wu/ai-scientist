@@ -25,12 +25,14 @@ import type { ProjectPaths } from "../projects.ts";
 import {
   contextUsageForClient,
   contextUsageFrame,
-  toClientFrame,
+  createRunFrameMapper,
   type ClientFrame,
 } from "./events.ts";
 import { explainProviderRefusal } from "./model-refusal.ts";
 import { modelReference } from "./models.ts";
 import { mintRunId, setSessionRunId } from "./run-ids.ts";
+import { TaskEventRecorder } from "./task-event-recorder.ts";
+import type { RunOutcome } from "./task-events.ts";
 import {
   runBroker,
   type RunBaseline,
@@ -145,6 +147,7 @@ export interface OpenRunOptions {
   baseline: RunBaseline;
   session: Pick<PipelineSession, "getContextUsage" | "messages">;
   runId?: string;
+  timeline?: { paths: ProjectPaths; log: Pick<FastifyBaseLogger, "warn">; basePiEntryId?: string };
   /** Runs first in cleanup on every exit path (route: restore fusion tool set). */
   onCleanup?: () => void;
 }
@@ -153,6 +156,7 @@ export interface OpenedRun {
   readonly handle: RunHandle;
   readonly runId: string;
   readonly claim: RunClaim;
+  readonly timeline?: TaskEventRecorder;
   /** Publish the session's current context usage (call after model setup). */
   publishContextUsage(): void;
   /**
@@ -169,8 +173,10 @@ class OpenedRunImpl implements OpenedRun {
     readonly handle: RunHandle,
     readonly runId: string,
     readonly claim: RunClaim,
+    readonly startedAt: number,
     private readonly session: Pick<PipelineSession, "getContextUsage" | "messages">,
     private readonly onCleanup: (() => void) | undefined,
+    readonly timeline?: TaskEventRecorder,
   ) {}
 
   publishContextUsage(): void {
@@ -199,11 +205,18 @@ class OpenedRunImpl implements OpenedRun {
     if (error && !this.handle.isComplete) {
       this.handle.publish({ type: "error", message: error.message });
     }
+    const outcome = this.handle.isAbortRequested ? "cancelled"
+      : this.handle.activityState === "blocked" ? "blocked"
+      : this.handle.activityState === "error" || this.handle.kind !== "notice" ? "failed"
+      : "completed";
     if (!this.handle.isComplete) {
-      this.handle.publish({ type: "done" });
+      this.handle.publish({ type: "done", outcome });
       this.handle.complete();
     }
-    this.cleanup();
+    // Keep the claim until the terminal batch is committed. A subsequent run
+    // must not mistake this still-finishing notice for an orphan.
+    if (this.timeline) void this.timeline.finish(outcome).finally(() => this.cleanup());
+    else this.cleanup();
   }
 }
 
@@ -217,6 +230,7 @@ export function openRun(claim: RunClaim, opts: OpenRunOptions): OpenedRun {
   // tool + subagent harvest) are stamped with it. Cleared in cleanup so it
   // covers every exit path.
   const runId = opts.runId ?? mintRunId();
+  const startedAt = Date.now();
   let handle: RunHandle;
   try {
     setSessionRunId(claim.projectId, claim.sessionId, runId);
@@ -243,7 +257,16 @@ export function openRun(claim: RunClaim, opts: OpenRunOptions): OpenedRun {
     claim.release();
     throw err;
   }
-  return new OpenedRunImpl(handle, runId, claim, opts.session, opts.onCleanup);
+  const timeline = opts.timeline && new TaskEventRecorder({
+    paths: opts.timeline.paths, log: opts.timeline.log, runId,
+    scope: { projectId: claim.projectId, sessionId: claim.sessionId },
+  });
+  if (timeline) {
+    handle.setPublicationObserver((frame) => timeline.observeServer(frame));
+    timeline.start({ origin: opts.origin, kind: opts.kind,
+      ...(opts.timeline?.basePiEntryId ? { basePiEntryId: opts.timeline.basePiEntryId } : {}) }, startedAt);
+  }
+  return new OpenedRunImpl(handle, runId, claim, startedAt, opts.session, opts.onCleanup, timeline);
 }
 
 export interface ExecuteRunOptions {
@@ -295,6 +318,8 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
   const { session, paths, log } = opts;
   let unsubscribePi: (() => void) | null = null;
   let pendingProvenance: ProvenanceRecorder | null = null;
+  let outcome: RunOutcome = "completed";
+  let abortObserved = false;
   try {
     // Usage tallied straight from turn_end events. getSessionStats() is
     // recomputed from the in-context messages, so auto-compaction mid-run can
@@ -334,7 +359,9 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
     // Subscribed before the first await: a system run's caller re-delivers the
     // `agent_start` it already saw right after this call returns.
     const subscribe = opts.subscribe ?? ((l) => session.subscribe(l));
+    const mapFrames = createRunFrameMapper(paths.sandbox, impl.startedAt);
     unsubscribePi = subscribe((ev) => {
+      const observedAt = Date.now();
       provenance.observe(ev);
       if (ev.type === "turn_end") {
         const usage = (ev.message as { usage?: Parameters<typeof addTurnUsage>[1] }).usage;
@@ -345,8 +372,11 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
         const message = ev.message as { role?: string; customType?: string };
         if (message.role === "custom" && message.customType) handle.setReason(message.customType);
       }
-      const frame = toClientFrame(ev, paths.sandbox);
-      if (frame && !handle.isComplete) handle.publish(withRefusalGuidance(frame));
+      const frames = mapFrames(ev, observedAt);
+      impl.timeline?.observe(ev, frames, observedAt);
+      if (!handle.isComplete) {
+        for (const frame of frames) handle.publish(withRefusalGuidance(frame));
+      }
       if (ev.type === "turn_end") opened.publishContextUsage();
     });
 
@@ -374,10 +404,12 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
     // system turn already started, however: still await its settled boundary
     // and ledger incurred usage even if Stop raced with billing resolution.
     let refused = handle.isAbortRequested && opts.budgetPolicy === "refuse";
+    if (refused) abortObserved = true;
     if (!handle.isAbortRequested && billingCountsTowardBudget(billing)) {
       // Hard budget cap: refuse to run if the project has reached its limit.
       const budget = isBudgetExceeded(projectId);
       if (budget.exceeded) {
+        outcome = "blocked";
         handle.publish({
           type: "error",
           kind: "budget",
@@ -398,11 +430,14 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
         // (e.g. auth failure with an empty assistant turn).
         const errorMessage = session.state.errorMessage;
         if (errorMessage && errorMessage !== priorError && !handle.isComplete) {
+          outcome = "failed";
           handle.publish(withRefusalGuidance({ type: "error", message: errorMessage }));
         }
       } catch (err) {
+        outcome = "failed";
         if (!handle.isComplete) handle.publish({ type: "error", message: (err as Error).message });
       } finally {
+        abortObserved = handle.isAbortRequested || Boolean(impl.timeline?.wasCancelled);
         unsubscribePi();
         unsubscribePi = null;
         // Drain queued provenance scans before the terminal frames go out, so a
@@ -473,6 +508,7 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
       }
     }
   } catch (err) {
+    outcome = "failed";
     log.error({ err }, "detached run failed");
     if (!handle.isComplete) {
       handle.publish({ type: "error", message: (err as Error).message });
@@ -486,8 +522,13 @@ export async function executeRun(opened: OpenedRun, opts: ExecuteRunOptions): Pr
       try { await pendingProvenance.flush(); }
       catch (err) { log.warn({ err }, "failed to flush refused-run provenance"); }
     }
+    if (outcome !== "blocked") {
+      if (abortObserved) outcome = "cancelled";
+      else if (impl.timeline?.modelFailed) outcome = "failed";
+    }
+    await impl.timeline?.finish(outcome);
     if (!handle.isComplete) {
-      handle.publish({ type: "done" });
+      handle.publish({ type: "done", outcome });
       handle.complete();
     }
     impl.cleanup();

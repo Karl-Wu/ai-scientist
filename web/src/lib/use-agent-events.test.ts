@@ -23,10 +23,38 @@ describe("applyFrameToMessage", () => {
     expect(m.content).toBe("hello");
   });
 
+  it("confirms an unmarked summary only on success and retracts it if the run is interrupted", () => {
+    let message = applyFrameToMessage(baseMessage(), { type: "text_delta", delta: "Checking.", blockId: "p" });
+    message = applyFrameToMessage(message, { type: "text_delta", delta: "Done.", blockId: "a" });
+    const candidate = { type: "summary_candidate", blockId: "a", executionMs: 1200 };
+    expect(message.segments).toEqual([
+      { type: "text", blockId: "p", content: "Checking." },
+      { type: "text", blockId: "a", content: "Done." },
+    ]);
+    const pending = applyFrameToMessage(message, candidate);
+    expect(pending.summary?.confirmed).toBe(false);
+    expect(applyFrameToMessage(pending, { type: "done", outcome: "completed" }).summary?.confirmed).toBe(true);
+    const explicit = applyFrameToMessage(message, { ...candidate, confirmed: true });
+    expect(explicit.summary?.confirmed).toBe(true);
+    expect(applyFrameToMessage(explicit, { type: "done", outcome: "cancelled" }).summary).toBeUndefined();
+    expect(applyFrameToMessage(explicit, { type: "error", message: "provider error" }).summary).toBeUndefined();
+    expect(applyFrameToMessage(explicit, { type: "message_end", role: "assistant", summaryEligible: false }).summary).toBeUndefined();
+  });
+
   it("accumulates thinking deltas separately", () => {
     const m = applyFrameToMessage(baseMessage(), { type: "thinking_delta", delta: "hmm" }, 10);
     expect(m.reasoning).toBe("hmm");
     expect(m.content).toBe("");
+  });
+
+  it("keeps adjacent reasoning blocks separate while combining updates to each block", () => {
+    let message = applyFrameToMessage(baseMessage(), { type: "thinking_delta", delta: "First ", reasoningStart: true });
+    message = applyFrameToMessage(message, { type: "thinking_delta", delta: "summary." });
+    message = applyFrameToMessage(message, { type: "thinking_delta", delta: "Second summary.", reasoningStart: true });
+    expect(message.segments).toEqual([
+      { type: "reasoning", content: "First summary." },
+      { type: "reasoning", content: "Second summary." },
+    ]);
   });
 
   it("tracks a tool call from start to completion", () => {
@@ -316,6 +344,22 @@ describe("custom (system) messages in the transcript", () => {
     const { messages, state } = start();
     const r = applyFrameToTranscript(messages, state, { type: "message_start", role: "custom", customType: "x", content: "  " }, makeNextId(), 5);
     expect(r.messages).toBe(messages);
+  });
+
+  it("finishes a tool on its original card after a system notice opens a new bubble", () => {
+    const { messages, state } = start();
+    const nextId = makeNextId();
+    const started = applyFrameToTranscript(messages, state, {
+      type: "tool_start", toolCallId: "read-1", toolName: "read", startedAt: 10,
+    }, nextId);
+    const notice = applyFrameToTranscript(started.messages, started.state, supervisor, nextId);
+    const finished = applyFrameToTranscript(notice.messages, notice.state, {
+      type: "tool_end", toolCallId: "read-1", durationMs: 200, result: "tool result",
+    }, nextId);
+    expect(finished.messages[1].activities).toMatchObject([
+      { id: "read-1", startedAt: 10, durationMs: 200, status: "complete", result: "tool result" },
+    ]);
+    expect(finished.messages.at(-1)?.activities).toBeUndefined();
   });
 });
 

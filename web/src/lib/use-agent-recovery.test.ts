@@ -25,6 +25,56 @@ function snapshot(frames: AgentFrame[], status = "running", runId = "run-1") {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
+it("keeps prose, reasoning, and tool timing in order live and after reopening the task", async () => {
+  const frames: AgentFrame[] = [
+    { type: "text_delta", delta: "Check two files." },
+    { type: "thinking_delta", delta: "Compare the results." },
+    { type: "tool_start", toolCallId: "first", toolName: "read", startedAt: 1000 },
+    { type: "tool_start", toolCallId: "second", toolName: "read", startedAt: 1003 },
+    { type: "tool_end", toolCallId: "second", result: "second result", durationMs: 50 },
+    { type: "tool_end", toolCallId: "first", result: "first result", durationMs: 75 },
+    { type: "thinking_delta", delta: "Both files read." },
+    { type: "text_delta", delta: "Now check the summary." },
+    { type: "tool_start", toolCallId: "interrupted", toolName: "read", startedAt: 2000 },
+  ];
+  const api = vi.spyOn(projects, "apiFetch").mockImplementation(async (path) => {
+    if (path === "/sessions") return Response.json({ id: "s1" });
+    if (path.endsWith("/run")) {
+      return stream([{ type: "run_start", runId: "run-1" }, ...frames, { type: "done" }]
+        .map((frame, index) => ({ ...frame, seq: index + 1 })));
+    }
+    if (path.endsWith("/run/state")) return Response.json({ status: "none" });
+    if (path.endsWith("/history")) return Response.json({ messages: [
+      { role: "user", content: "Inspect inputs" },
+      { role: "assistant", frames },
+    ] });
+    throw new Error(`unexpected ${path}`);
+  });
+  const live = renderHook(() => useAgent("p"));
+  await act(async () => { await live.result.current.send("Inspect inputs"); });
+  const observed = live.result.current.messages.at(-1)!;
+  expect(observed.segments?.map((segment) => segment.type)).toEqual([
+    "text", "reasoning", "activity", "activity", "reasoning", "text", "activity",
+  ]);
+  const summarizeTools = (message: typeof observed) => message.activities?.map(
+    ({ id, status, startedAt, durationMs, result }) => ({ id, status, startedAt, durationMs, result }),
+  );
+  expect(summarizeTools(observed)).toMatchObject([
+    { id: "first", status: "complete", startedAt: 1000, durationMs: 75, result: "first result" },
+    { id: "second", status: "complete", startedAt: 1003, durationMs: 50, result: "second result" },
+    { id: "interrupted", status: "unknown", startedAt: 2000, durationMs: undefined },
+  ]);
+  live.unmount();
+
+  const reopened = renderHook(() => useAgent("p"));
+  await act(async () => { await reopened.result.current.loadSession("s1"); });
+  const restored = reopened.result.current.messages.at(-1)!;
+  expect(restored.segments).toEqual(observed.segments);
+  expect(summarizeTools(restored)).toEqual(summarizeTools(observed));
+  expect(api.mock.calls.filter(([path]) => path.endsWith("/run"))).toHaveLength(1);
+  reopened.unmount();
+});
+
 it.each([false, true])("reconnects an interrupted stream (network error=%s) without duplicating replayed content", async (networkError) => {
   vi.useFakeTimers();
   const calls: string[] = [];

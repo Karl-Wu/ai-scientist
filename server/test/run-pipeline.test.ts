@@ -29,6 +29,7 @@ import { recordRun } from "../src/cost/ledger.ts";
 import { runBroker } from "../src/agent/run-broker.ts";
 import { currentRunId } from "../src/agent/run-ids.ts";
 import { claimRun, executeRun, isRunClaimed, openRun } from "../src/agent/run-pipeline.ts";
+import { readTaskTimeline } from "../src/agent/task-event-log.ts";
 import type { BillingContext } from "../src/cost/billing.ts";
 
 class FakeSession {
@@ -242,8 +243,10 @@ describe("executeRun", () => {
 
     const refused = new FakeSession();
     const run = vi.fn(async () => {});
+    const paths = resolvePaths(capped.id);
     let opened = openRun(claimRun(capped.id, refused.sessionId)!, {
       origin: "user", kind: "turn", prompt: "x", images: [], baseline, session: refused,
+      timeline: { paths, log },
     });
     await executeRun(opened, { session: refused, paths: resolvePaths(capped.id), billing: payg, budgetPolicy: "refuse", log, run });
     expect(run).not.toHaveBeenCalled();
@@ -251,6 +254,11 @@ describe("executeRun", () => {
     expect(types).toEqual(["run_start", "error", "done"]);
     expect(opened.handle.activityState).toBe("blocked");
     expect(costRows(capped.id, refused.sessionId)).toHaveLength(0);
+    const timeline = await readTaskTimeline(paths, { projectId: capped.id, sessionId: refused.sessionId },
+      { after: 0, limit: 10 }, () => false);
+    expect(timeline.events).toMatchObject([
+      { type: "run_started" }, { type: "run_ended", payload: { outcome: "blocked" } },
+    ]);
 
     const aborted = new FakeSession();
     aborted.sessionId = "pipe-2";
