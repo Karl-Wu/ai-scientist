@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizePastedTables, type PastedTable } from "@/lib/clipboard-table";
+import databases from "@/data/databases.json";
 import type { Database } from "@/components/database-selector";
 import type { ModalInstance } from "@/components/compute-selector";
 import type { Model } from "@/components/model-selector";
@@ -23,6 +24,7 @@ const DB_VERSION = 1;
 const BLOB_STORE = "blobs";
 const MAX_TABS = 10;
 const MAX_QUEUE = 5;
+const availableDatabaseIds = new Set(databases.map(({ id }) => id));
 
 export type WorkspaceScreen = "projects" | "workspace";
 export type WorkspaceView = "chat" | "workflows";
@@ -322,7 +324,7 @@ function sanitizeStoredChat(value: unknown): StoredChatState | undefined {
     thinkingLevel: sanitizeThinkingLevel(value.thinkingLevel) ?? "high",
     selectedComputeTarget: sanitizeComputeTarget(value.selectedComputeTarget),
     attachedFiles: stringArray(value.attachedFiles),
-    selectedDatabases: sanitizeDatabases(value.selectedDatabases),
+    selectedDatabases: sanitizeDatabases(value.selectedDatabases).filter(({ id }) => availableDatabaseIds.has(id)),
     selectedSkills: sanitizeSkills(value.selectedSkills),
     researchRefs: normalizeResearchRefs(value.researchRefs),
     delegation: normalizeDelegation(value.delegation),

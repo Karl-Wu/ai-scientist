@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import databases from "@/data/databases.json";
 
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -112,6 +113,22 @@ describe("workspace persistence schema", () => {
         },
       ],
     });
+  });
+
+  it("restores only still-listed databases in the composer", async () => {
+    const active = { ...databases.find(({ id }) => id === "crossref")!, domain: "science" as const };
+    const removed = { ...active, id: "nasa-apis", name: "NASA APIs" };
+    const originalTab = projectState.tabs[0];
+    await saveProjectWorkspaceState("project-a", {
+      ...projectState,
+      tabs: [{ ...originalTab, chat: {
+        ...originalTab.chat!,
+        selectedDatabases: [removed, active],
+      } }],
+    });
+    await saveWorkspaceShellState("workspace", ["project-a"]);
+    const restored = await loadWorkspaceSnapshot();
+    expect(restored.projects["project-a"].tabs[0].chat?.selectedDatabases).toEqual([active]);
   });
 
   it.each([true, false])("preserves a manual placeholder title across reload (chat state: %s)", async (withChat) => {
