@@ -80,6 +80,7 @@ import {
   getSession,
   lastModelInSessionFile,
   listSessions,
+  peekLiveSession,
   renameSession,
 } from "../agent/session-registry.ts";
 import { parseThinkingLevel } from "../agent/thinking.ts";
@@ -267,11 +268,13 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
       }
       const projectId = currentProjectId();
       const sessionId = req.params.id;
-      const session = await getSession(projectId, paths, sessionId);
+      const messages = await withTaskObservations(
+        toHistory(file, paths.sandbox), paths, { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
+      );
+      // Reading the transcript must work even if the assistant cannot start.
+      const session = peekLiveSession(projectId, sessionId);
       return {
-        messages: await withTaskObservations(
-          toHistory(file, paths.sandbox), paths, { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
-        ),
+        messages,
         contextUsage: session ? contextUsageForClient(session) ?? null : null,
       };
     } catch (err) {

@@ -1,16 +1,70 @@
 import fs from "node:fs";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, expect, it, vi } from "vitest";
 import { runBroker } from "../src/agent/run-broker.ts";
 import * as appSettings from "../src/app-settings.ts";
-import { createSession, disposeSession, getModelRuntime } from "../src/agent/session-registry.ts";
+import { attachSessionObserver } from "../src/agent/session-observer.ts";
+import { createSession, disposeSession, getModelRuntime, setSessionObserver, type SessionObserverFactory } from "../src/agent/session-registry.ts";
 import { PARENT_WAKE_TEXT } from "../src/agent/subagent-wake.ts";
 import { buildApp } from "../src/index.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
 
 const app = await buildApp();
 afterAll(() => app.close());
+
+it("reads a cold chat from disk and opens the assistant only when continuing it", async () => {
+  const project = createProject({ name: "Cold chat history" });
+  const paths = resolvePaths(project.id);
+  const manager = SessionManager.create(paths.sandbox, paths.sessionsDir);
+  manager.appendMessage({ role: "user", content: "Original saved prompt", timestamp: Date.now() });
+  const id = manager.getSessionId();
+  const headers = { "X-Project-Id": project.id };
+  const history = () => app.inject({ method: "GET", url: `/sessions/${id}/history`, headers });
+  const receivedPrompts: string[] = [];
+  const observe = vi.fn<SessionObserverFactory>((ctx) => {
+    ctx.session.agent.streamFunction = (model, context) => {
+      receivedPrompts.push(JSON.stringify(context.messages));
+      const message: AssistantMessage = {
+        role: "assistant", api: model.api, provider: model.provider, model: model.id,
+        content: [{ type: "text", text: "Continued" }], stopReason: "stop", timestamp: Date.now(),
+        usage: { input: 20, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 25,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      };
+      const stream = createAssistantMessageEventStream();
+      stream.push({ type: "done", reason: "stop", message });
+      return stream;
+    };
+    return attachSessionObserver({ ...ctx, log: app.log });
+  });
+  setSessionObserver(observe);
+  try {
+    const restored = await history();
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({
+      messages: [{ role: "user", content: "Original saved prompt" }], contextUsage: null,
+    });
+    expect(observe).not.toHaveBeenCalled();
+
+    const continued = await app.inject({
+      method: "POST", url: `/sessions/${id}/run`, headers,
+      payload: { message: "Follow-up prompt", model: "ollama/history-test" },
+    });
+    expect(continued.statusCode).toBe(200);
+    expect(continued.body).toContain('"type":"done"');
+    expect(observe).toHaveBeenCalledOnce();
+    expect(receivedPrompts).toHaveLength(1);
+    expect(receivedPrompts[0]).toContain("Original saved prompt");
+    expect(receivedPrompts[0]).toContain("Follow-up prompt");
+    const updated = (await history()).json();
+    expect(updated.messages).toContainEqual(expect.objectContaining({ role: "user", content: "Follow-up prompt" }));
+    expect(updated.contextUsage).toEqual(expect.objectContaining({ contextWindow: expect.any(Number) }));
+  } finally {
+    await disposeSession(project.id, id);
+    runBroker.clear();
+    setSessionObserver((ctx) => attachSessionObserver({ ...ctx, log: app.log }));
+  }
+}, 30_000);
 
 it("lists the saved prompt during a slow first answer and preserves it after an error", async () => {
   const project = createProject({ name: "First prompt history" });

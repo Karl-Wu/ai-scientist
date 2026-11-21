@@ -137,7 +137,7 @@ const observers = new Map<string, () => void>();
 // Insertion-ordered Map doubles as an LRU: we delete+re-set an entry on access
 // so the first matching key for a project is always the least-recently-used.
 const live = new Map<string, AgentSession>();
-// History, controls and run requests can cold-open the same session together.
+// Controls and run requests can cold-open the same session together.
 // Share construction as well as the resulting live object: duplicate builds
 // register conflicting extension hosts and can route Stop to the wrong agent.
 const opening = new Map<string, Promise<AgentSession | null>>();
@@ -533,6 +533,11 @@ export async function createSession(
   live.set(keyFor(projectId, session.sessionId), session);
   evictOverCap(projectId);
   return session;
+}
+
+/** Inspect an already-open session without starting it or changing its LRU position. */
+export function peekLiveSession(projectId: string, sessionId: string): AgentSession | undefined {
+  return live.get(keyFor(projectId, sessionId));
 }
 
 /** Return a live session, cold-opening its JSONL file from disk if needed. */
