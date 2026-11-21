@@ -6,6 +6,7 @@ import { resolvePaths } from "../src/projects.ts";
 import {
   appendNewNotebookEntries,
   appendNotebookEntry,
+  notebookPath,
   readNotebookEntries,
   readProjectNotebooks,
   type NotebookEntry,
@@ -44,8 +45,7 @@ describe("notebook-store", () => {
   it("skips malformed lines instead of throwing", () => {
     const s = "sess-store-b";
     appendNotebookEntry(s, entry({ id: "ok" }));
-    const { notebookPath } = require("../src/agent/notebook-store.ts");
-    require("node:fs").appendFileSync(notebookPath(s), "{not json\n");
+    fs.appendFileSync(notebookPath(s), "{not json\n");
     expect(readNotebookEntries(s).map((e) => e.id)).toEqual(["ok"]);
   });
 

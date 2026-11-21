@@ -21,7 +21,10 @@ vi.mock("../src/agent/session-registry.ts", () => ({
     return { sessionId: id, agent: { state: { tools: [] } } };
   }),
   getSession: vi.fn(async (_p: string, _paths: unknown, id: string) => (id === "existing-host" ? { sessionId: id, agent: { state: { tools: [] } } } : null)),
-  listSessions: vi.fn(async () => [{ id: "chat-1", created: new Date(), modified: new Date(), messageCount: 1 }, { id: "existing-host", created: new Date(), modified: new Date(), messageCount: 0 }]),
+  listSessions: vi.fn(async (paths: { sessionsDir: string }) => [
+    { id: "chat-1", path: path.join(paths.sessionsDir, "chat-1.jsonl"), created: new Date(), modified: new Date(), messageCount: 1 },
+    { id: "existing-host", path: path.join(paths.sessionsDir, "existing-host.jsonl"), created: new Date(), modified: new Date(), messageCount: 0 },
+  ]),
   disposeSession: vi.fn(),
   pinSession: vi.fn(),
   unpinSession: vi.fn(),
@@ -190,7 +193,12 @@ describe("resident session and budget hold", () => {
 describe("automation routes", () => {
   it("lists, acts on schedules through the resident session, and hides the host from the chat list", async () => {
     writeSchedule(projectId, "nightly-qc");
-    writeSchedulerState(resolvePaths(projectId), { sessionId: "existing-host", heldByBudget: [] });
+    const paths = resolvePaths(projectId);
+    writeSchedulerState(paths, { sessionId: "existing-host", heldByBudget: [] });
+    fs.mkdirSync(paths.sessionsDir, { recursive: true });
+    fs.writeFileSync(path.join(paths.sessionsDir, "chat-1.jsonl"), JSON.stringify({
+      type: "message", id: "prompt-1", message: { role: "user", content: [{ type: "text", text: "Check the data" }] },
+    }) + "\n");
     const calls: Record<string, unknown>[] = [];
     configureScheduler({ invoke: async (_p, params) => { calls.push(params); return { text: "paused", details: {} }; } });
 
@@ -207,7 +215,8 @@ describe("automation routes", () => {
     expect(res.statusCode).toBe(404);
 
     res = await app.inject({ method: "GET", url: "/sessions", headers: hg(projectId) });
-    expect((res.json() as { id: string }[]).map((s) => s.id)).toEqual(["chat-1"]);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject([{ id: "chat-1", visibleInHistory: true }]);
 
     res = await app.inject({ method: "GET", url: "/missions", headers: hg(projectId) });
     expect(res.json()).toEqual({ missions: [] });

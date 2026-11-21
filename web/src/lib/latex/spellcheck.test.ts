@@ -21,7 +21,7 @@ describe("buildSpellDiagnostics", () => {
   });
   it("is case-insensitive on the ignore list", () => {
     const diags = buildSpellDiagnostics(
-      [tok("AI Scientist", 0)], new Set(["AI Scientist"]), new Set(["kady"]), () => [],
+      [tok("LaTeX", 0)], new Set(["LaTeX"]), new Set(["latex"]), () => [],
     );
     expect(diags).toHaveLength(0);
   });

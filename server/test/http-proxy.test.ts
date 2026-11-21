@@ -133,11 +133,10 @@ describe("configureHttpProxy", () => {
 
   it("honours NO_PROXY for hosts that should bypass the proxy", async () => {
     const { configureHttpProxy } = await loadModule();
-    configureHttpProxy({ http_proxy: proxyUrl, no_proxy: "kady-proxy-test.invalid" });
-
-    // Excluded from the proxy, so this falls back to a direct connection and
-    // fails DNS on the unresolvable host rather than being served a 200.
-    await expect(fetch("http://kady-proxy-test.invalid/v1/models")).rejects.toThrow();
+    configureHttpProxy({ http_proxy: proxyUrl, no_proxy: "127.0.0.1" });
+    const { port } = origin.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${port}/v1/models`);
+    expect(response.status).toBe(200);
     expect(tunneled).toEqual([]);
   });
 
