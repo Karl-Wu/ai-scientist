@@ -802,6 +802,10 @@ export function useAgent(projectId?: string) {
       } else if (frame.type === "run_start" && typeof frame.runId === "string") {
         consumer.currentRunId = frame.runId;
         lastRunIdRef.current = frame.runId;
+      } else if (frame.type === "message_end" && frame.role === "user") {
+        // Pi persists this message as it handles message_end, before asking the
+        // model for a response. Refresh the disk-backed task list at that point.
+        window.dispatchEvent(new Event("kady:tasks-changed"));
       }
 
       if (frame.type === "context_usage") {
