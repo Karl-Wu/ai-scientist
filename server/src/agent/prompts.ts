@@ -206,7 +206,7 @@ Run a quality-control pass on \`$1\` before any modelling. Do not modify the fil
 4. Categorical columns: cardinality and the top levels; flag near-duplicate spellings.
 5. Identify the independent sampling unit, repeated measurements, replicates, conditions and batches. Compare observed samples with a supplied manifest/design, report balance without assuming imbalance is an error, and distinguish unknown expected samples from confirmed missing ones.
 
-Create a report under \`derived/\` using \`qc_<safe-basename>_<unique-run-id>.md\`: derive the basename from the final filename component, keep only letters, digits, underscores and hyphens, and check for collisions. Never interpolate the input path or URI directly into an output path. Record the source location without credentials or signed query strings, inspection scope and limitations. Log the key findings in the lab notebook and separate blockers from non-blocking observations.
+Create a report under \`derived/\` using \`qc_<safe-basename>_<unique-run-id>.md\`: derive the basename from the final filename component, keep only letters, digits, underscores and hyphens, and check for collisions. Never interpolate the input path or URI directly into an output path. Record the source location without credentials or signed query strings, inspection scope and limitations. Summarize the key findings in your reply and separate blockers from non-blocking observations.
 `,
   },
   {
@@ -237,7 +237,7 @@ Audit the figure \`$1\`.
 3. Check labels, units, legends and colour choices for accessibility; flag truncated axes or dual axes that exaggerate effects.
 4. Note anything the caption claims that the data does not show.
 
-Report as a lab-notebook observation citing the figure and its inputs, and regenerate a corrected figure only if asked.
+Report your findings with citations to the figure and its inputs, and regenerate a corrected figure only if asked.
 `,
   },
   {
@@ -250,7 +250,7 @@ Review the methods relevant to this chat's requested result/deliverable. Use not
 
 List planned, attempted, completed and unverified steps separately, with evidence references. Read relevant \`.kady/provenance/<sessionId>/steps.jsonl\` records and their \`.kady/environments/<environmentId>.json\` snapshots using available file tools; preserve snapshot timing and never substitute today's environment for an unrecorded historical one. Report inputs, parameters, versions and full output paths only where supported. Flag undocumented manual edits, missing scripts and unknown/stale lineage, distinguishing inaccessible evidence from a confirmed omission. Propose specific remedies.
 
-Write the review to the lab notebook as a decision entry and offer to generate a Methods draft.
+Summarize the review in your reply, with the supporting files and any open decisions.
 `,
   },
   {
@@ -268,7 +268,7 @@ Before running, inspect the script, imported helpers and configuration for outpu
 
 Capture a read-only comparison baseline before execution: copy the expected original outputs when feasible and record hashes, source paths, parameters, seeds and available environment versions. Stage only necessary inputs. Run with the same scientific parameters; disclose any unavoidable differences. Compare output inventories, byte hashes where meaningful, and semantic table values/plot source data with justified absolute/relative tolerances chosen before inspecting differences. Separate metadata/formatting differences from numerical differences. Missing/extra outputs are findings. Diagnose causes only with evidence; label untested explanations as hypotheses. Save the baseline manifest, run logs and comparison table in the new run directory.
 
-Log the outcome in the lab notebook and link the comparison table.
+Report the outcome and link the comparison table.
 `,
   },
   {
@@ -309,7 +309,7 @@ Stop when a result passes both gates and no remaining direction could plausibly 
 1. If more than one result passed, pick the one whose consequential steps the verifiers checked most thoroughly, and say why.
 2. Write \`report.md\` in the run folder: the precise statement, the full argument or analysis with every lemma, input and command it depends on, the verification record, and the remaining limitations, readable by someone who never saw this conversation.
 3. Have a fresh verifier check \`report.md\` against the accepted draft as a verification gate, so the write-up introduces no new errors, and fix what it finds.
-4. Log the outcome in the lab notebook: the verified result, the excluded directions with their counterexamples, and what remains open. If nothing passed, report the furthest verified progress and the strongest objection still standing; that is a valid outcome, not a failure to hide.
+4. Report the verified result, the excluded directions with their counterexamples, and what remains open. If nothing passed, report the furthest verified progress and the strongest objection still standing; that is a valid outcome, not a failure to hide.
 `,
   },
 ];
@@ -435,11 +435,12 @@ export function seedAdeBootstrapPrompt(paths: ProjectPaths): void {
 // Canonical SHA-256 of the previously shipped bodies, including frontmatter.
 // Keep historic digests when changing defaults; never infer an edit from a name.
 const PREVIOUS_TEMPLATE_DIGESTS: Record<string, string[]> = {
-  qc: ["8e858d6ae8c8806e3a016f5158debaa73140cade0cac5af590f88a4a97dc633d"],
+  "prove-verify": ["b136ed7ac98efafb490b07e013c761c65f6459d7b5ac150e2a9aeaf7ed23e7fb"],
+  qc: ["fb55d2ba5f8ad2852ddc4a121fe3ba64f338740558a83dfa13f50f5eaa451428", "8e858d6ae8c8806e3a016f5158debaa73140cade0cac5af590f88a4a97dc633d"],
   "stats-check": ["fe0e0f0e3400f96c97ab76208757b78748aae816a8d623dd72d20ed0546de03c"],
-  "figure-audit": ["043ec013badbbc1f5eac315b4b613b166a6a85fd7e1b1558cf3f20e6d1dbb112"],
-  "methods-review": ["1b54e12a144a4a5b9a7628d911bd581058bc15ee8309e9862cb2e5f362932b63"],
-  replicate: ["7ae7cf27e62c7841fd606522fe8c1333af1df3ee0dd4ef7c07a8079d1a945291"],
+  "figure-audit": ["ee4246192166a830fcaf181bfebf6f47d90fd1ffd0877e3fecf9c301ddd767c0", "043ec013badbbc1f5eac315b4b613b166a6a85fd7e1b1558cf3f20e6d1dbb112"],
+  "methods-review": ["3847b931a5617be5dc1705982fc5809c5c024df3a0fbb328b80dfc0a027faf62", "1b54e12a144a4a5b9a7628d911bd581058bc15ee8309e9862cb2e5f362932b63"],
+  replicate: ["518cef5d77c58f5be3ae879204dd2b32ced8b78dd498925d0be5754b7a2d202d", "7ae7cf27e62c7841fd606522fe8c1333af1df3ee0dd4ef7c07a8079d1a945291"],
 };
 
 /**

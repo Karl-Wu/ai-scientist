@@ -47,3 +47,11 @@ it("prevents creating branches during a run and before persistence", () => {
   view.rerender(<TooltipProvider><AnswerActions {...props} response={undefined} /></TooltipProvider>);
   expect(screen.getByRole("button", { name: "Like" })).toBeDisabled();
 });
+
+it("opens a note draft anchored to the persisted answer", async () => {
+  const onCreateNote = vi.fn();
+  render(<TooltipProvider><AnswerActions {...props} onCreateNote={onCreateNote} /></TooltipProvider>);
+  await userEvent.click(screen.getByRole("button", { name: "Create note from this answer" }));
+  expect(onCreateNote).toHaveBeenCalledWith({ title: "Finding", anchor: { kind: "message", sessionId: "s1", entryId: "answer" } });
+  expect(api.apiFetch).not.toHaveBeenCalled();
+});

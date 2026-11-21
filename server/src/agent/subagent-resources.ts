@@ -1,6 +1,6 @@
 /**
- * Seed the pinned plugin's prompts and complete skill trees into a project,
- * and carry unchanged copies forward when the plugin is upgraded.
+ * Seed the pinned plugin's prompts and skill trees, plus bundled note skills,
+ * and carry unchanged copies forward when their shipped content changes.
  *
  * `.kady/subagent-resources.json` records the plugin version and the hash of
  * each file as Kady last wrote it. On a new plugin version a file that still
@@ -12,6 +12,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import type { ProjectPaths } from "../projects.ts";
 import { atomicJson } from "../atomic-json.ts";
 
@@ -44,6 +45,7 @@ const LEGACY_SHIPPED_HASHES: Readonly<Record<string, readonly string[]>> = {
 interface Marker {
   version: 2;
   plugin: string;
+  bundledSkillsDigest?: string;
   /** `<kind>/<path>` → sha256 of the shipped file Kady last wrote there. */
   files: Record<string, string>;
 }
@@ -75,8 +77,11 @@ export function seedSubagentResources(paths: ProjectPaths): void {
   const markerFile = path.join(paths.kadyDir, "subagent-resources.json");
   const packageDir = path.dirname(createRequire(import.meta.url).resolve("pi-subagents"));
   const plugin = String(JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")).version);
+  const bundledDir = fileURLToPath(new URL("../notes/skills/", import.meta.url));
+  const bundledSkills = new Map(listFiles(bundledDir).sort().map((rel) => [rel, fs.readFileSync(path.join(bundledDir, rel))]));
+  const bundledSkillsDigest = sha256(Buffer.from(JSON.stringify([...bundledSkills].map(([rel, bytes]) => [rel, sha256(bytes)]))));
   const previous = readMarker(markerFile);
-  if (previous !== undefined && previous !== "legacy" && previous.plugin === plugin) return;
+  if (previous !== undefined && previous !== "legacy" && previous.plugin === plugin && previous.bundledSkillsDigest === bundledSkillsDigest) return;
   const recorded = previous === "legacy" ? LEGACY_SHIPPED_HASHES : Object.fromEntries(
     Object.entries(previous?.files ?? {}).map(([rel, hash]) => [rel, [hash]]),
   );
@@ -85,10 +90,11 @@ export function seedSubagentResources(paths: ProjectPaths): void {
   const files: Record<string, string> = {};
   for (const kind of KINDS) {
     const source = path.join(packageDir, kind);
-    for (const rel of listFiles(source)) {
+    const entries = kind === "skills" ? [...new Set([...listFiles(source), ...bundledSkills.keys()])] : listFiles(source);
+    for (const rel of entries) {
       const key = `${kind}/${rel}`;
       const entry = rel.split("/")[0];
-      const shipped = fs.readFileSync(path.join(source, rel));
+      const shipped = (kind === "skills" ? bundledSkills.get(rel) : undefined) ?? fs.readFileSync(path.join(source, rel));
       const hash = sha256(shipped);
       const disabled = kind === "skills" && !fs.existsSync(path.join(paths.sandbox, ".pi", kind, entry)) &&
         fs.existsSync(path.join(paths.sandbox, ".pi", "skills-disabled", entry));
@@ -114,5 +120,5 @@ export function seedSubagentResources(paths: ProjectPaths): void {
       files[key] = hash;
     }
   }
-  atomicJson(markerFile, { version: 2, plugin, files } satisfies Marker);
+  atomicJson(markerFile, { version: 2, plugin, bundledSkillsDigest, files } satisfies Marker);
 }

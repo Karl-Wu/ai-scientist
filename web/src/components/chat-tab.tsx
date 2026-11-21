@@ -76,6 +76,7 @@ import {
   ToolDisclosure,
 } from "@/components/tool-activity";
 import type { FileSourceFocus } from "@/lib/provenance";
+import type { NoteCreationSource } from "@/lib/note-pages";
 import { InterviewCard } from "@/components/interview-form";
 import { SystemCard } from "@/components/system-card";
 import { PermissionCard } from "@/components/permission-card";
@@ -1474,6 +1475,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   onViewInNotebook,
   onViewCompute,
   onOpenFile,
+  onCreateNote,
   fileSourceFocus,
 }: {
   message: ChatMessage;
@@ -1485,6 +1487,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   onViewInNotebook?: (entryId: string) => void;
   onViewCompute?: (jobId?: string) => void;
   onOpenFile?: (path: string) => void;
+  onCreateNote?: (source: NoteCreationSource) => void;
   fileSourceFocus?: FileSourceFocus;
 }) {
   const t = useT();
@@ -1563,8 +1566,12 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       );
     } else if (a.scientificResult) {
       flushChunk();
+      const result = a.scientificResult;
       (hasSummary ? resultBlocks : orderedBlocks).push(
-        <ScientificResultCard key={a.id} item={a} projectId={projectId} onOpenFile={onOpenFile} />,
+        <ScientificResultCard key={a.id} item={a} projectId={projectId} onOpenFile={onOpenFile}
+          onRecordResult={!isStreaming && sessionId && a.status === "complete" && onCreateNote ? () => onCreateNote({
+            title: result.title, anchor: { kind: "result", sessionId, toolCallId: a.id },
+          }) : undefined} />,
       );
     } else if (a.toolName === "generate_image") {
       flushChunk();
@@ -1695,7 +1702,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 /** Unchanged history rows keep their tool disclosures and skip token renders. */
 export const ChatMessageRow = memo(function ChatMessageRow({
   message, isStreaming, isLast, showReasoningDetails, sessionId, projectId,
-  onViewInNotebook, onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork,
+  onViewInNotebook, onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork, onCreateNote,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
@@ -1712,11 +1719,12 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   response?: TaskResponse;
   canFork?: boolean;
   onOpenTask?: OpenTask;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }) {
   // Extension notices and compaction markers sit between the bubbles.
   if (message.role === "system") return <SystemCard message={message} />;
   return (
-    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId}>
+    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId ?? message.entryId}>
       <MessageContent>
         {message.role === "assistant" ? (
           <AssistantMessageBody
@@ -1729,6 +1737,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             onViewInNotebook={onViewInNotebook}
             onViewCompute={onViewCompute}
             onOpenFile={onOpenFile}
+            onCreateNote={onCreateNote}
             fileSourceFocus={fileSourceFocus}
           />
         ) : (
@@ -1764,9 +1773,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({
       </MessageContent>
       {message.role === "assistant" && message.content && (
         <MessageToolbar>
-          <MessageActions>
+          <MessageActions className="min-w-0 flex-wrap">
             <AnswerActions projectId={projectId} sessionId={sessionId} response={response}
-              canFork={canFork ?? !isStreaming} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask} />
+              canFork={canFork ?? !isStreaming} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask}
+              onCreateNote={isStreaming ? undefined : onCreateNote} />
           </MessageActions>
           {((typeof message.runCostUsd === "number" &&
             message.runCostUsd > 0) ||
@@ -1868,6 +1878,7 @@ export interface ChatTabProps {
   /** Stored session to reopen into this tab (History menu / reload recovery). */
   initialSessionId?: string | null;
   onOpenTask?: OpenTask;
+  onCreateNote?: (source: NoteCreationSource) => void;
   focusResponse?: { entryId: string; nonce: number };
   fileSourceFocus?: FileSourceFocus;
   /** Browser-persisted controls, queue, and composer state for this tab. */
@@ -1903,6 +1914,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     isActiveTab,
     initialSessionId,
     onOpenTask,
+    onCreateNote,
     focusResponse,
     fileSourceFocus,
     initialWorkspaceState,
@@ -2277,7 +2289,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       const id = CSS.escape(fileSourceFocus.step.stepId);
       const target = rootRef.current?.querySelector<HTMLElement>(`[data-tool-call-id="${id}"]`);
       if (!target) {
-        toast.error(t("The recorded writing step is unavailable in this task."));
+        toast.error(t(fileSourceFocus.fromNote ? "The cited item is unavailable in this task." : "The recorded writing step is unavailable in this task."));
         return;
       }
       target.querySelector("button")?.focus({ preventScroll: true });
@@ -2287,12 +2299,16 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     });
     return () => cancelAnimationFrame(frame);
   }, [fileSourceFocus, isActive, messages, transcriptReady, t]);
+  const handledMessageJump = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!isActive || !focusResponse) return;
-    const target = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-response-entry-id]") ?? [])
-      .find((element) => element.dataset.responseEntryId === focusResponse.entryId);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusResponse, isActive, taskResponses.byMessage]);
+    if (!isActive || !focusResponse || !transcriptReady || handledMessageJump.current === focusResponse.nonce) return;
+    const target = rootRef.current?.querySelector<HTMLElement>(
+      `[data-response-entry-id="${CSS.escape(focusResponse.entryId)}"]`,
+    );
+    if (!target) return;
+    handledMessageJump.current = focusResponse.nonce;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusResponse, isActive, messages, taskResponses.byMessage, transcriptReady]);
   useEffect(() => {
     const onModalJobFinished = (event: Event) => {
       const detail = (
@@ -2653,6 +2669,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
                 response={taskResponses.byMessage.get(message.id)}
                 canFork={!isStreaming}
                 onOpenTask={onOpenTask}
+                onCreateNote={onCreateNote}
               />
             ))
           )}

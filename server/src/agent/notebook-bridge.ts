@@ -1,19 +1,6 @@
 /**
- * Wiring so SUBAGENTS contribute to the lab notebook (Phase 5).
- *
- *  1. seedNotebookPackage — reference the vendored kady-notebook package from
- *     sandbox/.pi/settings.json "packages" so child sessions load it and
- *     get the `notebook` tool. Mirrors seedWebAccessPackage. Sandbox trust is
- *     already established by ensureWebAccess (called in the same build()), so
- *     no separate trust write is needed here.
- *  2. seedBuiltinAgentNotebookTools — pi-subagents' builtin specialists pin a
- *     `tools:` allowlist that pi also applies to package tools, which would
- *     silently strip `notebook` from their children; seed settings.json
- *     agentOverrides adding `notebook` to each builtin's declared list.
- *  3. makeSubagentNotebookExtension — on subagent completion (sync tool_result
- *     + async subagent:async-complete, same events the cost ledger uses), parse
- *     each child's session file for `notebook` tool-calls and append them to
- *     the PARENT notebook. The parent is the single writer.
+ * Share read-only notebook search with child Pi sessions. Retain the old
+ * harvest helpers for the legacy notebook code.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -107,20 +94,7 @@ function parseAgentFrontmatter(file: string): { name?: string; tools?: string[] 
   return out;
 }
 
-/**
- * Make the `notebook` tool reachable from pi-subagents' BUILTIN specialists.
- *
- * Builtin agents (researcher, scout, worker, ...) pin a `tools:` allowlist in
- * their frontmatter, and pi applies `--tools` to extension/package tools too —
- * so those children load kady-notebook but the tool is filtered out and their
- * lanes never populate. Project agents we seed declare no allowlist and are
- * unaffected. For every builtin that pins tools without `notebook`, seed a
- * `subagents.agentOverrides.<name>.tools` entry (declared list + "notebook")
- * in sandbox settings.json. An existing `tools` value is kept unless it still
- * has the shape we generated, in which case it is reconciled against the
- * builtin's current frontmatter — see builtin-tool-overrides.ts for why an
- * upgrade makes extending alone unsafe. Returns true when the file was written.
- */
+/** Update generated specialist allowlists to use search and retire notebook writes. */
 export function seedBuiltinAgentNotebookTools(paths: ProjectPaths): boolean {
   const agentsDir = builtinAgentsDir();
   if (!agentsDir) return false;
@@ -152,7 +126,7 @@ export function seedBuiltinAgentNotebookTools(paths: ProjectPaths): boolean {
   let changed = false;
   for (const file of files) {
     const { name, tools } = parseAgentFrontmatter(path.join(agentsDir, file));
-    if (!name || !tools?.length || ["notebook", "notebook_search"].every((tool) => tools.includes(tool))) continue;
+    if (!name || !tools?.length) continue;
     const existing = overrides[name];
     if (existing !== undefined && (typeof existing !== "object" || existing === null || Array.isArray(existing))) {
       continue; // malformed user entry — leave it alone
@@ -166,11 +140,16 @@ export function seedBuiltinAgentNotebookTools(paths: ProjectPaths): boolean {
         continue;
       }
       const existingTools = override.tools as string[];
-      const bases = [uniqueTools([...tools, "notebook"]), uniqueTools([...tools, "notebook", "notebook_search"])];
+      const bases = [
+        uniqueTools([...tools, "notebook"]),
+        uniqueTools([...tools, "notebook_search"]),
+        uniqueTools([...tools, "notebook", "notebook_search"]),
+      ];
       const next = reconcileBuiltinTools({
         existing: existingTools,
         declared: tools,
-        add: ["notebook", "notebook_search"],
+        add: ["notebook_search"],
+        remove: ["notebook"],
         shapes: bases.flatMap((base) => [base, ...MODAL_AND_PDF_SHAPES.map((extra) => uniqueTools([...base, ...extra]))]),
       });
       if (!next) continue;
@@ -178,7 +157,7 @@ export function seedBuiltinAgentNotebookTools(paths: ProjectPaths): boolean {
       changed = true;
       continue;
     }
-    overrides[name] = { ...override, tools: uniqueTools([...tools, "notebook", "notebook_search"]) };
+    overrides[name] = { ...override, tools: uniqueTools([...tools.filter((tool) => tool !== "notebook"), "notebook_search"]) };
     changed = true;
   }
   if (!changed) return false;

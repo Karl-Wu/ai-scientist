@@ -15,7 +15,7 @@ const MAX_JSON_DEPTH = 5;
 const SENSITIVE_KEY = /^(?:(?:http|request|response)?headers|(?:proxy)?authorization|.*(?:apikey|credential|passphrase|password|privatekey|secret|token|cookie|base64)s?)$/i;
 const HIDDEN = "[redacted]";
 
-function redactText(text: string): string {
+export function redactText(text: string): string {
   return text
     .replace(/\b(Bearer|Basic)\s+[\w./+~=-]+/gi, "$1 " + HIDDEN)
     .replace(/\b((?:[\w-]*[_-])?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|secret|token|cookie)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&}]+)/gi, "$1" + HIDDEN)

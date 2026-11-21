@@ -37,6 +37,7 @@ These guides describe the current implementation; release history lives in
 
 ## Development
 
+- [Product and engineering backlog](backlog.md): proposed work and design discussions, separate from implemented capabilities.
 - [Architecture](architecture.md): runtime, storage and source entry points.
 - [UI performance](performance.md): performance contracts and regression checks.
 - [Contributing workflows](contributing-workflows.md): template format and input handling.

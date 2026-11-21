@@ -62,9 +62,7 @@ const TABS: TabDescriptor[] = [
       <>
         <b>Research context</b>
         <br />
-        Point AI Scientist at notebook entries, frozen plans, notes, or an earlier
-        chat. It reads them with its own tools before answering. Applies to
-        the next message only.
+        Add note pages or earlier tasks as context for the next message.
       </>
     ),
   },

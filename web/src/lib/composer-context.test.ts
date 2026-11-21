@@ -122,6 +122,13 @@ describe("chat snapshots", () => {
 });
 
 describe("persistence normalizers", () => {
+  it("preserves exact note references in sent messages and draft context", () => {
+    const ref = { kind: "note", id: "ad94e200-56c4-4100-98b4-e2e643a24b01", type: "qualityCheck", title: "QC findings", version: 3 } as const;
+    const text = "Use the note" + buildComposerContext({ delegation: EMPTY_DELEGATION, research: [ref] });
+    expect(splitComposerContext(text)).toMatchObject({ text: "Use the note", context: { research: [ref] } });
+    expect(normalizeResearchRefs([ref, ref, { ...ref, id: "../another-project" }, { ...ref, version: 0 }, { ...ref, type: "invalid" }])).toEqual([ref]);
+  });
+
   it("keeps valid refs, drops malformed or duplicate ones, and never restores a snapshot", () => {
     const valid = full.research;
     const restored = normalizeResearchRefs([

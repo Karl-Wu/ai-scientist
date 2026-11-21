@@ -209,8 +209,9 @@ export interface FileOrigin {
 }
 
 export interface FileSourceFocus {
-  step: FileSourceStep;
+  step: Pick<FileSourceStep, "sessionId" | "stepId">;
   nonce: number;
+  fromNote?: boolean;
 }
 
 export const SOURCE_EVIDENCE_LABELS: Record<SourceEvidence, string> = {

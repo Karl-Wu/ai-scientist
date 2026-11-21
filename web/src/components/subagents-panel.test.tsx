@@ -3,10 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as agentsLib from "@/lib/agents";
 import * as useProjects from "@/lib/use-projects";
+import * as useSkills from "@/lib/use-skills";
 import { SubagentsPanel } from "@/components/subagents-panel";
 
 beforeEach(() => {
   vi.spyOn(agentsLib, "getSpecialistDefaultModel").mockResolvedValue(null);
+  vi.spyOn(useSkills, "useSkills").mockReturnValue({ skills: [], loading: false });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -113,6 +115,19 @@ describe("SubagentsPanel persistent memory", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(save).toHaveBeenCalled());
     expect(save.mock.calls[0][1]).toMatchObject({ memory: { scope: "user", path: "plain" } });
+  });
+
+  it("binds a project's enabled skill for a specialist's note drafts", async () => {
+    vi.spyOn(useProjects, "useProjects").mockReturnValue({ activeProjectId: "p1" } as ReturnType<typeof useProjects.useProjects>);
+    vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
+    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([{ name: "plain", description: "review", source: "project", systemPrompt: "Review", enabled: true }]);
+    vi.mocked(useSkills.useSkills).mockReturnValue({ skills: [{ id: "review-method", name: "review-method", description: "Review approach" }], loading: false });
+    const save = vi.spyOn(agentsLib, "saveAgent").mockImplementation(async (name, patch) => ({ name, source: "project", ...patch }));
+    render(<SubagentsPanel />);
+    await userEvent.click(await screen.findByRole("button", { name: "Edit plain" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Note drafting skill" }), "review-method");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith("plain", expect.objectContaining({ noteSkill: "review-method" })));
   });
 });
 

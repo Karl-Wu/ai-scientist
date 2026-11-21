@@ -23,7 +23,7 @@ vi.mock("@uiw/react-codemirror", async (original) => ({
 vi.mock("@/components/ai-elements/message", () => ({ MessageResponse: () => null }));
 vi.mock("@/components/pdf-viewer/pdf-viewer", () => ({ PdfViewer: () => null }));
 vi.mock("@/components/file-icon", () => ({ KadyFileIcon: () => null }));
-vi.mock("@/components/lab-notebook-view", () => ({ LabNotebookView: () => null }));
+vi.mock("@/components/note-pages-view", () => ({ NotePagesView: () => null }));
 vi.mock("@/components/modal-jobs-panel", () => ({ ModalJobsPanel: () => null }));
 vi.mock("@/components/automation-panel", () => ({ AutomationPanel: () => null }));
 vi.mock("@/components/provenance-panel", () => ({ ProvenancePanel: () => null }));
@@ -38,12 +38,23 @@ function panelProps(path = "a.txt"): React.ComponentProps<typeof FilePreviewPane
     onSaveText: vi.fn(async () => true), onSaveImageBlob: vi.fn(async () => true),
     onCompileLatex: vi.fn(), showNotebook: false, onSelectNotebook: vi.fn(), showCompute: false,
     onSelectCompute: vi.fn(), computeSessionId: null, computeScope: "project", onComputeScopeChange: vi.fn(),
-    onOpenComputeOutput: vi.fn(), notebookSessionId: null, notebookEntries: [], notebookStreaming: false,
-    notebookSubagentCompletions: 0, onOpenNotebookFile: vi.fn(),
+    onOpenComputeOutput: vi.fn(), onOpenNoteSource: vi.fn(),
   };
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+it("starts a note for the file currently shown in the preview", () => {
+  const onCreateNote = vi.fn();
+  const props = panelProps("derived/report.csv");
+  const { rerender } = render(<FilePreviewPanel {...props} onCreateNote={onCreateNote} />);
+  fireEvent.click(screen.getByRole("button", { name: "Write a note for this file" }));
+  expect(onCreateNote).toHaveBeenLastCalledWith({ title: "report.csv", anchor: { kind: "file", path: "derived/report.csv" } });
+  rerender(<FilePreviewPanel {...props} activeTabPath="b.txt" onCreateNote={onCreateNote} />);
+  fireEvent.click(screen.getByRole("button", { name: "Write a note for this file" }));
+  expect(onCreateNote).toHaveBeenLastCalledWith({ title: "b.txt", anchor: { kind: "file", path: "b.txt" } });
+  expect(props.onSaveText).not.toHaveBeenCalled();
+});
 
 it.each(["showNotebook", "showCompute", "showAutomation"] as const)(
   "hides file tabs while %s is selected and restores them on return",

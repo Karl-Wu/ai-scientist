@@ -65,9 +65,11 @@ describe("skill scopes over HTTP", () => {
     const skills = res.json() as { name: string; description: string }[];
     expect(skills.map((s) => s.name)).toEqual([
       "council-mode",
+      "data-processing-note",
       "global-only",
       "pi-subagents",
       "project-only",
+      "scientific-result-note",
       "shared",
     ]);
     // Pi resolves project skills first and collisions are first-wins, so the
@@ -90,7 +92,9 @@ describe("skill scopes over HTTP", () => {
       shadowed: string[];
     };
     expect(project.scope).toBe("project");
-    expect(project.enabled.map((s) => s.name)).toEqual(["council-mode", "pi-subagents", "shared"]);
+    expect(project.enabled.map((s) => s.name)).toEqual([
+      "council-mode", "data-processing-note", "pi-subagents", "scientific-result-note", "shared",
+    ]);
 
     const globalListing = (await req("GET", "/skills/all?scope=global")).json() as {
       scope: string;

@@ -84,6 +84,7 @@ export const READ_ONLY_TOOLS = new Set([
   "notebook",
   "scientific_result",
   "notebook_search",
+  "note_read",
   "list_pdf_annotations",
   "modal_status",
   "modal_instances",

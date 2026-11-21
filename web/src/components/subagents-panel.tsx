@@ -39,6 +39,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useProjects } from "@/lib/use-projects";
+import { useSkills } from "@/lib/use-skills";
 import {
   clearAgentMemory,
   deleteAgent,
@@ -69,6 +70,7 @@ interface AgentFormState {
   systemPromptMode: "append" | "replace";
   inheritProjectContext: boolean;
   inheritSkills: boolean;
+  noteSkill: string;
   memoryEnabled: boolean;
   memoryScope: "project" | "user";
   extra?: Record<string, unknown>;
@@ -85,6 +87,7 @@ const EMPTY_FORM: AgentFormState = {
   systemPromptMode: "append",
   inheritProjectContext: true,
   inheritSkills: true,
+  noteSkill: "",
   memoryEnabled: false,
   memoryScope: "project",
   systemPrompt: "",
@@ -101,6 +104,7 @@ function formFromAgent(agent: AgentFile, asCopy: boolean): AgentFormState {
     systemPromptMode: agent.systemPromptMode ?? "append",
     inheritProjectContext: agent.inheritProjectContext ?? true,
     inheritSkills: agent.inheritSkills ?? true,
+    noteSkill: agent.noteSkill ?? "",
     memoryEnabled: Boolean(agent.memory),
     memoryScope: agent.memory?.scope ?? "project",
     extra: agent.extra,
@@ -354,6 +358,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
 export function SubagentsPanel() {
   const t = useT();
   const { activeProject, activeProjectId } = useProjects();
+  const { skills: noteSkills, loading: noteSkillsLoading } = useSkills(activeProjectId ?? undefined);
   const [agents, setAgents] = useState<AgentFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -429,6 +434,7 @@ export function SubagentsPanel() {
         systemPromptMode: form.systemPromptMode,
         inheritProjectContext: form.inheritProjectContext,
         inheritSkills: form.inheritSkills,
+        noteSkill: form.noteSkill || undefined,
         memory: form.memoryEnabled ? { scope: form.memoryScope, path: name } : undefined,
         extra: form.extra,
         systemPrompt: form.systemPrompt,
@@ -662,6 +668,17 @@ export function SubagentsPanel() {
               />
               {t("Replace base system prompt")}{" "}</label>
           </div>
+
+          <label className="block space-y-1.5 text-xs font-medium">
+            {t("Note drafting skill")}
+            <select className="h-8 w-full rounded-md border bg-background px-2 text-xs" value={form.noteSkill}
+              disabled={noteSkillsLoading} onChange={(event) => setForm({ ...form, noteSkill: event.target.value })}>
+              <option value="">{t("Choose a skill to enable note drafting")}</option>
+              {form.noteSkill && !noteSkills.some((skill) => skill.name === form.noteSkill) &&
+                <option value={form.noteSkill} disabled>{form.noteSkill} · {t("Unavailable")}</option>}
+              {noteSkills.map((skill) => <option key={skill.id} value={skill.name}>{skill.name}</option>)}
+            </select>
+          </label>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border p-2.5">
             <label className="flex items-center gap-2 text-xs">

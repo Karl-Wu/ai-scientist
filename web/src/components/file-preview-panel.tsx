@@ -6,14 +6,14 @@ import { TableFileViewer } from "./table-explorer";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { PdfViewer } from "@/components/pdf-viewer/pdf-viewer";
 import { KadyFileIcon } from "@/components/file-icon";
-import { LabNotebookView } from "@/components/lab-notebook-view";
+import { NotePagesView } from "@/components/note-pages-view";
 import { ModalJobsPanel } from "@/components/modal-jobs-panel";
 import { AutomationPanel } from "@/components/automation-panel";
 import { ProvenancePanel } from "@/components/provenance-panel";
 import { FileOriginControl } from "@/components/file-origin-control";
 import type { FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import type { ModalComputeScope } from "@/lib/modal-jobs";
-import type { NotebookEntry } from "@/lib/notebook";
+import type { NoteCreationSource, NoteSourceLink, NoteTaskReference } from "@/lib/note-pages";
 import { cn } from "@/lib/utils";
 import {
   notebookHtmlDocument,
@@ -42,6 +42,7 @@ import {
   CheckIcon,
   XIcon,
   BookOpenIcon,
+  NotebookPenIcon,
   DatabaseIcon,
   TableIcon,
   ActivityIcon,
@@ -1681,17 +1682,11 @@ export interface FilePreviewPanelProps {
   onComputeScopeChange: (scope: ModalComputeScope) => void;
   computeFocus?: { id: string; token: number } | null;
   onOpenComputeOutput: (path: string) => void;
-  notebookSessionId: string | null;
-  notebookEntries: NotebookEntry[];
-  notebookStreaming: boolean;
-  notebookSubagentCompletions: number;
-  onOpenNotebookFile: (path: string) => void;
-  /** Deep-link target from a chat notebook chip (token forces re-focus). */
-  notebookFocus?: { id: string; token: number } | null;
-  /** Scroll the chat transcript to a notebook entry's tool call. */
-  onNotebookJumpToChat?: (entryId: string) => void;
-  /** Open the Lab Notebook focused on an entry (used by artifact citations). */
-  onOpenNotebookEntry?: (entryId: string) => void;
+  noteTask?: NoteTaskReference;
+  noteCreation?: NoteCreationSource;
+  onNoteCreationHandled?: (source: NoteCreationSource) => void;
+  onCreateNote?: (source: NoteCreationSource) => void;
+  onOpenNoteSource: (source: NoteSourceLink) => void;
   fileSourceInput?: { path: string; consumer: SourceStepReference; nonce: number };
   onJumpToFileSource?: (step: FileSourceStep) => void;
   onOpenSourceInput?: (path: string, consumer: SourceStepReference) => void;
@@ -1721,14 +1716,11 @@ export function FilePreviewPanel({
   onComputeScopeChange,
   computeFocus,
   onOpenComputeOutput,
-  notebookSessionId,
-  notebookEntries,
-  notebookStreaming,
-  notebookSubagentCompletions,
-  onOpenNotebookFile,
-  notebookFocus,
-  onNotebookJumpToChat,
-  onOpenNotebookEntry,
+  noteTask,
+  noteCreation,
+  onNoteCreationHandled,
+  onCreateNote,
+  onOpenNoteSource,
   fileSourceInput,
   onJumpToFileSource,
   onOpenSourceInput,
@@ -1817,6 +1809,12 @@ export function FilePreviewPanel({
           <GitBranchIcon aria-hidden="true" className="size-3" /> {t("Provenance")}
         </button>
       )}
+      {mode === "view" && onCreateNote && !loadingFile && <button type="button"
+        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        title={t("Write a note for this file")} aria-label={t("Write a note for this file")}
+        onClick={() => onCreateNote({ title: selectedName ?? selectedPath, anchor: { kind: "file", path: selectedPath } })}>
+        <NotebookPenIcon aria-hidden="true" className="size-3.5" />
+      </button>}
       {canEdit && mode === "view" && (
         <button
           onClick={() => setMode(selectedPath, "edit")}
@@ -1898,17 +1896,8 @@ export function FilePreviewPanel({
       })}
 
       {isActive && (showNotebook ? (
-        <LabNotebookView
-          projectId={projectId}
-          model={oneShotModelRef}
-          sessionId={notebookSessionId}
-          liveEntries={notebookEntries}
-          streaming={notebookStreaming}
-          subagentCompletions={notebookSubagentCompletions}
-          onOpenFile={onOpenNotebookFile}
-          focusEntry={notebookFocus}
-          onJumpToChat={onNotebookJumpToChat}
-        />
+        <NotePagesView key={projectId} projectId={projectId} currentTask={noteTask} model={oneShotModelRef} onOpenSource={onOpenNoteSource}
+          createFrom={noteCreation} onCreationHandled={onNoteCreationHandled} />
       ) : showAutomation ? (
         <AutomationPanel projectId={projectId} />
       ) : showCompute ? (
@@ -1962,7 +1951,7 @@ export function FilePreviewPanel({
             {sourceInput && <p className="px-3 pt-3 text-xs text-muted-foreground">{t("Technical details for the current file")}</p>}
             <ProvenancePanel key={selectedPath} path={selectedPath} projectId={projectId}
               onOpenFile={onTabSelect} onOpenSourceInput={onOpenSourceInput}
-              onOpenNotebookEntry={onOpenNotebookEntry} embedded />
+              embedded />
           </div>
         </>
       )}

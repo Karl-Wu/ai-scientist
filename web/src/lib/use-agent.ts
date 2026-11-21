@@ -622,6 +622,7 @@ function restoreHistory(
       restored.push({
         id: nextId(),
         role: "user",
+        entryId: item.entryId,
         content: item.content ?? "",
         ...(item.images && item.images.length > 0 ? { images: item.images } : {}),
         timestamp,

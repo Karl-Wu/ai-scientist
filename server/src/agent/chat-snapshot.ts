@@ -87,6 +87,8 @@ export function toolCallSummary(call: ToolCallPart, sandboxRoot: string): string
       return oneLine(`${str(args.type)}: ${str(args.title)}`, ARG_CLIP);
     case "notebook_search":
       return oneLine(args.action === "read" ? "read a record" : `search "${str(args.query)}"`, ARG_CLIP);
+    case "note_read":
+      return oneLine(`note ${str(args.id)}, revision ${String(args.version ?? "?")}`, ARG_CLIP);
     case "interview": {
       const n = Array.isArray(args.questions) ? args.questions.length : 0;
       return `asked the user ${n} question${n === 1 ? "" : "s"}`;
@@ -98,6 +100,14 @@ export function toolCallSummary(call: ToolCallPart, sandboxRoot: string): string
 
 /** A tool result in one line; tools with boilerplate output get a digest. */
 export function toolResultSummary(call: ToolCallPart, text: string): string {
+  if (call.name === "note_read") {
+    try {
+      const data = JSON.parse(text) as { title: string; version: number };
+      return oneLine(`read "${data.title}" (revision ${data.version})`, RESULT_CLIP);
+    } catch {
+      return oneLine(text, RESULT_CLIP);
+    }
+  }
   if (call.name === "notebook_search") {
     try {
       const data = JSON.parse(text) as { hits?: { title?: string }[]; hit?: { title?: string } };
@@ -134,7 +144,9 @@ function userText(raw: string): string {
   else if (d.auto) added.push("delegate (Kady picks specialists)");
   if (d.verify) added.push("verification gate");
   for (const ref of context.research) {
-    added.push(ref.kind === "chat" ? `earlier chat "${ref.title}"` : `${RECORD_KIND_LABELS[ref.type]} "${ref.title}"`);
+    if (ref.kind === "chat") added.push(`earlier chat "${ref.title}"`);
+    else if (ref.kind === "note") added.push(`note page "${ref.title}" (id ${ref.id}, revision ${ref.version})`);
+    else added.push(`${RECORD_KIND_LABELS[ref.type]} "${ref.title}"`);
   }
   return `${body}\n\n_(Added from the + menu: ${added.join("; ")})_`;
 }

@@ -81,7 +81,9 @@ it("loads child MCP and mandatory tools with ambient extensions disabled, and me
   try {
     child = await factory.create({ cwd: paths.sandbox, storage: { kind: "dir", sessionDir: paths.sessionsDir }, ambientExtensions: false, extensionPaths: required.map((r) => r.path), requiredExtensions: required, hooks: [], noSkills: true, noContextFiles: true, runtime: { agent: "researcher", orchestratorSessionId: "parent", runId: "run" }, onExtensionError: (error: any) => errors.push(error) });
     await expect.poll(() => captured!.getActiveToolNames(), { timeout: 15000 }).toContain("mcp__echo__echo");
-    for (const name of ["notebook", "modal_submit", "add_pdf_annotation"]) expect(captured!.getAllTools().map((t) => t.name)).toContain(name);
+    const childTools = captured!.getAllTools().map((tool) => tool.name);
+    for (const name of ["notebook_search", "modal_submit", "add_pdf_annotation"]) expect(childTools).toContain(name);
+    expect(childTools).not.toContain("notebook");
     expect(errors).toEqual([]);
     const prompt = await captured!.extensionRunner!.emitBeforeAgentStart({ messageType: "user", prompt: "Inspect the data" }, {
       cwd: paths.sandbox, customPrompt: "Keep my custom persona.",

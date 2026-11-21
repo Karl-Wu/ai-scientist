@@ -22,6 +22,7 @@ export interface AgentFile {
   systemPromptMode?: "append" | "replace";
   inheritProjectContext?: boolean;
   inheritSkills?: boolean;
+  noteSkill?: string;
   /** pi-subagents per-agent persistent memory (`MEMORY.md` injected each run). */
   memory?: AgentMemory;
   /** Frontmatter keys the UI doesn't model; preserved on save. */

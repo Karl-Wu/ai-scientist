@@ -70,11 +70,7 @@ function WorkspaceFixture() {
         computeScope="project"
         onComputeScopeChange={vi.fn()}
         onOpenComputeOutput={vi.fn()}
-        notebookSessionId={null}
-        notebookEntries={[]}
-        notebookStreaming={false}
-        notebookSubagentCompletions={0}
-        onOpenNotebookFile={vi.fn()}
+        onOpenNoteSource={vi.fn()}
       />
       <section aria-label="Task transcript">
         <AssistantMessageBody

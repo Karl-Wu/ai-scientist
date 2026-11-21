@@ -165,7 +165,9 @@ export function seedBuiltinAgentPdfAnnotationTools(
       const notebookModal = unique([...notebook, ...MODAL_TOOL_NAMES]);
       const notebookMemory = unique([...notebook, "notebook_search"]);
       const notebookMemoryModal = unique([...notebookMemory, ...MODAL_TOOL_NAMES]);
-      const generated = [base, notebook, notebookMemory, modal, notebookModal, notebookMemoryModal].flatMap(
+      const search = unique([...base, "notebook_search"]);
+      const searchModal = unique([...search, ...MODAL_TOOL_NAMES]);
+      const generated = [base, notebook, notebookMemory, modal, notebookModal, notebookMemoryModal, search, searchModal].flatMap(
         (tools) => [
           tools,
           unique([...tools, ...PDF_ANNOTATION_TOOL_NAMES]),

@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import type { Database } from "@/components/database-selector";
 import type { Skill } from "@/lib/use-skills";
+import { NOTE_TYPES } from "@/lib/note-pages";
 import {
   RECORD_KIND_LABELS,
   researchRefKey,
@@ -111,7 +112,7 @@ function ComposerContextChips({
 }) {
   const t = useT();
   const { delegation, research } = context;
-  const scope = onResearchChange ? "Applies to the next message only." : null;
+  const scope = onResearchChange ? t("Applies to the next message only.") : null;
   return (
     <>
       {delegation.auto && (
@@ -179,7 +180,11 @@ function ComposerContextChips({
       )}
       {research.map((ref) => {
         const key = researchRefKey(ref);
-        const label = ref.kind === "chat" ? t("Earlier task") : RECORD_KIND_LABELS[ref.type];
+        const label = ref.kind === "chat" ? t("Earlier task")
+          : ref.kind === "note" ? t(NOTE_TYPES[ref.type].label) : t(RECORD_KIND_LABELS[ref.type]);
+        const guidance = ref.kind === "chat" ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
+          : ref.kind === "note" ? t("AI Scientist reads revision {version} of this note page.", { version: ref.version })
+            : "AI Scientist reads this record with notebook_search before relying on it.";
         return (
           <Chip
             key={key}
@@ -195,9 +200,7 @@ function ComposerContextChips({
                 <br />
                 {ref.title}
                 <br />
-                {ref.kind === "chat"
-                  ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
-                  : "AI Scientist reads this record with notebook_search before relying on it."}{" "}
+                {guidance}{" "}
                 {scope}
               </>
             }

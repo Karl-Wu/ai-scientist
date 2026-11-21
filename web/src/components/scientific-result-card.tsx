@@ -10,6 +10,8 @@ import {
   ExternalLinkIcon,
   FileIcon,
   FlaskConicalIcon,
+  MoreHorizontalIcon,
+  NotebookPenIcon,
   TableIcon,
   TriangleAlertIcon,
   XCircleIcon,
@@ -18,6 +20,8 @@ import {
 import { useMemo, useState } from "react";
 
 import { KadyFileIcon } from "@/components/file-icon";
+import { useT } from "@/components/i18n-provider";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Collapsible,
   CollapsibleContent,
@@ -690,11 +694,14 @@ export function ScientificResultCard({
   item,
   projectId,
   onOpenFile,
+  onRecordResult,
 }: {
   item: ActivityItem;
   projectId: string;
   onOpenFile?: (path: string) => void;
+  onRecordResult?: () => void;
 }) {
+  const t = useT();
   const card = item.scientificResult;
   if (!card) return null;
   const { label, Icon } = KIND_META[card.kind];
@@ -727,6 +734,19 @@ export function ScientificResultCard({
             </p>
           )}
         </div>
+        {onRecordResult && <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label={t("Scientific result actions")}
+              className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+              <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onRecordResult}>
+              <NotebookPenIcon aria-hidden="true" />{t("Record this result")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>}
       </header>
       <div className="space-y-3 p-3">
         <CardBody card={card} projectId={projectId} onOpenFile={onOpenFile} />

@@ -72,7 +72,7 @@ function parseFrontmatter(file: string): { name?: string; tools?: string[] } {
 /**
  * Extend package-owned builtin allowlists while preserving user-pinned lists.
  *
- * notebook-bridge runs first and seeds `builtin tools + notebook`. We recognize
+ * notebook-bridge runs first and seeds `builtin tools + notebook_search`. We recognize
  * only that generated shape (or our own already-generated shape); any other
  * existing `tools` override is treated as user-owned and left unchanged.
  */
@@ -120,19 +120,23 @@ export function seedBuiltinAgentModalTools(paths: ProjectPaths): boolean {
         continue;
       }
       const existingTools = override.tools as string[];
-      const generatedNotebook = [...builtin.tools, "notebook"];
-      const generatedModal = [...generatedNotebook, ...MODAL_TOOL_NAMES];
-      const generatedModalWithPdf = [
-        ...generatedModal,
-        ...PDF_ANNOTATION_TOOL_NAMES,
+      const notebookTools = [
+        uniqueTools([...builtin.tools, "notebook"]),
+        uniqueTools([...builtin.tools, "notebook_search"]),
+        uniqueTools([...builtin.tools, "notebook", "notebook_search"]),
       ];
+      const generated = notebookTools.flatMap((tools) => [
+        tools,
+        uniqueTools([...tools, ...MODAL_TOOL_NAMES]),
+        uniqueTools([...tools, ...MODAL_TOOL_NAMES, ...PDF_ANNOTATION_TOOL_NAMES]),
+      ]);
       // Reconciled, not only extended: an override seeded before an upstream
       // release narrowed this builtin still carries the tools it removed.
       const next = reconcileBuiltinTools({
         existing: existingTools,
         declared: builtin.tools,
         add: MODAL_TOOL_NAMES,
-        shapes: [generatedNotebook, generatedModal, generatedModalWithPdf].flatMap((shape) => [shape, uniqueTools([...shape, "notebook_search"])]),
+        shapes: generated,
       });
       if (!next) continue;
       overrides[builtin.name] = { ...override, tools: next };

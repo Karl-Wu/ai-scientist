@@ -181,7 +181,7 @@ describe("seedBuiltinAgentNotebookTools", () => {
     return (tools?.[1] ?? "").split(",").map((tool) => tool.trim()).filter(Boolean);
   }
 
-  it("appends notebook to every builtin agent that pins a tools allowlist", () => {
+  it("appends read-only notebook search to every builtin agent that pins a tools allowlist", () => {
     const paths = resolvePaths("default");
     fs.mkdirSync(paths.sandbox, { recursive: true });
 
@@ -191,14 +191,15 @@ describe("seedBuiltinAgentNotebookTools", () => {
     const overrides = (settings.subagents as Record<string, unknown>)
       .agentOverrides as Record<string, { tools?: string[] }>;
     // researcher ships with a tools allowlist in pi-subagents — the exact list
-    // tracks the installed package, but notebook must be appended after it.
+    // tracks the installed package, and notebook search must be appended after it.
     const researcher = overrides.researcher;
     expect(researcher?.tools).toBeDefined();
-    expect(researcher.tools).toContain("notebook");
+    expect(researcher.tools).not.toContain("notebook");
     expect(researcher.tools).toContain("web_search");
     expect(researcher.tools?.at(-1)).toBe("notebook_search");
     for (const override of Object.values(overrides)) {
-      expect(override.tools).toContain("notebook");
+      expect(override.tools).not.toContain("notebook");
+      expect(override.tools).toContain("notebook_search");
     }
   });
 
@@ -222,7 +223,7 @@ describe("seedBuiltinAgentNotebookTools", () => {
     const overrides = (settings.subagents as Record<string, unknown>)
       .agentOverrides as Record<string, { tools?: string[]; disabled?: boolean }>;
     expect(overrides.researcher.disabled).toBe(true);
-    expect(overrides.researcher.tools).toContain("notebook");
+    expect(overrides.researcher.tools).toContain("notebook_search");
     expect(settings.packages).toEqual(["/x/kady-notebook"]);
   });
 
@@ -272,7 +273,7 @@ describe("seedBuiltinAgentNotebookTools", () => {
     const settings = readSettings("default");
     const overrides = (settings.subagents as Record<string, unknown>)
       .agentOverrides as Record<string, { tools?: string[] }>;
-    expect(overrides.reviewer.tools).toEqual([...declared, "notebook", "notebook_search"]);
+    expect(overrides.reviewer.tools).toEqual([...declared, "notebook_search"]);
     for (const removed of ["bash", "edit", "write"]) {
       expect(overrides.reviewer.tools).not.toContain(removed);
     }

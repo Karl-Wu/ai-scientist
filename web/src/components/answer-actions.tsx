@@ -1,17 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
-import { CheckIcon, CopyIcon, GitBranchIcon, LoaderCircleIcon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, GitBranchIcon, LoaderCircleIcon, NotebookPenIcon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useT } from "@/components/i18n-provider";
 import { MessageAction } from "@/components/ai-elements/message";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/projects";
+import { suggestedChatTitle } from "@/lib/chat-title";
+import type { NoteCreationSource } from "@/lib/note-pages";
 import { notifyTaskResponsesChanged, type AnswerFeedback, type TaskResponse } from "@/lib/use-task-responses";
 
 export type OpenTask = (sessionId: string, title: string, entryId?: string) => void;
-export function AnswerActions({ projectId, sessionId, response, canFork, copied, onCopy, onOpenTask }: {
+export function AnswerActions({ projectId, sessionId, response, canFork, copied, onCopy, onOpenTask, onCreateNote }: {
   projectId: string; sessionId: string | null; response?: TaskResponse; canFork: boolean;
   copied: boolean; onCopy: () => void; onOpenTask?: OpenTask;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }) {
   const t = useT();
   const [busy, setBusy] = useState<"vote" | "fork" | null>(null);
@@ -86,5 +89,11 @@ export function AnswerActions({ projectId, sessionId, response, canFork, copied,
         </DropdownMenuContent>
       </DropdownMenu> : forkControl}
     </>}
+    {response && sessionId && onCreateNote && <button type="button"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+      onClick={() => onCreateNote({ title: suggestedChatTitle(response.content) ?? t("Answer"),
+        anchor: { kind: "message", sessionId, entryId: response.entryId } })}>
+      <NotebookPenIcon aria-hidden="true" className="size-4" />{t("Create note from this answer")}
+    </button>}
   </>;
 }

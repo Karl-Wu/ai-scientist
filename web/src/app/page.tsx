@@ -7,6 +7,7 @@ import { FileTreePanel } from "@/components/sandbox-panel";
 import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/lazy-surfaces";
 import type { Model } from "@/components/model-selector";
 import { ChatTab, type ChatTabHandle, type ChatTabMeta } from "@/components/chat-tab";
+import type { NoteCreationSource, NoteSourceLink } from "@/lib/note-pages";
 import type { FileSourceFocus, FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import { ChatTabsBar, type ChatTabDescriptor } from "@/components/chat-tabs-bar";
 import { ProjectSwitcher } from "@/components/project-switcher";
@@ -102,7 +103,7 @@ function ProjectNavigation({
   const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
     { id: "files", label: t("Files"), hint: t("Browse and manage project files"), Icon: FilesIcon, color: "text-blue-500" },
     { id: "workflows", label: t("Workflows"), hint: t("Browse and launch scientific workflows"), Icon: WorkflowIcon, color: "text-violet-500" },
-    { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-amber-500" },
+    { id: "notebook", label: t("Notes"), hint: t("Browse this project’s note pages"), Icon: BookOpenIcon, color: "text-amber-500" },
     { id: "automation", label: t("Automated runs"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
 
@@ -483,6 +484,15 @@ function WorkspacePage({
     setShowCompute(destination === "compute");
     setShowAutomation(destination === "automation");
   }, []);
+  const [noteCreation, setNoteCreation] = useState<NoteCreationSource>();
+  const handleCreateNote = useCallback((source: NoteCreationSource) => {
+    setNoteCreation(source);
+    setRightPanelOpen(true);
+    selectProjectDestination("notebook");
+  }, [selectProjectDestination]);
+  const handleNoteCreationHandled = useCallback((source: NoteCreationSource) => {
+    setNoteCreation((pending) => pending === source ? undefined : pending);
+  }, []);
   const [computeScope, setComputeScope] = useState<ModalComputeScope>(
     () => initialState?.computeScope ?? "project",
   );
@@ -629,9 +639,6 @@ function WorkspacePage({
   // Drive sandbox polling cadence off the active tab's streaming state
   // (the live-poll mode used to be hard-wired to the single chat).
   const activeMeta = tabsMeta[activeTabId];
-  const notebookEntries = activeMeta?.notebookEntries ?? [];
-  const notebookStreaming = activeMeta?.isStreaming ?? false;
-  const subagentCompletions = activeMeta?.subagentCompletions ?? 0;
   const anyStreaming = useMemo(
     () => Object.values(tabsMeta).some((m) => m.isStreaming),
     [tabsMeta],
@@ -1012,17 +1019,16 @@ function WorkspacePage({
     void handle.sendQuick(ORGANIZE_FILES_PROMPT);
   }, [activeTabId]);
 
-  // ------------------------------------------------------------------
-  // Chat ↔ notebook deep links (join key: tool-call id === entry id).
-  // ------------------------------------------------------------------
-  const [notebookFocus, setNotebookFocus] = useState<{ id: string; token: number } | null>(null);
-  const handleViewInNotebook = useCallback((entryId: string) => {
-    setView("chat");
-    setShowCompute(false);
-    setShowAutomation(false);
-    setShowNotebook(true);
-    setNotebookFocus({ id: entryId, token: Date.now() });
-  }, []);
+  const handleOpenNoteSource = useCallback((source: NoteSourceLink) => {
+    if (source.kind === "file") {
+      handleFileSelect(source.path);
+      return;
+    }
+    if (!openTask(source.sessionId, t("Source task"), source.kind === "message" ? source.entryId : undefined)) return;
+    if (source.kind === "tool" || source.kind === "result") {
+      setFileSourceFocus({ step: { sessionId: source.sessionId, stepId: source.toolCallId }, nonce: ++sourceNonce.current, fromNote: true });
+    }
+  }, [handleFileSelect, openTask, t]);
   const [computeFocus, setComputeFocus] = useState<{ id: string; token: number } | null>(null);
   const handleViewCompute = useCallback((jobId?: string) => {
     setView("chat");
@@ -1042,27 +1048,12 @@ function WorkspacePage({
     window.addEventListener(OPEN_MODAL_JOB_EVENT, onOpenJob);
     return () => window.removeEventListener(OPEN_MODAL_JOB_EVENT, onOpenJob);
   }, [handleViewCompute, isActive]);
-  const handleNotebookJumpToChat = useCallback(
-    (entryId: string) => {
-      // Un-hide the chat column without toggling it closed, then scroll once
-      // display:none has lifted (scrollIntoView no-ops on hidden elements).
-      setChatNavigationOpen(true);
-      setTimeout(() => {
-        const ok = tabHandles.current.get(activeTabId)?.scrollToToolCall(entryId) ?? false;
-        if (!ok) toast.error("Couldn't find this entry in the chat transcript.");
-      }, 50);
-    },
-    [activeTabId],
-  );
 
   // ------------------------------------------------------------------
   // Header pieces — cost pill — read from the active tab.
   // ------------------------------------------------------------------
 
   const activeSessionId = activeMeta?.sessionId ?? null;
-  // A jump targets the chat it came from; a notebook view remounting under
-  // another chat must not replay it ("That notebook entry isn't in this chat").
-  useEffect(() => { setNotebookFocus(null); }, [activeSessionId]);
   const {
     activeCount: activeModalJobCount,
     loading: modalJobsLoading,
@@ -1359,14 +1350,14 @@ function WorkspacePage({
                 onComputeScopeChange={setComputeScope}
                 computeFocus={computeFocus}
                 onOpenComputeOutput={handleFileSelect}
-                notebookSessionId={activeSessionId}
-                notebookEntries={notebookEntries}
-                notebookStreaming={notebookStreaming}
-                notebookSubagentCompletions={subagentCompletions}
-                onOpenNotebookFile={handleFileSelect}
-                notebookFocus={notebookFocus}
-                onNotebookJumpToChat={handleNotebookJumpToChat}
-                onOpenNotebookEntry={handleViewInNotebook}
+                noteTask={activeSessionId && activeMeta?.userMessageCount ? {
+                  id: activeSessionId,
+                  title: tabs.find((tab) => tab.id === activeTabId)?.title || t("Source task"),
+                } : undefined}
+                noteCreation={noteCreation}
+                onNoteCreationHandled={handleNoteCreationHandled}
+                onCreateNote={handleCreateNote}
+                onOpenNoteSource={handleOpenNoteSource}
                 fileSourceInput={fileSourceInput}
                 onJumpToFileSource={jumpToFileSource}
                 onOpenSourceInput={handleOpenSourceInput}
@@ -1483,6 +1474,7 @@ function WorkspacePage({
                 tabId={t.id}
                 initialSessionId={t.sessionId ?? null}
                 onOpenTask={openTask}
+                onCreateNote={handleCreateNote}
                 focusResponse={responseFocus && responseFocus.sessionId === t.sessionId ? responseFocus : undefined}
                 fileSourceFocus={fileSourceFocus?.step.sessionId === t.sessionId ? fileSourceFocus : undefined}
                 initialWorkspaceState={tabWorkspaceStates[t.id]}
@@ -1501,7 +1493,6 @@ function WorkspacePage({
                 onMetaChange={handleMetaChange}
                 onWorkspaceStateChange={handleTabWorkspaceStateChange}
                 onSessionUnavailable={forgetTabSession}
-                onViewInNotebook={handleViewInNotebook}
                 onViewCompute={handleViewCompute}
                 onOpenFile={handleFileSelect}
               />

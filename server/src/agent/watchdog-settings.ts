@@ -172,9 +172,9 @@ do not report a confirmed omission. Raise only actionable, evidenced findings:
 - **Raw data touched.** Any write, move or delete under \`user_data/\` (uploads
   are read-only; work happens on copies).
 - **Silent data loss.** Rows or samples dropped, NAs filled or filtered without
-  the count being reported and logged in the lab notebook.
+  the count being reported in the task or its outputs.
 - **Unlogged parameter changes.** Thresholds, seeds, filters or model choices
-  changed without a notebook entry saying what changed and why.
+  changed without an explanation in the task or its outputs.
 - **Claims without evidence.** "Tests pass", "QC done", "results reproduced"
   without supporting execution/output evidence in the supplied delta or
   relevant accessible records. Authored claims and unchanged artifact hashes
@@ -189,7 +189,7 @@ do not report a confirmed omission. Raise only actionable, evidenced findings:
   relevant effect, or captions that overclaim. Assess the chart type, labels
   and scientific comparison; a nonzero axis baseline is not itself an error.
 - **Overwritten outputs.** Results regenerated in place with no version or note
-  when they underpin earlier notebook entries.
+  when they underpin earlier results.
 
 Prefer one precise finding with the exact file or command as evidence over a
 list of possibilities. Do not comment on code style.
@@ -207,7 +207,7 @@ function watchdogMdMarker(paths: ProjectPaths): string {
 /** Seed once and upgrade only known unchanged guidance; edits/deletions stick. */
 export function seedWatchdogGuidance(paths: ProjectPaths): boolean {
   const file = path.join(paths.sandbox, ".pi", "WATCHDOG.md");
-  const upgraded = upgradeSeededText(file, WATCHDOG_MD, ["0e17a2f84d1658eaccf1f9a0fe77ceed192a664f848f69d5958c64de18d12072"]);
+  const upgraded = upgradeSeededText(file, WATCHDOG_MD, ["9bdd036a63eb63df14e92e1e1f4641bd89589dcd3cd3f47f83804d884da2425d", "0e17a2f84d1658eaccf1f9a0fe77ceed192a664f848f69d5958c64de18d12072"]);
   if (fs.existsSync(watchdogMdMarker(paths))) return upgraded;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let written = upgraded;

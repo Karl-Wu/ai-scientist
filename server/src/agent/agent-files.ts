@@ -20,6 +20,7 @@ import { createRequire } from "node:module";
 import type { ProjectPaths } from "../projects.ts";
 import { KADY_PI_AGENT_DIR } from "../config.ts";
 import { seedSubagentResources } from "./subagent-resources.ts";
+import { SKILL_NAME_RE } from "./skills.ts";
 import { SUBAGENT_TYPES } from "./subagents.ts";
 import { piSettingsPath, readPiSettings, writePiSettings, type ToggleResult } from "./capability-state.ts";
 
@@ -61,6 +62,7 @@ export interface AgentFile {
   systemPromptMode?: "append" | "replace";
   inheritProjectContext?: boolean;
   inheritSkills?: boolean;
+  noteSkill?: string;
   /**
    * pi-subagents per-agent persistent memory: `<project>/.pi/agent-memory/<path>/MEMORY.md`
    * (scope project) or `~/.kady/pi-agent/agent-memory/<path>/MEMORY.md` (scope user),
@@ -269,6 +271,7 @@ const KNOWN_KEYS = new Set([
   "systemPromptMode",
   "inheritProjectContext",
   "inheritSkills",
+  "noteSkill",
   "memory",
 ]);
 
@@ -296,6 +299,7 @@ export function parseAgentMarkdown(
     systemPromptMode: mode === "append" || mode === "replace" ? mode : undefined,
     inheritProjectContext: bool(fm.inheritProjectContext),
     inheritSkills: bool(fm.inheritSkills),
+    noteSkill: scalar(fm.noteSkill),
     memory: parseAgentMemory(fm.memory),
     extra: Object.keys(extra).length > 0 ? extra : undefined,
     systemPrompt: body.trim(),
@@ -402,6 +406,7 @@ export function writeProjectAgent(
   if (patch.thinking && !THINKING_LEVELS.includes(patch.thinking as never)) {
     throw new Error(`thinking must be one of: ${THINKING_LEVELS.join(", ")}`);
   }
+  if (patch.noteSkill && !SKILL_NAME_RE.test(patch.noteSkill)) throw new Error("Invalid note skill name");
   const agent: AgentFile = { ...patch, name, source: "project" };
   const enabledFile = path.join(agentsDir(paths), `${name}.md`);
   const disabledFile = path.join(agentsDisabledDir(paths), `${name}.md`);
@@ -482,6 +487,7 @@ function rosterMarkdown(type: (typeof SUBAGENT_TYPES)[number]): string {
     systemPromptMode: "append",
     inheritProjectContext: true,
     inheritSkills: true,
+    noteSkill: type.noteSkill,
     systemPrompt: type.systemPrompt,
   });
 }

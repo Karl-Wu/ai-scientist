@@ -1,18 +1,4 @@
-/**
- * kady-notebook — a Pi package that gives CHILD pi processes the `notebook`
- * tool, so subagents can log lab-notebook entries. The parent (in-process)
- * session already has its own notebook tool, so this package registers nothing
- * there: it self-gates on PI_SUBAGENT_CHILD (set only in child processes) to
- * avoid a duplicate `notebook` tool name in the parent.
- *
- * The child tool does NOT write files. A child's tool call is recorded in its
- * session JSONL; the parent harvests it on completion (see
- * server/src/agent/notebook-harvest.ts) and is the single writer.
- *
- * Schema mirrors the in-process tool (server/src/agent/notebook.ts). It is kept
- * self-contained here because a package is loaded standalone by the child pi
- * process; server/test/notebook-package.test.ts asserts field parity.
- */
+/** Read-only notebook search for child Pi sessions. The lead registers its own search tool. */
 import { Type } from "typebox";
 import { NotebookExecutionSchema } from "./execution-schema.ts";
 import { AnalysisPlanSchema, NotebookResultsSchema } from "./plan-schema.ts";
@@ -133,13 +119,9 @@ export const notebookChildTool: ToolDefinition<typeof NotebookParams> = {
 };
 
 export default function (pi: ExtensionAPI): void {
-  // Parent (in-process) session loads this package too, but already has its own
-  // in-process notebook tool — register only in child processes to avoid a
-  // duplicate tool name.
   if (!process.env.PI_SUBAGENT_CHILD) return;
   registerChildNotebook(pi);
 }
 export function registerChildNotebook(pi: ExtensionAPI): void {
-  pi.registerTool(notebookChildTool);
   pi.registerTool(notebookSearchTool(callMemoryApi));
 }

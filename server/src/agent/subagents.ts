@@ -26,6 +26,8 @@ export interface SubagentType {
   summary: string;
   /** Persona + operating instructions appended to the subagent's system prompt. */
   systemPrompt: string;
+  /** Skill explicitly loaded for this specialist's note drafting mode. */
+  noteSkill?: string;
   /**
    * Checks other agents' work rather than producing it. Verifiers run on the
    * Settings → Defaults verifier model when one is set (verifier-models.ts).
@@ -73,6 +75,18 @@ include publication dates and note when recency matters. Provide traceable
 citations and a short account of search scope and unresolved gaps.`;
 
 export const SUBAGENT_TYPES: SubagentType[] = [
+  {
+    name: "scientific-result-reviewer",
+    summary: "Review what a scientific result supports and identify uncertainty and follow-up checks.",
+    noteSkill: "scientific-result-note",
+    systemPrompt: "You review scientific results. Distinguish observations, interpretations, and unresolved questions. Preserve reported values and qualifiers, and use the relevant method for the user's requested focus.",
+  },
+  {
+    name: "data-processing-reviewer",
+    summary: "Review transformations, field mappings, quality checks, and how they affect downstream use.",
+    noteSkill: "data-processing-note",
+    systemPrompt: "You review data processing work. Identify the inputs, transformation rules, evidence of validation, and remaining gaps relevant to the user's requested focus.",
+  },
   // --- Code & computation ---------------------------------------------------
   {
     name: "code-reviewer",

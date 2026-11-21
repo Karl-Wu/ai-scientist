@@ -16,6 +16,8 @@ it("lists the saved prompt during a slow first answer and preserves it after an 
   const project = createProject({ name: "First prompt history" });
   const session = await createSession(project.id, resolvePaths(project.id));
   const id = session.sessionId;
+  expect(session.getActiveToolNames()).toContain("scientific_result");
+  expect(session.getActiveToolNames()).not.toContain("notebook");
   const headers = { "X-Project-Id": project.id };
   const list = async () => (await app.inject({ method: "GET", url: "/sessions", headers })).json();
   const timeline = async () => (await app.inject({ method: "GET", url: `/sessions/${id}/timeline`, headers })).json();
@@ -86,7 +88,7 @@ it("lists the saved prompt during a slow first answer and preserves it after an 
   expect(await list()).toEqual([expect.objectContaining({ id, visibleInHistory: true, isRunning: false })]);
   expect((await timeline()).events.at(-1)).toMatchObject({ type: "run_ended", payload: { outcome: "failed" } });
   const history = (await app.inject({ method: "GET", url: `/sessions/${id}/history`, headers })).json();
-  expect(history.messages[0]).toMatchObject({ role: "user", content: "Analyze my data" });
+  expect(history.messages[0]).toMatchObject({ role: "user", content: "Analyze my data", entryId: expect.any(String) });
   expect(history.messages[1].frames).toContainEqual({
     type: "thinking_delta", delta: summary, reasoningStart: true,
   });

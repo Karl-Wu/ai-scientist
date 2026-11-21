@@ -230,6 +230,7 @@ export function toHistory(file: string, sandboxRoot = ""): HistoryMessage[] {
       if ((!text && images.length === 0) || (images.length === 0 && isParentWake(text))) continue;
       out.push({
         role: "user",
+        ...(row.id ? { entryId: row.id } : {}),
         content: text,
         ...(images.length > 0 ? { images } : {}),
         timestamp: m.timestamp,

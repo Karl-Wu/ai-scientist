@@ -21,13 +21,11 @@ afterEach(() => {
 });
 
 describe("kady-notebook package", () => {
-  it("registers the notebook tool only in a child process", () => {
+  it("registers only read-only notebook search in a child process", () => {
     process.env.PI_SUBAGENT_CHILD = "1";
     const child = fakePi();
     factory(child.api as never);
-    expect(child.registered).toHaveLength(2);
-    expect((child.registered[1] as { name: string }).name).toBe("notebook_search");
-    expect((child.registered[0] as { name: string }).name).toBe("notebook");
+    expect(child.registered.map((tool) => (tool as { name: string }).name)).toEqual(["notebook_search"]);
 
     delete process.env.PI_SUBAGENT_CHILD;
     const parent = fakePi();

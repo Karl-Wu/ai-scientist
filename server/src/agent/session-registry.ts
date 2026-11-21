@@ -37,9 +37,9 @@ import { defaultModel, pruneStaleOpenRouterCatalog, resolveModel, setupModelRunt
 import { canonicalProviderId } from "./provider-catalog.ts";
 import { seedAgentFiles } from "./agent-files.ts";
 import { makeInterviewTool } from "./interview.ts";
-import { makeNotebookTool } from "./notebook.ts";
 import { notebookSearchTool } from "../../pi-packages/kady-notebook/memory-tool.ts";
 import { executeMemoryRecall } from "./notebook-memory.ts";
+import { makeNoteReadTool } from "../notes/read-tool.ts";
 import { makeScientificResultTool } from "./scientific-result.ts";
 import { clearSessionCompute, makeModalTools } from "./modal-tool.ts";
 import { makeCodemodeModelBudgetExtension, makeImageTool } from "./image-tool.ts";
@@ -59,7 +59,6 @@ import { ensureWebAccess } from "./web-access-bridge.ts";
 import {
   seedNotebookPackage,
   seedBuiltinAgentNotebookTools,
-  makeSubagentNotebookExtension,
 } from "./notebook-bridge.ts";
 import { makeSubagentProvenanceExtension } from "../provenance/bridge.ts";
 import {
@@ -354,11 +353,10 @@ async function build(
   // sessions in a detached runner that loads the sandbox's ambient packages)
   // get the web tools (web-access-bridge.ts explains why children need this).
   ensureWebAccess(paths);
-  // Reference the kady-notebook package so child sessions get the notebook
-  // tool (sandbox trust is already handled by ensureWebAccess above).
+  // The notebook package supplies read-only historical search to specialists.
   seedNotebookPackage(paths);
   // Builtin pi-subagents specialists pin a tools allowlist that would filter
-  // the notebook tool out of their child processes — extend it via overrides.
+  // notebook search out of their child processes — extend it via overrides.
   seedBuiltinAgentNotebookTools(paths);
   // Child-only localhost bridge for the same durable project-scoped Modal
   // jobs. Builtin allowlists are extended only when they retain our generated
@@ -432,10 +430,6 @@ async function build(
       makeScientificCompactionExtension(projectId, () => holder.session?.sessionId ?? "", {
         readChildStatus: async () => subagentHost(projectId, holder.session?.sessionId ?? "").rpc("status"),
       }),
-      // Harvest notebook entries the roster's subagents logged (child pi
-      // processes get the notebook tool via seedNotebookPackage above) into
-      // the parent notebook — the parent is the single writer.
-      makeSubagentNotebookExtension(projectId, () => holder.session?.sessionId ?? ""),
       // Reconstruct provenance for the child's tool calls from its session file
       // and append it to the parent's log. Needs no tool inside the child — the
       // session file is the record, which is what makes it unauthorable.
@@ -470,8 +464,6 @@ async function build(
   // The interview tool blocks mid-run on answers posted to the HTTP API; it
   // reads the live sessionId through the same holder as the ledger extension.
   const interviewTool = makeInterviewTool(projectId, () => holder.session?.sessionId ?? "");
-  // Non-blocking lab-notebook tool: logs the agent's own narrative entries.
-  const notebookTool = makeNotebookTool(projectId, () => holder.session?.sessionId ?? "");
   // Typed presentation layer for compact scientific results and artifact links.
   const scientificResultTool = makeScientificResultTool(projectId);
   const pdfAnnotationTools = makePdfAnnotationTools(projectId);
@@ -505,8 +497,8 @@ async function build(
     excludeTools: LEAD_EXCLUDED_TOOLS,
     customTools: [
       interviewTool,
-      notebookTool,
       notebookSearchTool((params) => executeMemoryRecall(projectId, params)),
+      makeNoteReadTool(projectId),
       scientificResultTool,
       ...pdfAnnotationTools,
       ...modalTools,

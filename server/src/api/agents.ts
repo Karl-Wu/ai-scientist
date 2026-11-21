@@ -56,6 +56,8 @@ function patchFromBody(body: Record<string, unknown>): AgentFilePatch | string {
     return `systemPromptMode must be "append" or "replace"`;
   }
   const boolOrUndef = (v: unknown) => (v === undefined || v === null ? undefined : Boolean(v));
+  const noteSkill = body.noteSkill;
+  if (noteSkill !== undefined && noteSkill !== null && typeof noteSkill !== "string") return "noteSkill must be a skill name";
   let extra: Record<string, unknown> | undefined;
   if (body.extra && typeof body.extra === "object" && !Array.isArray(body.extra)) {
     extra = {};
@@ -83,6 +85,7 @@ function patchFromBody(body: Record<string, unknown>): AgentFilePatch | string {
     systemPromptMode: mode as AgentFilePatch["systemPromptMode"],
     inheritProjectContext: boolOrUndef(body.inheritProjectContext),
     inheritSkills: boolOrUndef(body.inheritSkills),
+    noteSkill: noteSkill?.trim() || undefined,
     extra,
   };
 }
