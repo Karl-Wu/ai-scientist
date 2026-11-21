@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronRightIcon, FileTextIcon, LinkIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronRightIcon, FileTextIcon, LinkIcon, ListFilterIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   NOTE_INSTRUCTION_MAX_CHARS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
@@ -19,8 +20,9 @@ import { relativeTime } from "@/lib/locale-time";
 import { cn } from "@/lib/utils";
 
 const selectClass = "h-8 max-w-full rounded-md border bg-background px-2 text-xs";
-const listSelectClass = `${selectClass} min-w-0 flex-1 truncate`;
+const filterSelectClass = `${selectClass} block w-full min-w-0 truncate`;
 const noteListWidth = "mx-auto w-full max-w-xl @min-[54rem]/notes:max-w-5xl";
+const noteReadingWidth = "mx-auto w-full max-w-2xl";
 
 function newNoteKey() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -57,7 +59,7 @@ function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
 
   return <li className="@container/note-card flex min-w-0 flex-col rounded-xl border bg-card text-card-foreground transition-colors hover:border-foreground/20">
     <button type="button" aria-label={page.title} aria-describedby={description}
-      className="grid w-full min-w-0 gap-1 rounded-t-xl px-3 pb-2 pt-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
+      className="grid w-full min-w-0 gap-1 rounded-t-xl px-3 pb-1 pt-2.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
       onClick={onOpen}>
       <span className="flex min-w-0 items-start gap-2">
         <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug">{page.title}</span>
@@ -68,15 +70,15 @@ function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
       </span>
       {summary && <span id={`${cardId}-summary`} className="line-clamp-2 break-words text-[13px] leading-5 text-muted-foreground">{summary}</span>}
     </button>
-    <div className={cn("mx-3 mt-auto grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-t border-border/70 py-1.5 text-xs text-muted-foreground",
-      source && "@min-[25rem]/note-card:grid-cols-[auto_minmax(0,1fr)_auto]")}>
-      <span id={`${cardId}-type`} className="col-start-1 row-start-1 truncate font-medium" title={t(NOTE_TYPES[page.type].label)}>{t(NOTE_TYPES[page.type].label)}</span>
+    <div className={cn("mx-3 mt-auto grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 pb-2 text-xs text-muted-foreground",
+      source && "@min-[20rem]/note-card:grid-cols-[auto_minmax(0,1fr)_auto]")}>
+      <span id={`${cardId}-type`} className="col-start-1 row-start-1 truncate" title={t(NOTE_TYPES[page.type].label)}>{t(NOTE_TYPES[page.type].label)}</span>
       {time && <time id={`${cardId}-time`} dateTime={new Date(page.savedAt).toISOString()}
-        className={cn("col-start-2 row-start-1 justify-self-end whitespace-nowrap tabular-nums", source && "@min-[25rem]/note-card:col-start-3")}
+        className={cn("col-start-2 row-start-1 justify-self-end whitespace-nowrap tabular-nums", source && "@min-[20rem]/note-card:col-start-3")}
         title={t("Updated {date}", { date: new Date(page.savedAt).toLocaleString(locale) })}>{time}</time>}
-      {source && SourceIcon && <div className="col-span-2 row-start-2 flex min-w-0 items-center gap-1 @min-[25rem]/note-card:col-span-1 @min-[25rem]/note-card:col-start-2 @min-[25rem]/note-card:row-start-1">
+      {source && SourceIcon && <div className="col-span-2 row-start-2 flex min-w-0 items-center gap-1 @min-[20rem]/note-card:col-span-1 @min-[20rem]/note-card:col-start-2 @min-[20rem]/note-card:row-start-1">
         <button type="button" onClick={() => onOpenSource(source)}
-          className="flex min-w-0 items-center gap-1 rounded px-1 py-1 text-left text-blue-700 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring dark:text-blue-300"
+          className="flex min-h-6 min-w-0 items-center gap-1 rounded px-1 text-left text-blue-700 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring dark:text-blue-300"
           title={"path" in source ? source.path : source.label}>
           <SourceIcon aria-hidden="true" className="size-3 shrink-0" />
           <span className="min-w-0 truncate">{sourceType} · {source.label}
@@ -174,6 +176,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   const organizers = [...new Set(pages?.map((page) => page.organizer))];
   const availableTypes = useMemo(() => noteTypesIn(pages), [pages]);
   const activeType = type && availableTypes.includes(type) ? type : "";
+  const filterCount = [activeType, task, organizer].filter(Boolean).length;
   const visible = (search ? matches : pages)?.filter((page) => (!activeType || page.type === activeType)
     && (!task || page.tasks.includes(task))
     && (!organizer || page.organizer === organizer));
@@ -200,34 +203,50 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
         <div className={cn(noteListWidth, "space-y-2.5")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="flex items-center gap-2 font-semibold"><BookOpenIcon aria-hidden="true" className="size-4 text-amber-600" />{t("Notes")}</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><BookOpenIcon aria-hidden="true" className="size-4 text-amber-600" />{t("Notes")}</h2>
               {visible && <span className="text-xs text-muted-foreground">
                 {visible.length === 1 ? t("1 page") : t("{count} pages", { count: visible.length })}
               </span>}
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => setCreating({ key: newNoteKey() })}>
-              <PlusIcon aria-hidden="true" />{t("New note page")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {Boolean(pages?.length) && <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    <ListFilterIcon aria-hidden="true" />{t("Filters")}
+                    {filterCount > 0 && <> <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">{filterCount}</span></>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent aria-label={t("Filters")} align="end" className="grid max-w-[calc(100vw-1.5rem)] gap-3 p-3">
+                  {availableTypes.length > 0 && <label className="block space-y-1 text-xs font-medium">{t("Note type")}
+                    <select className={filterSelectClass} value={activeType} onChange={(event) => setType(event.target.value as NoteType | "")}>
+                      <option value="">{t("All note types")}</option>
+                      {availableTypes.map((id) => <option key={id} value={id}>{t(NOTE_TYPES[id].label)}</option>)}
+                    </select>
+                  </label>}
+                  {taskIds.length > 0 && <label className="block space-y-1 text-xs font-medium">{t("Source task")}
+                    <select className={filterSelectClass} value={task} title={task ? tasks[task] ?? task : undefined} onChange={(event) => setTask(event.target.value)}>
+                      <option value="">{t("All tasks")}</option>
+                      {taskIds.map((id) => <option key={id} value={id}>{tasks[id] ?? id}</option>)}
+                    </select>
+                  </label>}
+                  <label className="block space-y-1 text-xs font-medium">{t("Organizer")}
+                    <select className={filterSelectClass} value={organizer} onChange={(event) => setOrganizer(event.target.value)}>
+                      <option value="">{t("All organizers")}</option>
+                      {organizers.map((id) => <option key={id} value={id}>{t(id)}</option>)}
+                    </select>
+                  </label>
+                  {filterCount > 0 && <Button type="button" variant="ghost" size="sm" className="justify-self-end"
+                    onClick={() => { setType(""); setTask(""); setOrganizer(""); }}>{t("Clear filters")}</Button>}
+                </PopoverContent>
+              </Popover>}
+              <Button type="button" size="sm" variant="outline" onClick={() => setCreating({ key: newNoteKey() })}>
+                <PlusIcon aria-hidden="true" />{t("New note page")}
+              </Button>
+            </div>
           </div>
-          {Boolean(pages?.length) && <div className="grid min-w-0 gap-1.5 @min-[30rem]/notes:grid-cols-[minmax(7rem,1fr)_minmax(0,2fr)]">
-            <div className="relative min-w-0">
-              <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input className="h-8 min-w-0 ps-8" aria-label={t("Search note pages")} placeholder={t("Search note pages")} value={query} maxLength={300} onChange={(event) => { if (event.target.value.trim() !== search) setMatches(undefined); setError(false); setQuery(event.target.value); }} />
-            </div>
-            <div className="flex min-w-0 gap-1.5">
-              {availableTypes.length > 0 && <select className={listSelectClass} aria-label={t("Note type")} value={activeType} onChange={(event) => setType(event.target.value as NoteType | "")}>
-                <option value="">{t("All note types")}</option>
-                {availableTypes.map((id) => <option key={id} value={id}>{t(NOTE_TYPES[id].label)}</option>)}
-              </select>}
-              {taskIds.length > 0 && <select className={listSelectClass} aria-label={t("Source task")} value={task} title={task ? tasks[task] ?? task : undefined} onChange={(event) => setTask(event.target.value)}>
-                <option value="">{t("All tasks")}</option>
-                {taskIds.map((id) => <option key={id} value={id}>{tasks[id] ?? id}</option>)}
-              </select>}
-              <select className={listSelectClass} aria-label={t("Organizer")} value={organizer} onChange={(event) => setOrganizer(event.target.value)}>
-                <option value="">{t("All organizers")}</option>
-                {organizers.map((id) => <option key={id} value={id}>{t(id)}</option>)}
-              </select>
-            </div>
+          {Boolean(pages?.length) && <div className="relative min-w-0">
+            <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-8 min-w-0 ps-8" aria-label={t("Search note pages")} placeholder={t("Search note pages")} value={query} maxLength={300} onChange={(event) => { if (event.target.value.trim() !== search) setMatches(undefined); setError(false); setQuery(event.target.value); }} />
           </div>}
         </div>
       </header>
@@ -238,7 +257,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
           : !pages.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t("No note pages yet")}</p>
           : !visible ? <p role="status" className="text-sm text-muted-foreground">{t("Searching notes…")}</p>
           : !visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t("No matching note pages")}</p>
-          : <ul className={cn(noteListWidth, "grid grid-cols-1 gap-3 @min-[54rem]/notes:grid-cols-2")}>
+          : <ul className={cn(noteListWidth, "grid grid-cols-1 gap-2.5 @min-[54rem]/notes:grid-cols-2")}>
             {visible.map((page) => <NoteListCard key={page.id} page={page} onOpenSource={onOpenSource}
               onOpen={() => setSelected({ id: page.id })} onOpenSources={() => setSelected({ id: page.id, focusSources: true })} />)}
           </ul>}
@@ -359,98 +378,104 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
   }
 
   const editor = (
-    <section className="flex min-h-0 flex-1 flex-col" aria-label={t("New note page")}>
-      <header className="shrink-0 border-b px-4 py-3">
-        {dialog ? <DialogTitle className="text-base leading-normal">{t("New note page")}</DialogTitle>
-          : <h2 className="font-semibold">{t("New note page")}</h2>}
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t("New note page")}>
+      <header className="shrink-0 border-b px-4 py-2.5">
+        {dialog ? <DialogTitle className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</DialogTitle>
+          : <h2 className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</h2>}
       </header>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-          <fieldset className="min-w-0 space-y-3" disabled={busy}>
-            <label className="block space-y-1 text-sm">{t("Note title")}
-              <Input required autoFocus maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
-            </label>
-            <label className="block space-y-1 text-sm">{t("Current summary")}
-              <Textarea rows={6} maxLength={32000} placeholder={t("Markdown supported")} value={summary}
-                onChange={(event) => setSummary(event.target.value)} />
-            </label>
-          </fieldset>
-          <section className="space-y-3 rounded-md border p-3" aria-label={t("Note assistant")}>
-            <div className="space-y-2">
-              <label className="block space-y-1 text-xs font-medium">{t("Note expert")}
-                <select className={`${selectClass} block w-full`} disabled={busy} value={expert} onChange={(event) => {
-                  setExpert(event.target.value);
-                  setSuggestion(undefined);
-                  setDraftError(undefined);
-                }}>
-                  <option value="">{t("General assistant")}</option>
-                  {expert && !selectedExpert && <option value={expert} disabled>{t(expert)} · {t("Unavailable")}</option>}
-                  {experts.map((option) => <option key={option.name} value={option.name} disabled={!option.available}>
-                    {t(option.name)}{!option.available ? ` · ${t("Unavailable")}` : ""}
-                  </option>)}
-                </select>
+      <form className="flex min-h-0 min-w-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <div className={cn(noteReadingWidth, "space-y-4")}>
+            <fieldset className="min-w-0 space-y-3" disabled={busy}>
+              <label className="block space-y-1 text-sm">{t("Note title")}
+                <Input required autoFocus maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} />
               </label>
-              {selectedExpert && <p className="text-xs text-muted-foreground">{t("Drafting skill: {skill}", { skill: selectedExpert.skill })}</p>}
-              {expertListError && <p className="text-xs text-muted-foreground">{t("Could not load note experts. You can still use the general assistant.")}</p>}
-              <label className="block space-y-1 text-xs font-medium">{t("Instructions for the expert (optional)")}
-                <Textarea disabled={busy} rows={2} maxLength={NOTE_INSTRUCTION_MAX_CHARS} value={instructions}
-                  placeholder={t("For example, focus on the limitations and suggest one follow-up check.")}
-                  onChange={(event) => setInstructions(event.target.value)} />
+              <label className="block space-y-1 text-sm">{t("Current summary")}
+                <Textarea rows={6} maxLength={32000} placeholder={t("Markdown supported")} value={summary}
+                  onChange={(event) => setSummary(event.target.value)} />
               </label>
-            </div>
-            <div className="space-y-1">
-              <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithAssistant()}>
-                <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : suggestion ? "Redraft" : "Draft with assistant")}
-              </Button>
-              <p className="text-xs text-muted-foreground">{t(source?.anchor.kind === "file"
-                ? "The assistant sends your input and a text excerpt when available. Add a description for other file formats."
-                : source ? "The assistant sends your input and an excerpt of the selected source to the model."
-                : "The assistant sends your input and excerpts from the referenced task to the model.")}</p>
-            </div>
-            {draftError && <p role="alert" className="text-sm text-destructive">{t(draftError)}</p>}
-            {suggestion && <div className="space-y-2 border-t pt-3">
-              <h3 className="text-sm font-medium">{t("Suggested draft")}</h3>
-              {suggestion.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
-              {suggestion.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
-              <div className="max-h-60 space-y-1 overflow-auto rounded-md bg-muted/50 p-3 text-sm">
-                <p className="break-words font-medium">{suggestion.title}</p>
-                <p className="whitespace-pre-wrap break-words">{suggestion.summary}</p>
+            </fieldset>
+            <section className="space-y-3 rounded-md border p-3" aria-label={t("Note assistant")}>
+              <div className="space-y-2">
+                <label className="block space-y-1 text-xs font-medium">{t("Note expert")}
+                  <select className={`${selectClass} block w-full`} disabled={busy} value={expert} onChange={(event) => {
+                    setExpert(event.target.value);
+                    setSuggestion(undefined);
+                    setDraftError(undefined);
+                  }}>
+                    <option value="">{t("General assistant")}</option>
+                    {expert && !selectedExpert && <option value={expert} disabled>{t(expert)} · {t("Unavailable")}</option>}
+                    {experts.map((option) => <option key={option.name} value={option.name} disabled={!option.available}>
+                      {t(option.name)}{!option.available ? ` · ${t("Unavailable")}` : ""}
+                    </option>)}
+                  </select>
+                </label>
+                {selectedExpert && <p className="text-xs text-muted-foreground">{t("Drafting skill: {skill}", { skill: selectedExpert.skill })}</p>}
+                {expertListError && <p className="text-xs text-muted-foreground">{t("Could not load note experts. You can still use the general assistant.")}</p>}
+                <label className="block space-y-1 text-xs font-medium">{t("Instructions for the expert (optional)")}
+                  <Textarea disabled={busy} rows={2} maxLength={NOTE_INSTRUCTION_MAX_CHARS} value={instructions}
+                    placeholder={t("For example, focus on the limitations and suggest one follow-up check.")}
+                    onChange={(event) => setInstructions(event.target.value)} />
+                </label>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
-                  setTitle(suggestion.title);
-                  setSummary(suggestion.summary);
-                  setDraftCredit(suggestion.draftCredit);
-                  setSuggestion(undefined);
-                }}>{t("Apply draft")}</Button>
-                <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSuggestion(undefined)}>{t("Dismiss")}</Button>
+              <div className="space-y-1">
+                <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithAssistant()}>
+                  <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : suggestion ? "Redraft" : "Draft with assistant")}
+                </Button>
+                <p className="text-xs text-muted-foreground">{t(source?.anchor.kind === "file"
+                  ? "The assistant sends your input and a text excerpt when available. Add a description for other file formats."
+                  : source ? "The assistant sends your input and an excerpt of the selected source to the model."
+                  : "The assistant sends your input and excerpts from the referenced task to the model.")}</p>
               </div>
-            </div>}
-          </section>
-          <fieldset className="min-w-0 space-y-2 border-t pt-3" disabled={busy} aria-label={t("Sources")}>
-            <h3 className="text-sm font-medium">{t("Sources")}</h3>
-            {source ? <p className="break-words rounded-md border p-2 text-xs">
-              <span className="text-muted-foreground">{t(source.anchor.kind === "message" ? "Answer" : NOTE_SOURCE_LABELS[source.anchor.kind])} · </span>
-              {source.anchor.kind === "file" ? source.anchor.path : source.title}
-            </p> : sourceTask ? <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={includeTask}
-                onChange={(event) => {
-                  setIncludeTask(event.target.checked);
-                  setSuggestion(undefined);
-                }} />
-              <span className="min-w-0">
-                {t("Reference current task")}
-                <span className="mt-0.5 block break-words text-xs text-muted-foreground">{sourceTask.title}</span>
-              </span>
-            </label> : <p className="text-xs text-muted-foreground">{t("No active task to reference")}</p>}
-          </fieldset>
-          {error && <p role="alert" className="text-sm text-destructive">{t(error)}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" disabled={busy || !title.trim()}>{t("Save note page")}</Button>
-            <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onCancel}>{t("Cancel")}</Button>
+              {draftError && <p role="alert" className="text-sm text-destructive">{t(draftError)}</p>}
+              {suggestion && <div className="space-y-2 border-t pt-3">
+                <h3 className="text-sm font-medium">{t("Suggested draft")}</h3>
+                {suggestion.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
+                {suggestion.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
+                <div className="max-h-60 space-y-1 overflow-auto rounded-md bg-muted/50 p-3 text-sm">
+                  <p className="break-words font-medium">{suggestion.title}</p>
+                  <p className="whitespace-pre-wrap break-words">{suggestion.summary}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+                    setTitle(suggestion.title);
+                    setSummary(suggestion.summary);
+                    setDraftCredit(suggestion.draftCredit);
+                    setSuggestion(undefined);
+                  }}>{t("Apply draft")}</Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSuggestion(undefined)}>{t("Dismiss")}</Button>
+                </div>
+              </div>}
+            </section>
+            <fieldset className="min-w-0 space-y-2 border-t pt-3" disabled={busy} aria-label={t("Sources")}>
+              <h3 className="text-sm font-medium">{t("Sources")}</h3>
+              {source ? <p className="break-words rounded-md border p-2 text-xs">
+                <span className="text-muted-foreground">{t(source.anchor.kind === "message" ? "Answer" : NOTE_SOURCE_LABELS[source.anchor.kind])} · </span>
+                {source.anchor.kind === "file" ? source.anchor.path : source.title}
+              </p> : sourceTask ? <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={includeTask}
+                  onChange={(event) => {
+                    setIncludeTask(event.target.checked);
+                    setSuggestion(undefined);
+                  }} />
+                <span className="min-w-0">
+                  {t("Reference current task")}
+                  <span className="mt-0.5 block break-words text-xs text-muted-foreground">{sourceTask.title}</span>
+                </span>
+              </label> : <p className="text-xs text-muted-foreground">{t("No active task to reference")}</p>}
+            </fieldset>
           </div>
-        </form>
-      </div>
+        </div>
+        <footer className="shrink-0 border-t bg-background px-4 py-2.5">
+          <div className={cn(noteReadingWidth, "space-y-2")}>
+            {error && <p role="alert" className="text-sm text-destructive">{t(error)}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onCancel}>{t("Cancel")}</Button>
+              <Button type="submit" size="sm" disabled={busy || !title.trim()}>{t("Save note page")}</Button>
+            </div>
+          </div>
+        </footer>
+      </form>
     </section>
   );
 
@@ -539,9 +564,11 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b px-3 py-2">
-        <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onBack}><ArrowLeftIcon aria-hidden="true" />{t("Notes")}</Button>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="shrink-0 border-b px-4 py-2.5">
+        <div className={noteReadingWidth}>
+          <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onBack}><ArrowLeftIcon aria-hidden="true" />{t("Notes")}</Button>
+        </div>
       </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {error && <div role="alert" className="mb-3 flex flex-wrap items-center gap-2 text-sm text-destructive">
@@ -549,7 +576,7 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
           <Button type="button" variant="outline" size="sm" onClick={() => { setEditing(undefined); setRevisionNumber(undefined); setReload((value) => value + 1); }}>{t("Reload")}</Button>
         </div>}
         {!page || !revision || !definition ? (!error && <p role="status" className="text-sm">{t("Loading notes…")}</p>) : (
-          <article className="space-y-4">
+          <article className={cn(noteReadingWidth, "space-y-4")}>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{definition.group && `${t(definition.group)} · `}{t(definition.label)}</span>
               <span>{t(NOTE_STATUS_LABELS[revision.status])}</span>
@@ -576,7 +603,7 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
               <h2 className="break-words text-lg font-semibold">{revision.title}</h2>
               <section className="space-y-2">
                 <h3 className="text-sm font-medium">{t("Current summary")}</h3>
-                {revision.summary ? <MessageResponse className="break-words text-sm">{revision.summary}</MessageResponse>
+                {revision.summary ? <MessageResponse className="break-words text-sm [&_:is(h1,h2)]:mt-4 [&_:is(h1,h2)]:mb-1.5 [&_:is(h1,h2)]:text-base [&_:is(h3,h4,h5,h6)]:mt-3 [&_:is(h3,h4,h5,h6)]:mb-1 [&_:is(h3,h4,h5,h6)]:text-sm [&_:is(ol,ul)]:ps-5">{revision.summary}</MessageResponse>
                   : <p className="text-xs text-muted-foreground">{t("No summary yet")}</p>}
                 {Object.values(revision.fields).some(Boolean) && <dl className="space-y-2 text-sm">
                   {Object.entries(definition.fields).filter(([key]) => revision.fields[key]).map(([key, label]) => <div key={key}>
