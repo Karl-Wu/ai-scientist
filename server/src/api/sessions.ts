@@ -47,12 +47,7 @@ import { withNotebookPlanHistory } from "../agent/notebook-research.ts";
 import { notebookToMarkdown } from "../agent/notebook-export.ts";
 import { snapshotChat } from "../agent/chat-snapshot.ts";
 import { buildNotebookZip } from "../agent/notebook-zip.ts";
-import {
-  normalizeNotebookAnnotations,
-  readNotebookAnnotations,
-  writeNotebookAnnotations,
-} from "../agent/notebook-annotations.ts";
-import { MethodsDraftError, runMethodsDraft } from "../agent/methods-draft.ts";
+import { readNotebookAnnotations } from "../agent/notebook-annotations.ts";
 import { runBroker, type RunHandle } from "../agent/run-broker.ts";
 import { readTaskTimeline, TASK_TIMELINE_MAX_PAGE } from "../agent/task-event-log.ts";
 import { deferSessionMessages } from "../agent/session-message-gate.ts";
@@ -369,66 +364,6 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
         if (err instanceof SandboxError) {
           reply.code(err.statusCode);
           return { detail: err.message };
-        }
-        throw err;
-      }
-    },
-  );
-
-  app.put<{ Params: { id: string }; Body: unknown }>(
-    "/sessions/:id/notebook/annotations",
-    async (req, reply) => {
-      try {
-        const projectId = currentProjectId();
-        const { mtime, etag } = readNotebookAnnotations(req.params.id, projectId);
-        const ifMatch = req.headers["if-match"] ? String(req.headers["if-match"]) : null;
-        const ifUnmodifiedSince = req.headers["if-unmodified-since"];
-        if (ifMatch) {
-          // Exact check. The Last-Modified fallback below can only compare
-          // whole seconds, so a same-second edit would slip through it.
-          if (ifMatch === "*" ? !etag : ifMatch !== etag) {
-            reply.code(412);
-            return { detail: "Sidecar modified; re-read and retry" };
-          }
-        } else if (ifUnmodifiedSince && mtime) {
-          const since = new Date(String(ifUnmodifiedSince)).getTime();
-          if (
-            !Number.isNaN(since) &&
-            Math.floor(mtime.getTime() / 1000) > Math.floor(since / 1000)
-          ) {
-            reply.code(412);
-            return { detail: "Sidecar modified; re-read and retry" };
-          }
-        }
-        const doc = normalizeNotebookAnnotations(req.body);
-        const saved = writeNotebookAnnotations(req.params.id, doc, projectId);
-        touchProject(projectId);
-        reply.header("Last-Modified", saved.mtime.toUTCString());
-        if (saved.etag) reply.header("ETag", saved.etag);
-        return { saved: req.params.id, count: doc.annotations.length };
-      } catch (err) {
-        if (err instanceof SandboxError) {
-          reply.code(err.statusCode);
-          return { detail: err.message };
-        }
-        throw err;
-      }
-    },
-  );
-
-  app.post<{ Params: { id: string }; Body: { model?: string } | null }>(
-    "/sessions/:id/notebook/methods-draft",
-    async (req, reply) => {
-      try {
-        return await runMethodsDraft(req.params.id, currentProjectId(), {
-          model: req.body?.model,
-        });
-      } catch (err) {
-        if (err instanceof MethodsDraftError) {
-          reply.code(err.status);
-          return err.status === 402
-            ? { detail: "budget-exceeded", message: err.message }
-            : { detail: "methods-draft-failed", message: err.message };
         }
         throw err;
       }

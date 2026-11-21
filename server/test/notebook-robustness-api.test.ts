@@ -25,6 +25,7 @@ const draft = { title: "Sensitivity", script: "script.py", inputs: ["data.csv"],
 function inject(url: string, body?: object, header = project) {
   return withActiveProject(project, () => app.inject({ method: body === undefined ? "GET" : "POST", url, headers: { "x-project-id": header }, ...(body === undefined ? {} : { payload: body }) }));
 }
+const legacyPreview = () => service.preview(project, source, { draft, planId, expectedPlanHead: head });
 beforeEach(async () => {
   fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); fs.mkdirSync(PROJECTS_ROOT, { recursive: true });
   project = createProject({ name: "API", projectId: "api-study" }).id;
@@ -42,22 +43,27 @@ beforeEach(async () => {
 afterEach(async () => { await manager.cancelProject(project); service.dispose(); await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); });
 
 describe("robustness API", () => {
-  it("previews without execution and gates admission on explicit approvals", async () => {
-    const response = await inject(`${base}/preview`, { draft, planId, expectedPlanHead: head });
-    expect(response.statusCode, response.body).toBe(200); expect(response.headers["cache-control"]).toBe("no-store"); expect(fake.created).toBe(0);
-    const p = response.json();
-    expect((await inject(`${base}/${p.id}/approve`, { digest: p.digest })).statusCode).toBe(400);
+  it("retires preview and approval while preserving old batch inspection and cancellation", async () => {
+    const input = { draft, planId, expectedPlanHead: head };
+    expect((await inject(`${base}/preview`, input)).statusCode).toBe(404);
+    const p = await legacyPreview();
+    const consent = { digest: p.digest, reviewedScript: true, approveRemote: true, acknowledgeEstimates: true, maxEstimatedUsd: p.totalReservationUsd };
+    expect((await inject(`${base}/${p.id}/approve`, consent)).statusCode).toBe(404);
     expect(fake.created).toBe(0);
-    const approved = await inject(`${base}/${p.id}/approve`, { digest: p.digest, reviewedScript: true, approveRemote: true, acknowledgeEstimates: true, maxEstimatedUsd: p.totalReservationUsd });
-    expect(approved.statusCode).toBe(200); expect(approved.json().attempts).toHaveLength(2);
-    await Promise.all(p.jobs.map((j: { jobId: string }) => manager.wait(project, j.jobId, 4000)));
+    const approved = await service.approve(project, source, p.id, consent);
+    expect(approved.attempts).toHaveLength(2);
+    await Promise.all(p.jobs.map((j) => manager.wait(project, j.jobId, 4000)));
     const list = await inject(base); expect(list.json().workflows).toHaveLength(1);
+    expect(list.headers["cache-control"]).toBe("no-store");
     expect(list.json().workflows[0].attempts.every((a: any) => a.resultStatus === "available")).toBe(true);
     const full = await inject(`${base}/${p.id}`); expect(full.json().preview.draft.specifications).toHaveLength(2);
+    const cancelled = await inject(`${base}/${p.id}/cancel`, {});
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json().cancelled).toBe(true);
   });
   it("does not fall back to another project or accept a workflow through a different source", async () => {
     expect((await inject(base, undefined, "no-such-project")).statusCode).toBe(404);
-    const p = (await inject(`${base}/preview`, { draft, planId, expectedPlanHead: head })).json();
+    const p = await legacyPreview();
     expect((await inject(`/sessions/s1/notebook/other/robustness/${p.id}`)).statusCode).toBe(404);
     expect((await inject(`${base}/../../etc`)).statusCode).not.toBe(200);
     expect(fake.created).toBe(0);

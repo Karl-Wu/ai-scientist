@@ -6,30 +6,30 @@ import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths, createProject, getProject } from "../src/projects.ts";
 import { appendNotebookEntry, recordedResultSnapshot } from "./helpers/notebook-fixtures.ts";
+import { freezeAnalysisPlan, previewAnalysisPlan, recordPlanDeviation } from "../src/agent/notebook-plans.ts";
 const app = await buildApp();
 afterAll(async () => { await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); });
 beforeEach(() => { fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); fs.mkdirSync(PROJECTS_ROOT, { recursive: true }); });
 const plan = { hypothesis: "Treatment effect", primaryOutcome: "Mean score", exclusions: "QC failures", model: "Linear model", multiplicity: "One test", qc: "No missingness", stopping: "100 samples", exposureNotes: "Unknown", datasets: ["data.csv"], intent: "exploratory", priorExposure: "unknown" };
 const base = "/sessions/s1/notebook/h1/plans";
-const post = (action: string, payload: unknown, project = "default") => app.inject({ method: "POST", url: `${base}/${action}`, headers: { "x-project-id": project }, payload });
+const source = { sessionId: "s1", entryId: "h1" };
 function setup(project = "default") {
   if (project !== "default" && !getProject(project)) createProject({ name: project, projectId: project });
   appendNotebookEntry("s1", { id: "h1", type: "hypothesis", title: "Hypothesis", timestamp: 1, role: "agent" }, project);
   fs.writeFileSync(path.join(resolvePaths(project).sandbox, "data.csv"), "data");
 }
 
-describe("analysis-plan HTTP workflow and exports", () => {
-  it("previews, explicitly freezes, records a deviation, and preserves history in every export", async () => {
+describe("historical plan reads and exports", () => {
+  it("preserves a frozen plan and its deviation in every export", async () => {
     setup();
-    const p = await post("preview", { plan, expectedHead: null }); expect(p.statusCode).toBe(200);
-    expect(p.headers["cache-control"]).toBe("no-store");
-    expect((await post("freeze", { previewId: p.json().id })).statusCode).toBe(400);
-    const frozen = await post("freeze", { previewId: p.json().id, acknowledgeLocalFreeze: true });
-    expect(frozen.statusCode).toBe(200);
-    const f = frozen.json();
-    const changed = await post("deviations", { expectedHead: f.head, planId: f.events[0].id, field: "model", actual: "Robust regression", reason: "Heavy tails", timing: "after-results" });
-    expect(changed.statusCode).toBe(200);
-    expect(changed.json().events[1].planned).toBe("Linear model");
+    const preview = await previewAnalysisPlan("default", source, { plan, expectedHead: null });
+    const frozen = await freezeAnalysisPlan("default", source, { previewId: preview.id, acknowledgeLocalFreeze: true });
+    const changed = recordPlanDeviation("default", source, { expectedHead: frozen.head, planId: frozen.events[0].id,
+      field: "model", actual: "Robust regression", reason: "Heavy tails", timing: "after-results" });
+    const loaded = await app.inject({ method: "GET", url: base });
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.headers["cache-control"]).toBe("no-store");
+    expect(loaded.json()).toEqual(changed);
     for (const url of ["/sessions/s1/notebook", "/projects/default/notebook"]) {
       const entries = (await app.inject({ method: "GET", url })).json().entries;
       expect(entries[0].planHistory.events).toHaveLength(2);
@@ -42,15 +42,13 @@ describe("analysis-plan HTTP workflow and exports", () => {
       expect(new AdmZip(zipped.rawPayload).readAsText("lab-notebook.md")).toContain("Robust regression");
     }
   });
-  it("enforces head preconditions, scope and source existence at the route boundary", async () => {
+  it("retires all planning actions while keeping historical reads scoped", async () => {
     setup(); setup("other");
-    expect((await post("preview", { plan })).statusCode).toBe(409);
-    const p = (await post("preview", { plan, expectedHead: null })).json();
-    expect((await post("freeze", { previewId: p.id, acknowledgeLocalFreeze: true }, "no-such-project")).statusCode).toBe(404);
-    expect((await post("freeze", { previewId: p.id, acknowledgeLocalFreeze: true }, "other")).statusCode).toBe(410);
-    const freeze = await post("freeze", { previewId: p.id, acknowledgeLocalFreeze: true }); expect(freeze.statusCode).toBe(200);
-    expect((await post("preview", { plan, expectedHead: null })).statusCode).toBe(409);
-    const missing = await app.inject({ method: "POST", url: "/sessions/s1/notebook/absent/plans/preview", payload: { plan, expectedHead: null } });
+    for (const action of ["preview", "freeze", "deviations"]) {
+      const response = await app.inject({ method: "POST", url: `${base}/${action}`, payload: { plan } });
+      expect(response.statusCode).toBe(404);
+    }
+    const missing = await app.inject({ method: "GET", url: base, headers: { "x-project-id": "no-such-project" } });
     expect(missing.statusCode).toBe(404);
     const other = await app.inject({ method: "GET", url: base, headers: { "x-project-id": "other" } });
     expect(other.json().events).toEqual([]);

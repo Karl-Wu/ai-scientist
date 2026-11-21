@@ -205,10 +205,8 @@ export class NotebookRobustnessService {
       try {
         const preview = readRobustnessPreview(projectId, id);
         if (preview.source.sessionId !== source.sessionId || preview.source.entryId !== source.entryId) continue;
-        // Unapproved previews are returned directly from preparation, not a
-        // research attempt. Keep the history focused on approved work.
+        // The archive lists approvals and attempts from before retirement.
         if (!approval(projectId, preview)) continue;
-        this.harvest(projectId, id);
         workflows.push(this.get(projectId, source, id));
       } catch (e) { errors.push(`${id}: ${(e as Error).message}`); }
     }
@@ -242,6 +240,8 @@ export class NotebookRobustnessService {
     appendNewNotebookEntries(preview.source.sessionId, entries, projectId);
   }
   async recoverAll(): Promise<void> {
+    // Approval routes are retired. Settle previously approved work, including
+    // the crash window between writing approval and committing its job batch.
     for (const project of listProjects()) for (const id of listRobustnessIds(project.id)) {
       try {
         const preview = readRobustnessPreview(project.id, id);

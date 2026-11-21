@@ -14,6 +14,7 @@ import { resolvePaths } from "../src/projects.ts";
 import type { NotebookEntry } from "../src/agent/notebook-store.ts";
 import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { captureNotebookArtifacts } from "../src/agent/notebook-artifacts.ts";
+import { writeNotebookAnnotations } from "../src/agent/notebook-annotations.ts";
 
 const app = await buildApp();
 
@@ -149,8 +150,6 @@ describe("GET /sessions/:id/notebook/export", () => {
 
 describe("notebook annotations", () => {
   const annUrl = "/sessions/ann-sess/notebook/annotations";
-  const put = (payload: unknown, headers: Record<string, string> = {}) =>
-    app.inject({ method: "PUT", url: annUrl, headers: { "x-project-id": "default", ...headers }, payload });
   const get = () =>
     app.inject({ method: "GET", url: annUrl, headers: { "x-project-id": "default" } });
 
@@ -162,47 +161,28 @@ describe("notebook annotations", () => {
     expect(res.headers["cache-control"]).toContain("no-store");
   });
 
-  it("PUT persists and round-trips with a Last-Modified header", async () => {
-    const ann = { id: "p1", kind: "pin", entryId: "tc_1", createdAt: 123 };
-    const res = await put({ version: 1, annotations: [ann] });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ saved: "ann-sess", count: 1 });
-    expect(res.headers["last-modified"]).toBeDefined();
-
+  it("reads existing annotations and rejects legacy updates", async () => {
+    const ann = { id: "p1", kind: "pin", entryId: "tc_1", createdAt: 123 } as const;
+    writeNotebookAnnotations("ann-sess", { version: 1, annotations: [ann] }, "default");
     const got = await get();
     expect(got.headers["last-modified"]).toBeDefined();
-    expect(got.json().annotations).toHaveLength(1);
-    expect(got.json().annotations[0]).toMatchObject({ id: "p1", kind: "pin", entryId: "tc_1" });
-  });
-
-  it("PUT with a stale If-Unmodified-Since returns 412", async () => {
-    await put({ version: 1, annotations: [] }); // create the sidecar first
-    const res = await put(
-      { version: 1, annotations: [] },
-      { "if-unmodified-since": new Date(1000).toUTCString() },
-    );
-    expect(res.statusCode).toBe(412);
-    expect(res.json().detail).toMatch(/re-read and retry/);
-  });
-
-  it("PUT with an invalid item returns 400 with a field-scoped message", async () => {
-    // A comment with no body violates normalizeNotebookAnnotations.
-    const res = await put({ version: 1, annotations: [{ id: "c1", kind: "comment", entryId: "tc_1" }] });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().detail).toMatch(/annotations\[0\]/);
+    expect(got.json()).toEqual({ version: 1, annotations: [ann] });
+    const write = await app.inject({ method: "PUT", url: annUrl, payload: { version: 1, annotations: [] } });
+    expect(write.statusCode).toBe(404);
+    expect((await get()).json()).toEqual(got.json());
   });
 });
 
 describe("POST /sessions/:id/notebook/methods-draft", () => {
-  it("returns 400 (methods-draft-failed) when the notebook is empty", async () => {
+  it("has retired Methods draft generation", async () => {
+    appendNotebookEntry("historical", entry(), "default");
     const res = await app.inject({
       method: "POST",
-      url: "/sessions/no-entries/notebook/methods-draft",
+      url: "/sessions/historical/notebook/methods-draft",
       headers: { "x-project-id": "default" },
       payload: {},
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().detail).toBe("methods-draft-failed");
+    expect(res.statusCode).toBe(404);
   });
 });
 

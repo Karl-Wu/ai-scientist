@@ -2,14 +2,21 @@
 
 The workspace now opens **Notes**, which has its own project note pages. The
 screen, the live `notebook` writer and the `notebook_search` agent tool were
-retired. Historical chats hide both tools. Project exports, the historical
-record API and the evidence-package API still use the existing records.
+retired. Historical chats hide both tools. Project and session exports still
+include legacy records, annotations, frozen plans and deviations.
+
+The legacy backend now serves historical material. Annotation updates,
+Methods generation, plan previews/freezes/deviations, and next-investigation
+generation and preferences have been retired. Existing reviewer ZIPs remain
+available for download. Previously approved robustness batches retain their
+status, cancellation and recovery paths until settled. PDF annotations and
+project note pages use their own interfaces.
 
 The center-panel **Lab Notebook** contains entries authored through Kady's
 `notebook` tool, plus your notes and annotations. It is a research record, not
 a complete execution trace; [Provenance](provenance.md) records observed tool work.
 
-## Reading and annotating
+## Historical reading and annotation behavior
 
 **All chats** merges the project's notebooks; **This chat** limits the view to
 the active session. Filter by type, tag or text, or switch between timeline and
@@ -54,7 +61,7 @@ records are labelled. Files linked inside cards open their **current** bytes.
 
 ## Frozen analysis plans and deviations
 
-On a saved hypothesis, open **Analysis plan**:
+Historical **Analysis plan** journals record the workflow that was available on a saved hypothesis:
 
 1. Specify outcomes, eligibility rules, model, multiplicity, QC, stopping rules, datasets and prior data exposure; state unknowns explicitly.
 2. Review the exact plan and dataset identities. A preview lasts 15 minutes; unverified datasets need acknowledgement.
@@ -70,10 +77,10 @@ corrupt or incomplete journals fail visibly.
 
 | Control | Purpose |
 |---|---|
-| [Stress-test finding](notebook-robustness.md) | Review and approve 2–16 sensitivity specifications on Modal. |
-| [What next?](next-experiments.md) | Generate source-linked proposals and record planning preferences. |
+| [Stress-test finding](notebook-robustness.md) | Inspect previously approved sensitivity batches on Modal. |
+| [What next?](next-experiments.md) | Inspect saved proposals, preferences and model-call receipts. |
 | [Research memory](notebook-memory.md) | Search saved project records and read exact sources. |
-| [Evidence package](evidence-packages.md) | Prepare a frozen reviewer ZIP with version checks and explicit gaps. |
+| [Evidence package](evidence-packages.md) | Inspect and download a retained reviewer ZIP. |
 
 ## Export and print
 
@@ -85,15 +92,8 @@ evidence package for version-matched reviewer materials.
 
 ## Methods draft
 
-**Methods draft** asks for confirmation before one billed, budget-gated model
-call. It uses active methods, observations, decisions and recorded deviations,
-with plan history, results and qualifications. A plan alone is insufficient.
-Planned/attempted work and missing execution evidence must remain explicit;
-proposals and planning preferences are excluded from performed-methods prose.
-
-The draft is saved as `methods_draft_<sessionId>.md` and opens for review. Its
-source citations and claims still require checking. Usage appears under
-`methods-draft` in project costs.
+Previously generated drafts remain in the project as `methods_draft_<sessionId>.md`.
+Their recorded usage appears under `methods-draft` in project costs.
 
 ## Context compaction
 

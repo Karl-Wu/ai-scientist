@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { researchProject } from "./notebook-research.ts";
+import { requireRequestedProject } from "./project-scope.ts";
 import { SandboxError } from "../sandbox-fs.ts";
 import { NotebookMemoryError, searchNotebookMemory, readNotebookMemory } from "../agent/notebook-memory.ts";
 function projectFor(req: FastifyRequest, id: string): string {
-  if (researchProject(req) !== id) throw new SandboxError(404, "Memory source must belong to the active project; no fallback was used");
+  if (requireRequestedProject(req) !== id) throw new SandboxError(404, "Memory source must belong to the active project; no fallback was used");
   return id;
 }
 function fail(reply: FastifyReply, error: unknown) {

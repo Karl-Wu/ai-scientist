@@ -1,10 +1,13 @@
 # Notebook robustness workflows
 
-**Stress-test finding** runs a reviewed set of Python sensitivity analyses for
+**Stress-test finding** ran a reviewed set of Python sensitivity analyses for
 a saved, active hypothesis with a [frozen analysis plan](lab-notebook.md#frozen-analysis-plans-and-deviations).
-It uses [Modal compute](modal-compute.md).
+It used [Modal compute](modal-compute.md). The preview and approval endpoints
+have been retired. Previously approved batches can still be inspected or
+cancelled. Recovery can complete interrupted admission for an existing
+approval and continues to track job accounting.
 
-## Review and run
+## How historical batches were produced
 
 1. Supply a Python script, explicit input files (including frozen-plan datasets and imported helpers), common metric/unit/null, resource, timeout, exact package pins and **2–16 specifications**. Each specification needs a key, label, rationale, seed and JSON parameters.
 2. **Prepare snapshot and quote** copies/hashes the inputs locally and displays the exact script, specifications and total estimated sandbox commitment. It does not execute code or contact a model/compute service.
@@ -99,4 +102,4 @@ removed, and exports are not standalone environment/data reproductions.
 See [`notebook-robustness.ts`](../server/src/agent/notebook-robustness.ts),
 [`robustness-store.ts`](../server/src/agent/robustness-store.ts) and the
 [shared protocol](../web/src/lib/notebook-robustness.ts). Project-scoped routes
-are under `/sessions/:sessionId/notebook/:entryId/robustness`.
+for list, inspect and cancel are under `/sessions/:sessionId/notebook/:entryId/robustness`.
