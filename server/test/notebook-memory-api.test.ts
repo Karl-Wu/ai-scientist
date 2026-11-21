@@ -10,7 +10,7 @@ afterAll(async () => { await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: 
 const add = (project = "a") => appendNotebookEntry("s", { id: "e", type: "decision", title: `Harmony in ${project}`, body: "Reject the confounded model", role: "agent", timestamp: 1000 }, project);
 
 describe("research memory API", () => {
-  it("searches, reads and supplies the same bounded tool envelope", async () => {
+  it("searches and reads historical records after retiring the agent tool", async () => {
     add();
     const search = await app.inject({ method: "POST", url: "/projects/a/notebook/memory/search", headers: { "x-project-id": "a" }, payload: { query: "Harmony" } });
     expect(search.statusCode, search.body).toBe(200); expect(search.headers["cache-control"]).toBe("no-store");
@@ -18,9 +18,7 @@ describe("research memory API", () => {
     const read = await app.inject({ method: "GET", url: hit.sourceUri }); // source URI carries its project scope
     expect(read.statusCode, read.body).toBe(200); expect(read.json().entry.title).toBe("Harmony in a");
     const tool = await app.inject({ method: "POST", url: "/projects/a/notebook/memory/tool", headers: { "x-project-id": "a" }, payload: { action: "read", source: hit.source, expectedDigest: hit.digest, projectId: "b" } });
-    expect(tool.statusCode).toBe(200);
-    expect(JSON.parse(tool.json().content[0].text).projectId).toBe("a");
-    expect(tool.json().details.memory).toBe(true);
+    expect(tool.statusCode).toBe(404);
   });
   it("does not fall back or let body/header/path select a different project", async () => {
     add("a"); add("b");
@@ -32,9 +30,8 @@ describe("research memory API", () => {
   it("reports invalid and missing sources explicitly", async () => {
     const bad = await app.inject({ method: "GET", url: "/projects/a/notebook/memory/record?source=not-json", headers: { "x-project-id": "a" } });
     expect(bad.statusCode).toBe(400);
-    const invalid = await app.inject({ method: "POST", url: "/projects/a/notebook/memory/tool", headers: { "x-project-id": "a" }, payload: { action: "write", query: "x" } });
-    expect(invalid.statusCode).toBe(400);
-    const missing = await app.inject({ method: "POST", url: "/projects/a/notebook/memory/tool", headers: { "x-project-id": "a" }, payload: { action: "read", source: { kind: "notebook", sessionId: "s", entryId: "absent" } } });
+    const absent = encodeURIComponent(JSON.stringify({ kind: "notebook", sessionId: "s", entryId: "absent" }));
+    const missing = await app.inject({ method: "GET", url: `/projects/a/notebook/memory/record?source=${absent}`, headers: { "x-project-id": "a" } });
     expect(missing.statusCode).toBe(404);
   });
 });

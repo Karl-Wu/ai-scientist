@@ -23,7 +23,6 @@ import {
   seedBuiltinAgentModalTools,
   seedModalPackage,
 } from "../src/agent/modal-bridge.ts";
-import { seedBuiltinAgentNotebookTools } from "../src/agent/notebook-bridge.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { buildApp } from "../src/index.ts";
 import { modalJobManager } from "../src/modal/manager.ts";
@@ -304,8 +303,6 @@ describe("kady-modal child package", () => {
     };
     expect(settings.packages).toContain(kadyModalPackageDir());
 
-    // notebook runs immediately before modal during a real session build.
-    seedBuiltinAgentNotebookTools(paths);
     seedBuiltinAgentModalTools(paths);
     const updated = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as any;
     const tools = updated.subagents.agentOverrides.researcher.tools as string[];

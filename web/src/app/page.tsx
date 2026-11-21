@@ -8,6 +8,7 @@ import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/l
 import type { Model } from "@/components/model-selector";
 import { ChatTab, type ChatTabHandle, type ChatTabMeta } from "@/components/chat-tab";
 import type { NoteCreationSource, NoteSourceLink } from "@/lib/note-pages";
+import type { PdfAnnotationFocus } from "@/lib/pdf-annotations";
 import type { FileSourceFocus, FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import { ChatTabsBar, type ChatTabDescriptor } from "@/components/chat-tabs-bar";
 import { ProjectSwitcher } from "@/components/project-switcher";
@@ -966,6 +967,7 @@ function WorkspacePage({
   const [responseFocus, setResponseFocus] = useState<{ sessionId: string; entryId: string; nonce: number } | null>(null);
   const [fileSourceFocus, setFileSourceFocus] = useState<FileSourceFocus>();
   const [fileSourceInput, setFileSourceInput] = useState<{ path: string; consumer: SourceStepReference; nonce: number }>();
+  const [pdfAnnotationFocus, setPdfAnnotationFocus] = useState<PdfAnnotationFocus>();
   const sourceNonce = useRef(0);
   const openTask = useCallback((sessionId: string, title: string, entryId?: string) => {
     const alreadyOpen = tabsRef.current.some((tab) => tab.sessionId === sessionId) ||
@@ -1002,6 +1004,7 @@ function WorkspacePage({
 
   const handleFileSelect = useCallback((path: string) => {
     setFileSourceInput(undefined);
+    setPdfAnnotationFocus(undefined);
     sandboxSelectFile(path);
     setView("chat");
     setShowNotebook(false);
@@ -1019,8 +1022,12 @@ function WorkspacePage({
   }, [activeTabId]);
 
   const handleOpenNoteSource = useCallback((source: NoteSourceLink) => {
-    if (source.kind === "file") {
+    if (source.kind === "file" || source.kind === "pdfAnnotation") {
       handleFileSelect(source.path);
+      if (source.kind === "pdfAnnotation") {
+        const { path, page, annotationId } = source;
+        setPdfAnnotationFocus({ path, page, annotationId, token: ++sourceNonce.current });
+      }
       return;
     }
     if (!openTask(source.sessionId, t("Source task"), source.kind === "message" ? source.entryId : undefined)) return;
@@ -1357,6 +1364,7 @@ function WorkspacePage({
                 onNoteCreationHandled={handleNoteCreationHandled}
                 onCreateNote={handleCreateNote}
                 onOpenNoteSource={handleOpenNoteSource}
+                pdfAnnotationFocus={pdfAnnotationFocus}
                 fileSourceInput={fileSourceInput}
                 onJumpToFileSource={jumpToFileSource}
                 onOpenSourceInput={handleOpenSourceInput}

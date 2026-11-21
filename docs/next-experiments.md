@@ -44,8 +44,8 @@ Historical entries may contain proposals authored through the retired `notebook`
 tool. New proposals generated through the API target a saved hypothesis and
 include the research question, existing-data assessment, competing explanations,
 and tests with predictions, decision branches, requirements and limitations.
-Use `notebook_search` to obtain exact source IDs. API-generated proposals record
-the source versions available during generation.
+The historical research memory API returns exact source IDs. API-generated
+proposals record the source versions available during generation.
 
 Proposals/preferences append to `.kady/notebook/<sessionId>.jsonl`. Model-call
 receipts live in `.kady/notebook/next-experiment-generations/`. Hashes do not

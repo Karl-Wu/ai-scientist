@@ -30,7 +30,7 @@ interface NotesProps {
   onOpenSource: (source: NoteSourceLink) => void;
 }
 
-const sourceIcons = { task: LinkIcon, tool: LinkIcon, message: MessageSquareIcon, result: Table2Icon, file: FileTextIcon };
+const sourceIcons = { task: LinkIcon, tool: LinkIcon, message: MessageSquareIcon, result: Table2Icon, file: FileTextIcon, pdfAnnotation: FileTextIcon };
 
 function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
   page: NoteSummary;
@@ -76,9 +76,11 @@ function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
       {source && SourceIcon && <div className="col-span-2 row-start-2 flex min-w-0 items-center gap-1 @min-[25rem]/note-card:col-span-1 @min-[25rem]/note-card:col-start-2 @min-[25rem]/note-card:row-start-1">
         <button type="button" onClick={() => onOpenSource(source)}
           className="flex min-w-0 items-center gap-1 rounded px-1 py-1 text-left text-blue-700 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring dark:text-blue-300"
-          title={source.kind === "file" ? source.path : source.label}>
+          title={"path" in source ? source.path : source.label}>
           <SourceIcon aria-hidden="true" className="size-3 shrink-0" />
-          <span className="min-w-0 truncate">{sourceType} · {source.label}</span>
+          <span className="min-w-0 truncate">{sourceType} · {source.label}
+            {source.kind === "pdfAnnotation" && <> · {t("Page {page}", { page: source.page })}</>}
+          </span>
           <ArrowUpRightIcon aria-hidden="true" className="size-3 shrink-0" />
         </button>
         {moreSources > 0 && <button type="button" onClick={onOpenSources}
@@ -256,7 +258,7 @@ function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCre
   const locale = useLocale();
   const [sourceTask] = useState(currentTask);
   const [title, setTitle] = useState(() => source?.title.trim().slice(0, 300) ?? "");
-  const [summary, setSummary] = useState("");
+  const [summary, setSummary] = useState(() => source?.initialSummary ?? "");
   const [includeTask, setIncludeTask] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
@@ -574,9 +576,12 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
               {page.sources.length === 0 ? <p className="text-xs text-muted-foreground">{t("No sources yet")}</p> : <ul className="space-y-2">
                 {page.sources.map((source) => <li key={source.id} className="space-y-1 rounded-md border p-2">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 break-words text-xs"><span className="text-muted-foreground">{t(NOTE_SOURCE_LABELS[source.kind])} · </span>{source.label}</span>
+                    <span className="min-w-0 break-words text-xs"><span className="text-muted-foreground">{t(NOTE_SOURCE_LABELS[source.kind])} · </span>{source.label}
+                      {source.kind === "pdfAnnotation" && <> · {t("Page {page}", { page: source.page })}</>}
+                    </span>
                     <Button className="shrink-0" size="xs" type="button" variant="ghost" onClick={() => onOpenSource(source)}>
-                      <ArrowUpRightIcon aria-hidden="true" />{t(source.kind === "file" ? "Open current file" : source.kind === "task" ? "Open source task" : "Open source")}
+                      <ArrowUpRightIcon aria-hidden="true" />{t(source.kind === "pdfAnnotation" ? "Open PDF annotation"
+                        : source.kind === "file" ? "Open current file" : source.kind === "task" ? "Open source task" : "Open source")}
                     </Button>
                   </div>
                   {source.excerpt && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{source.excerpt}</p>}

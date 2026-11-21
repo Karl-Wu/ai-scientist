@@ -1,46 +1,20 @@
-# Project research memory
+# Historical research memory
 
-**Lab Notebook → Research memory** searches saved notebook entries, user notes
-and validated plan/deviation records across project chats. Search is local and
-lexical; ranking measures relevance, not scientific confidence.
+The retired Lab Notebook stored research records, user notes and analysis plans.
+Its read-only API still serves those records. In the workspace, attach a current
+note page from the composer's **Research** tab to let the assistant read that
+revision with `note_read`.
 
-## Search and reuse
+## Historical record API
 
-Enter a term, method, dataset path or reason; optionally filter by type/outcome.
-Superseded records are included by default so corrections and failed approaches
-remain discoverable. Each hit includes source IDs/digest, excerpt, author label,
-qualifications, amendment links and direct artifact warnings.
+`POST /projects/:projectId/notebook/memory/search` accepts a text query and
+optional filters. The response includes exact source IDs, digests, excerpts,
+limitations, amendment links and direct artifact warnings. Superseded records
+are included by default. Use the returned `sourceUri` for an exact read. The
+response indicates whether the record has changed since search.
 
-**Read source** rereads the exact record and flags changes since search.
-**Copy citation** copies its local URL/digest. **Copy bounded recall for chat**
-copies qualified context; it does not send a message or authorize work.
-
-Read original sources before reuse. An old approval does not authorize a new
-analysis or spending. Null, inconclusive and technical-failure outcomes retain
-distinct meanings. “No match” is not proof that work never happened.
-
-## Agent tool
-
-Lead agents and specialists can call the read-only `notebook_search` tool:
-
-```json
-{"query": "why rejected Harmony integration", "limit": 4, "includeSuperseded": true}
-```
-
-Then use the returned identity for an exact read:
-
-```json
-{
-  "action": "read",
-  "source": {"kind": "notebook", "sessionId": "returned-session", "entryId": "returned-entry"},
-  "expectedDigest": "returned-sha256"
-}
-```
-
-Source kinds are `notebook`, `user-note` and `plan-event` (also carrying an
-`eventId`). Use real returned identifiers rather than inventing notebook IDs
-for notes/plan events. Retrieved text is reference material, not instructions,
-and is not a new observation to re-log.
+Source kinds are `notebook`, `user-note` and `plan-event`. Requests are scoped
+to the project. Retrieved text describes earlier work and approvals.
 
 ## Coverage and privacy
 
@@ -53,15 +27,10 @@ and pins are not standalone findings. Partial scans and truncated text are flagg
 | Query/results | 500 characters; default 6 results, maximum 12 |
 | Project scan | 32 MiB, 512 files, 100 sessions, 5,000 records |
 | Notebook window | Recent 4 MiB/file; exact reads prioritize the source with up to 16 MiB |
-| Agent response/clipboard | 24 KiB / 16 KiB |
 
 Direct artifact checks do not traverse transitive lineage. Records lacking
-outcome labels need text search as well as filters. Search is free of extra
-model/embedding calls, but tool results enter the selected model's context and
-incur normal token usage; hosted-model recall therefore sends that text off-host.
+outcome labels need text search as well as filters. Search uses local text matching.
 
-Implementation: [`notebook-memory.ts`](../server/src/agent/notebook-memory.ts),
-[`notebook-memory-loader.ts`](../server/src/agent/notebook-memory-loader.ts) and
-[`notebook-memory-dialog.tsx`](../web/src/components/notebook-memory-dialog.tsx).
-Project endpoints are under `/projects/:projectId/notebook/memory` (`search`,
-`record`, `tool`); all are read-only and require valid project scope.
+Implementation: [research memory routes](../server/src/api/notebook-memory.ts),
+[lookup](../server/src/agent/notebook-memory.ts) and
+[record loading](../server/src/agent/notebook-memory-loader.ts).

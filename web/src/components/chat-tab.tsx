@@ -4,6 +4,7 @@ import taskSummaryStyles from "./task-summary.module.css";
 
 import { ConversationMap } from "@/components/conversation-map";
 import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
+import { isRetiredNotebookTool } from "@/lib/legacy-notebook";
 import { useSessionModel } from "@/lib/use-session-model";
 import { useInputHistory } from "@/lib/use-input-history";
 
@@ -70,7 +71,6 @@ import { ContextUsageIndicator } from "@/components/context-usage-indicator";
 import { CitationBadge } from "@/components/citation-badge";
 import {
   ModalJobChip,
-  NotebookEntryChip,
   ToolTiming,
   ToolActivityList,
   ToolDisclosure,
@@ -1489,7 +1489,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 }) {
   const t = useT();
   const locale = useLocale();
-  const activities = message.activities ?? [];
+  const activities = (message.activities ?? []).filter((activity) => !isRetiredNotebookTool(activity.toolName));
   // Some models occasionally end a turn right after a tool call with no
   // closing text, which used to leave the chat silently "done". Surface that
   // explicitly on the final bubble so the user knows the run ended.
@@ -1545,14 +1545,6 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       orderedBlocks.push(
         <PermissionCard key={a.id} item={a} sessionId={sessionId} projectId={projectId} />,
       );
-    } else if (a.toolName === "notebook") {
-      flushChunk();
-      orderedBlocks.push(
-        <div key={a.id}>
-          <NotebookEntryChip item={a} />
-          <ToolTiming item={a} className="mt-1 text-xs" />
-        </div>,
-      );
     } else if (a.toolName?.startsWith("modal_")) {
       flushChunk();
       orderedBlocks.push(
@@ -1585,7 +1577,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   // tool card so it can name the specialists the script launches.
   let replyWorkflowScript: string | undefined;
   const segments = message.segments?.length
-    ? message.segments
+    ? message.segments.filter((segment) => segment.type !== "activity" || activityById.has(segment.activityId))
     : [
         ...activities.map((activity) => ({
           type: "activity" as const,
@@ -1719,6 +1711,11 @@ export const ChatMessageRow = memo(function ChatMessageRow({
 }) {
   // Extension notices and compaction markers sit between the bubbles.
   if (message.role === "system") return <SystemCard message={message} />;
+  if (
+    message.role === "assistant" && !isStreaming && !message.content.trim() &&
+    !message.reasoning?.trim() && !message.citations && message.activities?.length &&
+    message.activities.every((activity) => isRetiredNotebookTool(activity.toolName))
+  ) return null;
   return (
     <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId ?? message.entryId}>
       <MessageContent>

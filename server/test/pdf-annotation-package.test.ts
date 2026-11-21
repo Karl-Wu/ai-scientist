@@ -13,10 +13,6 @@ import {
   seedPdfAnnotationPackage,
 } from "../src/agent/pdf-annotation-bridge.ts";
 import {
-  seedBuiltinAgentNotebookTools,
-  seedNotebookPackage,
-} from "../src/agent/notebook-bridge.ts";
-import {
   seedBuiltinAgentModalTools,
   seedModalPackage,
 } from "../src/agent/modal-bridge.ts";
@@ -133,8 +129,6 @@ describe("kady-pdf-annotations child package", () => {
 
   it("seeds the package and extends generated builtin allowlists idempotently", () => {
     const paths = ensureProjectExists("default");
-    seedNotebookPackage(paths);
-    seedBuiltinAgentNotebookTools(paths);
     seedModalPackage(paths);
     seedBuiltinAgentModalTools(paths);
 
@@ -151,8 +145,7 @@ describe("kady-pdf-annotations child package", () => {
     ) as any;
     expect(settings.packages).toContain(kadyPdfAnnotationPackageDir());
     const tools = settings.subagents.agentOverrides.researcher.tools as string[];
-    expect(tools).toContain("notebook_search");
-    expect(seedBuiltinAgentNotebookTools(paths)).toBe(false);
+    expect(tools).not.toContain("notebook_search");
     expect(seedBuiltinAgentModalTools(paths)).toBe(false);
     for (const name of PDF_ANNOTATION_TOOL_NAMES) {
       expect(tools).toContain(name);

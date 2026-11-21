@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "@/components/i18n-provider";
 import { type Author, colorForAuthor } from "@/lib/pdf-annotations";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ export interface NotePopoverProps {
   onCancel: () => void;
   onSave: (body: string) => void;
   onDelete?: (force: boolean) => void;
+  onCreateNote?: (body: string) => void;
 }
 
 export function NotePopover({
@@ -25,7 +27,9 @@ export function NotePopover({
   onCancel,
   onSave,
   onDelete,
+  onCreateNote,
 }: NotePopoverProps) {
+  const t = useT();
   const [body, setBody] = useState(initialBody);
   const ref = useRef<HTMLDivElement>(null);
   const [altHeld, setAltHeld] = useState(false);
@@ -54,10 +58,8 @@ export function NotePopover({
   }, [onCancel]);
 
   // Position the popover near the click; clamp to viewport.
-  const top = Math.min(
-    Math.max(screen.y + 8, 8),
-    (typeof window !== "undefined" ? window.innerHeight : 800) - 220,
-  );
+  const height = onCreateNote ? 250 : 220;
+  const top = Math.max(8, Math.min(screen.y + 8, (typeof window !== "undefined" ? window.innerHeight : 800) - height));
   const left = Math.min(
     Math.max(screen.x + 8, 8),
     (typeof window !== "undefined" ? window.innerWidth : 1200) - 320,
@@ -137,6 +139,15 @@ export function NotePopover({
           )}
         </div>
       </div>
+      {onCreateNote && (
+        <button
+          type="button"
+          onClick={() => onCreateNote(body)}
+          className="mt-2 w-full rounded border px-2 py-1.5 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {t("Create note from this annotation")}
+        </button>
+      )}
     </div>
   );
 }

@@ -76,6 +76,36 @@ it("shows the list's type filter with the only available note type", async () =>
   expect(within(typeFilter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All note types", "General note"]);
 });
 
+it("prefills a PDF annotation note and passes its exact source to the workspace", async () => {
+  const anchor = { kind: "pdfAnnotation", path: "papers/study.pdf", annotationId: "highlight-3" } as const;
+  const initialSummary = "### Highlighted text\n\nSelected passage\n\n### Annotation text\n\nReview this claim.";
+  const citation = { ...anchor, id: "s1", page: 3, label: "study.pdf", excerpt: "Selected passage\nReview this claim." };
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/notes" && options?.method === "POST") {
+      const request = JSON.parse(String(options.body));
+      expect(request).toMatchObject({ source: anchor, summary: initialSummary });
+      return Response.json({
+        id: "pdf-note", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually",
+        sources: [citation],
+        revisions: [{ version: 1, title: request.title, summary: request.summary, fields: {}, savedAt: 1, status: "saved" }],
+      } satisfies NotePage, { status: 201 });
+    }
+    if (url === "/notes/experts") return Response.json({ experts: [] });
+    if (url === "/notes") return Response.json({ pages: [] });
+    throw new Error("Unexpected request");
+  });
+
+  const onOpenSource = vi.fn();
+  const user = userEvent.setup();
+  render(<NotePagesView projectId="default" onOpenSource={onOpenSource}
+    createFrom={{ title: "study.pdf · Page 3", anchor, initialSummary }} />);
+  expect(await screen.findByRole("textbox", { name: "Note title" })).toHaveValue("study.pdf · Page 3");
+  expect(screen.getByRole("textbox", { name: "Current summary" })).toHaveValue(initialSummary);
+  await user.click(screen.getByRole("button", { name: "Save note page" }));
+  await user.click(await screen.findByRole("button", { name: "Open PDF annotation" }));
+  expect(onOpenSource).toHaveBeenCalledWith(citation);
+});
+
 it("creates a manual note from the empty state and keeps the draft and request id when saving fails", async () => {
   const currentTask = { id: "source-task", title: "Scope review" };
   const source = { id: "s1", kind: "task", sessionId: currentTask.id, label: currentTask.title, excerpt: "" } as const;

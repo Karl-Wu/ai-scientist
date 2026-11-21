@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
-import { ModalJobChip, NotebookEntryChip, ToolActivityList, ToolTiming } from "./tool-activity";
+import { ModalJobChip, ToolActivityList, ToolTiming } from "./tool-activity";
 import type { ActivityItem } from "@/lib/use-agent";
 
 const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({
@@ -290,30 +290,6 @@ describe("ToolActivityList", () => {
     fireEvent.click(screen.getByRole("button", { name: /mcp__microscope__capture/i }));
     expect(screen.getByAltText("Tool result image 1")).toBeInTheDocument();
     expect(screen.getByText(/1 image omitted/)).toBeInTheDocument();
-  });
-});
-
-describe("NotebookEntryChip", () => {
-  it("renders the capitalized entry type and title from the tool args", () => {
-    render(
-      <NotebookEntryChip
-        item={item({ toolName: "notebook", args: { type: "hypothesis", title: "Six cell types" } })}
-      />,
-    );
-    expect(screen.getByText("Journal · Hypothesis")).toBeInTheDocument();
-    expect(screen.getByText("Six cell types")).toBeInTheDocument();
-  });
-
-  it("falls back to 'Entry' when the args carry no type", () => {
-    render(<NotebookEntryChip item={item({ toolName: "notebook", args: {} })} />);
-    expect(screen.getByText("Journal · Entry")).toBeInTheDocument();
-  });
-
-  it("carries the tool-call id on its root element", () => {
-    const { container } = render(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} />,
-    );
-    expect(container.querySelector('[data-tool-call-id="tc_9"]')).not.toBeNull();
   });
 });
 

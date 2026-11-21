@@ -4,9 +4,8 @@
  *
  * Builtins pin a `tools:` allowlist in their frontmatter, and Pi applies it to
  * extension/package tools too — so a child would load our packages and then
- * have `notebook_search`, the Modal family, and the PDF annotation tools filtered
- * straight back out. Three bridges (notebook, modal, pdf-annotation) each
- * extend the allowlist for their own group, in that order.
+ * have the Modal family and PDF annotation tools filtered out. Each bridge
+ * extends the allowlist for its own group.
  *
  * Each of them writes `<declared frontmatter tools> + <its group>`, so the
  * declared list gets *copied* into project settings. That copy goes stale when
@@ -40,8 +39,6 @@ export interface ReconcileBuiltinToolsInput {
   declared: readonly string[];
   /** The calling bridge's own tool group. */
   add: readonly string[];
-  /** These retired tools remain recognizable in old generated shapes. */
-  remove?: readonly string[];
   /**
    * Every allowlist shape Kady generates for this builtin, built from the
    * CURRENT declared list — the caller already computes these to recognize the
@@ -58,7 +55,6 @@ export function reconcileBuiltinTools({
   existing,
   declared,
   add,
-  remove = [],
   shapes,
 }: ReconcileBuiltinToolsInput): string[] | null {
   // Everything any bridge may inject, inferred from the shapes the caller
@@ -70,6 +66,6 @@ export function reconcileBuiltinTools({
   if (!shapes.some((shape) => sameToolSet(withoutStale, shape))) return null;
 
   const carried = existing.filter((tool) => ours.has(tool));
-  const next = uniqueTools([...declared, ...add, ...carried]).filter((tool) => !remove.includes(tool));
+  const next = uniqueTools([...declared, ...add, ...carried]);
   return sameToolSet(next, existing) ? null : next;
 }

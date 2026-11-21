@@ -11,11 +11,14 @@ export const NOTE_TYPES = {
 export type NoteType = keyof typeof NOTE_TYPES;
 export const NOTE_PAGE_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 
+type PdfAnnotationAnchor = { kind: "pdfAnnotation"; path: string; annotationId: string };
+
 export type NoteSourceLink = { label: string } & (
   | { kind: "task"; sessionId: string }
   | { kind: "message"; sessionId: string; entryId: string }
   | { kind: "tool" | "result"; sessionId: string; toolCallId: string }
   | { kind: "file"; path: string; sessionId?: string; sha256?: string }
+  | (PdfAnnotationAnchor & { page: number })
 );
 
 export type NoteSource = NoteSourceLink & { excerpt: string };
@@ -37,11 +40,13 @@ export interface NoteDraftCredit {
 export type NoteAnchor =
   | { kind: "message"; sessionId: string; entryId: string }
   | { kind: "result"; sessionId: string; toolCallId: string }
-  | { kind: "file"; path: string };
+  | { kind: "file"; path: string }
+  | PdfAnnotationAnchor;
 
 export interface NoteCreationSource {
   title: string;
   anchor: NoteAnchor;
+  initialSummary?: string;
 }
 
 export const NOTE_SOURCE_LABELS = {
@@ -50,6 +55,7 @@ export const NOTE_SOURCE_LABELS = {
   tool: "Tool result",
   result: "Scientific result",
   file: "File",
+  pdfAnnotation: "PDF annotation",
 } as const;
 
 export interface NoteContent {

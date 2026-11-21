@@ -15,6 +15,7 @@ it("upgrades historic shipped text with CRLF, preserves edits and does not resur
   seedWatchdogGuidance(paths);
   const cases = [
     { file: path.join(paths.sandbox, ".pi/prompts/qc.md"), fixture: "qc-v1.md", current: SEEDED_TEMPLATES.find((p) => p.name === "qc")!.content, seed: () => seedPromptTemplates(paths) },
+    { file: path.join(paths.sandbox, ".pi/prompts/methods-review.md"), fixture: "methods-review-v1.md", current: SEEDED_TEMPLATES.find((p) => p.name === "methods-review")!.content, seed: () => seedPromptTemplates(paths) },
     { file: path.join(paths.sandbox, ".pi/WATCHDOG.md"), fixture: "watchdog-v1.md", current: WATCHDOG_MD, seed: () => seedWatchdogGuidance(paths) },
   ];
   for (const c of cases) {

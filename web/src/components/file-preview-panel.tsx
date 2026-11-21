@@ -14,6 +14,7 @@ import { FileOriginControl } from "@/components/file-origin-control";
 import type { FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import type { ModalComputeScope } from "@/lib/modal-jobs";
 import type { NoteCreationSource, NoteSourceLink, NoteTaskReference } from "@/lib/note-pages";
+import type { PdfAnnotationFocus } from "@/lib/pdf-annotations";
 import { cn } from "@/lib/utils";
 import {
   notebookHtmlDocument,
@@ -324,7 +325,7 @@ function MarkdownViewer({
 }
 
 function FileViewer({
-  path, name, content, loading, projectId, onRetry, onSave, revealLine, revealCell, revealToken,
+  path, name, content, loading, projectId, onRetry, onSave, revealLine, revealCell, revealToken, pdfAnnotationFocus, onCreateNote,
 }: {
   path: string; name: string | null; content: string | null; loading: boolean;
   projectId: string;
@@ -333,6 +334,8 @@ function FileViewer({
   revealLine?: number;
   revealCell?: number;
   revealToken?: number;
+  pdfAnnotationFocus?: PdfAnnotationFocus;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }) {
   if (loading) {
     return (
@@ -375,7 +378,7 @@ function FileViewer({
     return <ImageViewer path={path} name={name} projectId={projectId} />;
   }
   if (cat === "pdf") {
-    return <PdfViewer path={path} projectId={projectId} />;
+    return <PdfViewer key={`${projectId}/${path}`} path={path} projectId={projectId} annotationFocus={pdfAnnotationFocus} onCreateNote={onCreateNote} />;
   }
   if (cat === "anndata") {
     return <AnnDataViewer path={path} projectId={projectId} />;
@@ -1687,6 +1690,7 @@ export interface FilePreviewPanelProps {
   onNoteCreationHandled?: (source: NoteCreationSource) => void;
   onCreateNote?: (source: NoteCreationSource) => void;
   onOpenNoteSource: (source: NoteSourceLink) => void;
+  pdfAnnotationFocus?: PdfAnnotationFocus;
   fileSourceInput?: { path: string; consumer: SourceStepReference; nonce: number };
   onJumpToFileSource?: (step: FileSourceStep) => void;
   onOpenSourceInput?: (path: string, consumer: SourceStepReference) => void;
@@ -1721,6 +1725,7 @@ export function FilePreviewPanel({
   onNoteCreationHandled,
   onCreateNote,
   onOpenNoteSource,
+  pdfAnnotationFocus,
   fileSourceInput,
   onJumpToFileSource,
   onOpenSourceInput,
@@ -1759,6 +1764,9 @@ export function FilePreviewPanel({
   const setMode = useCallback((path: string, mode: PanelMode) => {
     setTabModes((prev) => ({ ...prev, [path]: mode }));
   }, []);
+  useEffect(() => {
+    if (pdfAnnotationFocus) setMode(pdfAnnotationFocus.path, "view");
+  }, [pdfAnnotationFocus, setMode]);
 
   // Derive active tab state
   const activeTab = tabs.find((t) => t.path === activeTabPath) ?? null;
@@ -1975,6 +1983,8 @@ export function FilePreviewPanel({
               loading={loadingFile}
               onRetry={onRetry ? () => onRetry(selectedPath) : undefined}
               onSave={(content) => onSaveText(selectedPath, content)}
+              pdfAnnotationFocus={pdfAnnotationFocus?.path === selectedPath ? pdfAnnotationFocus : undefined}
+              onCreateNote={onCreateNote}
               revealLine={
                 revealTarget && revealTarget.path === selectedPath
                   ? revealTarget.line

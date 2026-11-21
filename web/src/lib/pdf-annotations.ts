@@ -55,6 +55,13 @@ export interface NoteAnnotation {
 
 export type Annotation = HighlightAnnotation | NoteAnnotation;
 
+export interface PdfAnnotationFocus {
+  path: string;
+  page: number;
+  annotationId: string;
+  token: number;
+}
+
 export interface AnnotationsDoc {
   version: 1;
   annotations: Annotation[];

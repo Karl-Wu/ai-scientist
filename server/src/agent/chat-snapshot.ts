@@ -26,7 +26,8 @@ import {
   type SessionEntryRow,
   type ToolCallPart,
 } from "./session-export.ts";
-import { splitComposerContext, contextTitle, RECORD_KIND_LABELS } from "../../../web/src/lib/composer-context.ts";
+import { splitComposerContext, contextTitle } from "../../../web/src/lib/composer-context.ts";
+import { isRetiredNotebookTool } from "../../../web/src/lib/legacy-notebook.ts";
 import { parseCommandBlock } from "../../../web/src/lib/command-blocks.ts";
 import { isParentWake } from "./subagent-wake.ts";
 
@@ -83,10 +84,6 @@ export function toolCallSummary(call: ToolCallPart, sandboxRoot: string): string
       if (args.workflow) return "workflow script";
       if (args.agent) return oneLine(`${str(args.agent)}: ${str(args.task)}`, ARG_CLIP);
       return oneLine(str(args.action) || JSON.stringify(args), ARG_CLIP);
-    case "notebook":
-      return oneLine(`${str(args.type)}: ${str(args.title)}`, ARG_CLIP);
-    case "notebook_search":
-      return oneLine(args.action === "read" ? "read a record" : `search "${str(args.query)}"`, ARG_CLIP);
     case "note_read":
       return oneLine(`note ${str(args.id)}, revision ${String(args.version ?? "?")}`, ARG_CLIP);
     case "interview": {
@@ -108,24 +105,7 @@ export function toolResultSummary(call: ToolCallPart, text: string): string {
       return oneLine(text, RESULT_CLIP);
     }
   }
-  if (call.name === "notebook_search") {
-    try {
-      const data = JSON.parse(text) as { hits?: { title?: string }[]; hit?: { title?: string } };
-      if (Array.isArray(data.hits)) {
-        const titles = data.hits.map((h) => `"${h.title ?? "untitled"}"`).join("; ");
-        return oneLine(`${data.hits.length} hit${data.hits.length === 1 ? "" : "s"}${titles ? `: ${titles}` : ""}`, RESULT_CLIP);
-      }
-      if (data.hit) return oneLine(`read "${data.hit.title ?? "untitled"}"`, RESULT_CLIP);
-    } catch {
-      /* fall through: not the JSON shape we know */
-    }
-    return "";
-  }
   if (call.name === "subagent" && call.arguments?.action === "list") return "listed specialists";
-  if (call.name === "notebook") {
-    const id = text.match(/logged notebook entry \(id: ([^)]+)\)/);
-    if (id) return `logged (id: ${id[1]})`;
-  }
   return oneLine(text, RESULT_CLIP);
 }
 
@@ -145,8 +125,7 @@ function userText(raw: string): string {
   if (d.verify) added.push("verification gate");
   for (const ref of context.research) {
     if (ref.kind === "chat") added.push(`earlier chat "${ref.title}"`);
-    else if (ref.kind === "note") added.push(`note page "${ref.title}" (id ${ref.id}, revision ${ref.version})`);
-    else added.push(`${RECORD_KIND_LABELS[ref.type]} "${ref.title}"`);
+    else added.push(`note page "${ref.title}" (id ${ref.id}, revision ${ref.version})`);
   }
   return `${body}\n\n_(Added from the + menu: ${added.join("; ")})_`;
 }
@@ -202,6 +181,7 @@ export function renderTurns(entries: SessionEntryRow[], sandboxRoot: string): Tu
     for (const part of content ?? []) {
       if (part.type === "toolCall") {
         const call = part as ToolCallPart;
+        if (isRetiredNotebookTool(call.name)) continue;
         const result = results.get(call.id);
         let outcome = "";
         if (result) {

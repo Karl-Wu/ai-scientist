@@ -246,7 +246,7 @@ Report your findings with citations to the figure and its inputs, and regenerate
 description: Review the methods used so far for reproducibility
 ---
 
-Review the methods relevant to this chat's requested result/deliverable. Use notebook_search and relevant provenance records to identify that scope; for an explicit project-wide request, cover the project and state any bounds or omitted records. Do not rerun every historical analysis merely to review it.
+Review the methods relevant to this chat's requested result/deliverable. Use the task transcript, relevant provenance records and any attached note pages to identify that scope; for an explicit project-wide request, cover the project and state any bounds or omitted records. Do not rerun every historical analysis merely to review it.
 
 List planned, attempted, completed and unverified steps separately, with evidence references. Read relevant \`.kady/provenance/<sessionId>/steps.jsonl\` records and their \`.kady/environments/<environmentId>.json\` snapshots using available file tools; preserve snapshot timing and never substitute today's environment for an unrecorded historical one. Report inputs, parameters, versions and full output paths only where supported. Flag undocumented manual edits, missing scripts and unknown/stale lineage, distinguishing inaccessible evidence from a confirmed omission. Propose specific remedies.
 
@@ -439,7 +439,7 @@ const PREVIOUS_TEMPLATE_DIGESTS: Record<string, string[]> = {
   qc: ["fb55d2ba5f8ad2852ddc4a121fe3ba64f338740558a83dfa13f50f5eaa451428", "8e858d6ae8c8806e3a016f5158debaa73140cade0cac5af590f88a4a97dc633d"],
   "stats-check": ["fe0e0f0e3400f96c97ab76208757b78748aae816a8d623dd72d20ed0546de03c"],
   "figure-audit": ["ee4246192166a830fcaf181bfebf6f47d90fd1ffd0877e3fecf9c301ddd767c0", "043ec013badbbc1f5eac315b4b613b166a6a85fd7e1b1558cf3f20e6d1dbb112"],
-  "methods-review": ["3847b931a5617be5dc1705982fc5809c5c024df3a0fbb328b80dfc0a027faf62", "1b54e12a144a4a5b9a7628d911bd581058bc15ee8309e9862cb2e5f362932b63"],
+  "methods-review": ["3847b931a5617be5dc1705982fc5809c5c024df3a0fbb328b80dfc0a027faf62", "1b54e12a144a4a5b9a7628d911bd581058bc15ee8309e9862cb2e5f362932b63", "9f88ba06bcb3362534b4625562bcc4503ee542a3660940a9caaaaac744789ec9"],
   replicate: ["518cef5d77c58f5be3ae879204dd2b32ced8b78dd498925d0be5754b7a2d202d", "7ae7cf27e62c7841fd606522fe8c1333af1df3ee0dd4ef7c07a8079d1a945291"],
 };
 

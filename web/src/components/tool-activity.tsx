@@ -3,7 +3,6 @@
 import { useLocale, useT } from "@/components/i18n-provider";
 
 import {
-  BookOpenIcon,
   CheckIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -433,30 +432,6 @@ export function ModalJobChip({
       >
         {jobId ? "View job" : "Open Compute"}
       </button>
-    </div>
-  );
-}
-
-/** Compact chip for a historical `notebook` tool call in a transcript. */
-export function NotebookEntryChip({ item }: { item: ActivityItem }) {
-  const t = useT();
-  const args = (item.args ?? {}) as Record<string, unknown>;
-  const typeLabel =
-    typeof args.type === "string"
-      ? args.type.charAt(0).toUpperCase() + args.type.slice(1)
-      : "Entry";
-  const title = typeof args.title === "string" ? args.title : "";
-  return (
-    <div
-      data-tool-call-id={item.id}
-      className="my-1 flex w-full items-center gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10 px-2.5 py-1.5 text-xs"
-    >
-      <BookOpenIcon className="size-3.5 shrink-0 text-amber-500" />
-      <span className="font-medium text-foreground">{t("Journal")} · {t(typeLabel)}</span>
-      {title && (
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">{title}</span>
-      )}
-      <StatusDot status={item.status} />
     </div>
   );
 }

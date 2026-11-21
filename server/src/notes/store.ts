@@ -85,6 +85,7 @@ function normalizeSource(
   sessionRows: Map<string, SessionEntryRow[]>,
 ): NoteSource {
   const raw = record(input, "note source");
+  if (raw.kind === "pdfAnnotation") return resolveNoteAnchor(projectId, parseNoteAnchor(raw)).source;
   const paths = resolvePaths(projectId);
   const common = { label: text(raw.label, "source label", 300, true), excerpt: text(raw.excerpt, "source excerpt", 4_000) };
   let sessionId: string | undefined;
@@ -266,7 +267,7 @@ export function listNotePages(projectId: string, search = ""): NoteSummary[] {
     if (search && ![revision.title, revision.summary,
       ...page.sources.map((source) => source.label), ...Object.values(revision.fields)]
       .some((value) => value.toLowerCase().includes(search))) return [];
-    const tasks = [...new Set(page.sources.flatMap((source) => source.sessionId ? [source.sessionId] : []))];
+    const tasks = [...new Set(page.sources.flatMap((source) => "sessionId" in source && source.sessionId ? [source.sessionId] : []))];
     const primarySource = page.sources[0];
     return [{
       id: page.id, type: page.type, version: revision.version, organizer: page.organizer, title: revision.title,

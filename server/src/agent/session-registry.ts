@@ -37,8 +37,6 @@ import { defaultModel, pruneStaleOpenRouterCatalog, resolveModel, setupModelRunt
 import { canonicalProviderId } from "./provider-catalog.ts";
 import { seedAgentFiles } from "./agent-files.ts";
 import { makeInterviewTool } from "./interview.ts";
-import { notebookSearchTool } from "../../pi-packages/kady-notebook/memory-tool.ts";
-import { executeMemoryRecall } from "./notebook-memory.ts";
 import { makeNoteReadTool } from "../notes/read-tool.ts";
 import { makeScientificResultTool } from "./scientific-result.ts";
 import { clearSessionCompute, makeModalTools } from "./modal-tool.ts";
@@ -56,10 +54,7 @@ import { seedGuardPackage } from "./guard-bridge.ts";
 import { seedPromptTemplates } from "./prompts.ts";
 import { seedWatchdogGuidance } from "./watchdog-settings.ts";
 import { ensureWebAccess } from "./web-access-bridge.ts";
-import {
-  seedNotebookPackage,
-  seedBuiltinAgentNotebookTools,
-} from "./notebook-bridge.ts";
+import { retireNotebookTools } from "./notebook-bridge.ts";
 import { makeSubagentProvenanceExtension } from "../provenance/bridge.ts";
 import {
   makeSubagentModalExtension,
@@ -353,11 +348,7 @@ async function build(
   // sessions in a detached runner that loads the sandbox's ambient packages)
   // get the web tools (web-access-bridge.ts explains why children need this).
   ensureWebAccess(paths);
-  // The notebook package supplies read-only historical search to specialists.
-  seedNotebookPackage(paths);
-  // Builtin pi-subagents specialists pin a tools allowlist that would filter
-  // notebook search out of their child processes — extend it via overrides.
-  seedBuiltinAgentNotebookTools(paths);
+  retireNotebookTools(paths);
   // Child-only localhost bridge for the same durable project-scoped Modal
   // jobs. Builtin allowlists are extended only when they retain our generated
   // shape; user-pinned lists remain authoritative.
@@ -497,7 +488,6 @@ async function build(
     excludeTools: LEAD_EXCLUDED_TOOLS,
     customTools: [
       interviewTool,
-      notebookSearchTool((params) => executeMemoryRecall(projectId, params)),
       makeNoteReadTool(projectId),
       scientificResultTool,
       ...pdfAnnotationTools,

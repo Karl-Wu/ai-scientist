@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { registerNotesRoutes } from "../src/api/notes.ts";
 import { createNotePage } from "../src/notes/store.ts";
 import { makeNoteReadTool } from "../src/notes/read-tool.ts";
+import { replacePdfAnnotations } from "../src/pdf-annotations-store.ts";
 import { ensureProjectExists } from "../src/projects.ts";
 import { withActiveProject } from "../src/scope.ts";
 import type { NotePage } from "../../web/src/lib/note-pages.ts";
@@ -280,5 +281,40 @@ describe("project note pages", () => {
       expect((await foreign.inject({ url: "/notes/" + page.id })).statusCode).toBe(404);
       expect((await foreign.inject({ url: "/notes", headers: { "x-project-id": "missing" } })).statusCode).toBe(404);
     } finally { await foreign.close(); }
+  });
+
+  it("stores the annotated PDF page, quotes the saved annotation, and preserves the source after deletion", async () => {
+    const pdf = "annotated-paper.pdf";
+    const annotationId = "highlight-3";
+    fs.writeFileSync(path.join(project.sandbox, pdf), "%PDF-1.7\n");
+    await replacePdfAnnotations(project.sandbox, pdf, { version: 1, annotations: [{
+      id: annotationId, type: "highlight", page: 3, text: "The cohort contained 42 samples.",
+      note: "Check the reported exclusions.",
+      rects: [{ x: 10, y: 20, w: 120, h: 14 }],
+      author: { kind: "user", id: "user", label: "You" },
+      createdAt: "2026-11-21T00:00:00.000Z",
+    }] });
+    const app = await notesApp();
+    try {
+      const payload = {
+        title: "Check sample exclusions",
+        summary: "The cohort contained 42 samples. Check the reported exclusions.",
+        requestId: "00aabbccddeeff000102030405060708",
+        source: { kind: "pdfAnnotation", path: pdf, annotationId, page: 9 },
+      };
+      const create = (body = payload) => app.inject({ method: "POST", url: "/notes", payload: body });
+      expect((await create({ ...payload, source: { ...payload.source, annotationId: "missing" } })).statusCode).toBe(404);
+      const response = await create();
+      expect(response.statusCode).toBe(201);
+      const page = response.json<NotePage>();
+      expect(page.sources).toEqual([{
+        id: "s1", kind: "pdfAnnotation", path: pdf, annotationId, page: 3, label: pdf,
+        excerpt: "Highlighted text\nThe cohort contained 42 samples.\n\nAnnotation text\nCheck the reported exclusions.",
+      }]);
+      expect((await app.inject("/notes")).json().pages[0].source).toMatchObject({ kind: "pdfAnnotation", path: pdf, page: 3, annotationId });
+      await replacePdfAnnotations(project.sandbox, pdf, { version: 1, annotations: [] });
+      expect((await create()).json<NotePage>().id).toBe(page.id);
+      expect((await app.inject("/notes/" + page.id)).json<NotePage>().sources).toEqual(page.sources);
+    } finally { await app.close(); }
   });
 });

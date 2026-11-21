@@ -25,14 +25,17 @@ import {
 } from "react";
 
 import { ExternalLinkIcon } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 import { rawFileUrl } from "@/lib/use-sandbox";
 import { useProjectScopeId } from "@/lib/projects";
+import type { NoteCreationSource } from "@/lib/note-pages";
 import {
   type Annotation,
   type AnnotationsDoc,
   type Author,
   type HighlightAnnotation,
   type NoteAnnotation,
+  type PdfAnnotationFocus,
   type Rect,
   EMPTY_DOC,
   USER_AUTHOR,
@@ -165,6 +168,8 @@ export interface PdfViewerProps {
   onSyncClick?: (pos: PdfSyncClick) => void; // Cmd/Ctrl+click on a page
   hideAnnotationUi?: boolean; // view-only: hide annotation UI and skip loading/polling the sidecar
   initialFitWidth?: boolean;
+  annotationFocus?: PdfAnnotationFocus;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }
 
 export function PdfViewer({
@@ -176,7 +181,10 @@ export function PdfViewer({
   onSyncClick,
   hideAnnotationUi = false,
   initialFitWidth = false,
+  annotationFocus,
+  onCreateNote,
 }: PdfViewerProps) {
+  const t = useT();
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
   const [pdfjs, setPdfjs] = useState<PdfjsModule | null>(null);
@@ -187,6 +195,7 @@ export function PdfViewer({
 
   const [annotations, setAnnotations] =
     useState<AnnotationsDoc>(EMPTY_DOC);
+  const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
   const [lastModified, setLastModified] = useState<string | null>(null);
   const annotationsRef = useRef<AnnotationsDoc>(EMPTY_DOC);
   const lastModifiedRef = useRef<string | null>(null);
@@ -318,11 +327,15 @@ export function PdfViewer({
   useEffect(() => {
     if (hideAnnotationUi) return;
     let cancelled = false;
-    fetchAnnotations(path, scopedProjectId).then((res) => {
+    void fetchAnnotations(path, scopedProjectId).then((res) => {
       if (cancelled) return;
       setAnnotations(res.doc);
       setLastModified(res.lastModified);
       etagRef.current = res.etag;
+    }).catch(() => {
+      // Finish loading so a broken citation can fall back to its saved page.
+    }).finally(() => {
+      if (!cancelled) setAnnotationsLoaded(true);
     });
     return () => {
       cancelled = true;
@@ -558,12 +571,16 @@ export function PdfViewer({
   // Filtered view for the layers + sidebar
   // --------------------------------------------------------------------
 
+  const linkedAnnotation = annotationFocus && annotations.annotations.find((annotation) =>
+    annotation.id === annotationFocus.annotationId);
+  const linkedPage = linkedAnnotation?.page ?? annotationFocus?.page;
+  const linkedId = linkedAnnotation?.id;
   const visibleAnnotations = useMemo(
     () =>
       annotations.annotations.filter(
-        (a) => showExpert || a.author.kind !== "expert",
+        (a) => showExpert || a.author.kind !== "expert" || a.id === linkedId,
       ),
-    [annotations, showExpert],
+    [annotations, showExpert, linkedId],
   );
 
   const annotationsByPage = useMemo(() => {
@@ -599,6 +616,30 @@ export function PdfViewer({
   // --------------------------------------------------------------------
 
   const defaultSize = useMemo(() => pageSize ? { w: pageSize.w * zoom, h: pageSize.h * zoom } : null, [pageSize, zoom]);
+  const pagesReady = Boolean(doc && defaultSize);
+  const focusToken = annotationFocus?.token;
+  useEffect(() => {
+    if (!pagesReady || linkedPage === undefined) return;
+    const page = containerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${linkedPage}"]`);
+    // Bring an unrendered page into range first. Its mounted annotation
+    // scrolls into view once the viewport transform is available.
+    if (page && !page.querySelector("[data-pdf-linked-annotation]")) {
+      page.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }, [focusToken, linkedPage, pagesReady]);
+
+  const createNoteFromAnnotation = onCreateNote ? (annotation: Annotation, comment: string) => {
+    const highlighted = annotation.type === "highlight" ? annotation.text : "";
+    const initialSummary = [
+      highlighted?.trim() && `### ${t("Highlighted text")}\n\n${highlighted.trim().slice(0, 15_000)}`,
+      comment.trim() && `### ${t("Annotation text")}\n\n${comment.trim().slice(0, 15_000)}`,
+    ].filter(Boolean).join("\n\n");
+    onCreateNote({
+      title: `${path.split("/").at(-1)} · ${t("Page {page}", { page: annotation.page })}`,
+      anchor: { kind: "pdfAnnotation", path, annotationId: annotation.id },
+      initialSummary,
+    });
+  } : undefined;
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
@@ -684,6 +725,11 @@ export function PdfViewer({
           if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />
+      {annotationFocus && annotationsLoaded && !linkedAnnotation && (
+        <p role="status" className="shrink-0 border-b px-3 py-2 text-xs text-muted-foreground">
+          {t("The linked PDF annotation is unavailable.")}
+        </p>
+      )}
 
       <div className="flex flex-1 min-h-0">
         <div
@@ -709,8 +755,11 @@ export function PdfViewer({
                       annotationsByPage.get(pageNumber) ?? []
                     }
                     activeAnnotationId={activeAnnotationId}
+                    linkedAnnotationId={linkedPage === pageNumber ? linkedId : undefined}
+                    focusToken={focusToken}
                     onRemove={removeAnnotation}
                     onUpdate={updateAnnotation}
+                    onCreateNote={createNoteFromAnnotation}
                     onClickPage={(e) => handlePageClick(e, pageNumber)}
                   />
                 ),
@@ -921,8 +970,11 @@ function PageView({
   sync,
   annotations,
   activeAnnotationId,
+  linkedAnnotationId,
+  focusToken,
   onRemove,
   onUpdate,
+  onCreateNote,
   onClickPage,
 }: {
   doc: PdfDoc;
@@ -932,13 +984,24 @@ function PageView({
   sync: { h: number; v: number; W: number; H: number; token: number } | null;
   annotations: Annotation[];
   activeAnnotationId: string | null;
+  linkedAnnotationId?: string;
+  focusToken?: number;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Annotation>) => void;
+  onCreateNote?: (annotation: Annotation, comment: string) => void;
   onClickPage: (ev: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const { pageRef, canvasRef, textLayerRef, viewport, size } = usePdfPageRendering(
     doc, pageNumber, BASE_SCALE * zoom, loadPdfjs,
   );
+  const scrolledToken = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!viewport || !linkedAnnotationId || focusToken === undefined || scrolledToken.current === focusToken) return;
+    const element = pageRef.current?.querySelector<HTMLElement>("[data-pdf-linked-annotation]");
+    if (!element) return;
+    element.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+    scrolledToken.current = focusToken;
+  }, [viewport, linkedAnnotationId, focusToken, pageRef]);
 
   return (
     <div
@@ -974,10 +1037,12 @@ function PageView({
           height={size.h}
           annotations={annotations}
           activeAnnotationId={activeAnnotationId}
+          linkedAnnotationId={linkedAnnotationId}
           viewport={viewport as unknown as PdfjsViewport | null}
           colorForAuthor={colorForAuthor}
           onRemove={onRemove}
           onUpdate={onUpdate}
+          onCreateNote={onCreateNote}
         />
       )}
     </div>

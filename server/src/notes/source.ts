@@ -4,6 +4,7 @@ import { scientificResultFromDetails } from "../agent/scientific-result.ts";
 import { findSessionFile, readEntries } from "../agent/session-export.ts";
 import { toHistory } from "../agent/session-history.ts";
 import { redactText } from "../agent/task-event-recorder.ts";
+import { PdfAnnotationStoreError, pdfAnnotationSidecarPath, readPdfAnnotations } from "../pdf-annotations-store.ts";
 import { resolvePaths } from "../projects.ts";
 import { isUserVisible, isWithin, safePath, SandboxError, toApiPath } from "../sandbox-fs.ts";
 import { commandPreview } from "../../../web/src/lib/command-blocks.ts";
@@ -12,12 +13,18 @@ import type { NoteAnchor, NoteSource } from "../../../web/src/lib/note-pages.ts"
 export function parseNoteAnchor(input: unknown): NoteAnchor {
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new SandboxError(400, "Invalid note source");
   const source = input as Record<string, unknown>;
-  if (source.kind === "file") {
+  if (source.kind === "file" || source.kind === "pdfAnnotation") {
     const file = source.path;
     if (typeof file !== "string" || !file || file.length > 2_000 || file.includes("\0") || path.isAbsolute(file)) {
       throw new SandboxError(400, "Invalid source path");
     }
-    return { kind: "file", path: toApiPath(path.normalize(file)) };
+    const sourcePath = toApiPath(path.normalize(file));
+    if (source.kind === "file") return { kind: "file", path: sourcePath };
+    if (!sourcePath.toLowerCase().endsWith(".pdf") || typeof source.annotationId !== "string" ||
+        !source.annotationId.trim() || source.annotationId.length > 500 || source.annotationId.includes("\0")) {
+      throw new SandboxError(400, "Invalid PDF annotation source");
+    }
+    return { kind: "pdfAnnotation", path: sourcePath, annotationId: source.annotationId };
   }
   const sessionId = source.sessionId;
   if (typeof sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(sessionId)) {
@@ -35,6 +42,10 @@ export function parseNoteAnchor(input: unknown): NoteAnchor {
 export function matchesNoteAnchor(source: NoteSource | undefined, anchor: NoteAnchor): boolean {
   if (source?.kind !== anchor.kind) return false;
   if (anchor.kind === "file") return source.kind === "file" && source.path === anchor.path;
+  if (anchor.kind === "pdfAnnotation") {
+    return source.kind === "pdfAnnotation" && source.path === anchor.path && source.annotationId === anchor.annotationId;
+  }
+  if (source.kind === "pdfAnnotation") return false;
   if (source.sessionId !== anchor.sessionId) return false;
   if (anchor.kind === "message") return source.kind === "message" && source.entryId === anchor.entryId;
   return source.kind === "result" && source.toolCallId === anchor.toolCallId;
@@ -59,11 +70,33 @@ export function resolveNoteAnchor(projectId: string, anchor: NoteAnchor):
   | { source: NoteSource; material: string }
   | { source: NoteSource; file: string } {
   const paths = resolvePaths(projectId);
-  if (anchor.kind === "file") {
+  if (anchor.kind === "file" || anchor.kind === "pdfAnnotation") {
     const absolute = safePath(anchor.path, paths.sandbox);
     if (!isUserVisible(absolute, paths.sandbox)) throw new SandboxError(403, "Source file is outside the visible project files");
     const file = existingFile(paths.sandbox, absolute, true);
-    return { source: { ...anchor, label: anchor.path.split("/").at(-1)!.slice(0, 300), excerpt: "" }, file };
+    const label = path.posix.basename(anchor.path).slice(0, 300);
+    if (anchor.kind === "file") return { source: { ...anchor, label, excerpt: "" }, file };
+
+    let annotations;
+    try {
+      existingFile(paths.sandbox, pdfAnnotationSidecarPath(paths.sandbox, anchor.path));
+      annotations = readPdfAnnotations(paths.sandbox, anchor.path).doc.annotations;
+    } catch (error) {
+      if (error instanceof PdfAnnotationStoreError) throw new SandboxError(404, "The selected PDF annotation is unavailable");
+      throw error;
+    }
+    const annotation = annotations.find((item) => item?.id === anchor.annotationId);
+    if (!annotation || !Number.isSafeInteger(annotation.page) || annotation.page < 1) {
+      throw new SandboxError(404, "The selected PDF annotation is unavailable");
+    }
+    const highlighted = annotation.type === "highlight" ? annotation.text : "";
+    const comment = annotation.type === "highlight" ? annotation.note : annotation.body;
+    const excerpts = (limit: number) => [
+      typeof highlighted === "string" && highlighted.trim() ? "Highlighted text\n" + highlighted.trim().slice(0, limit) : "",
+      typeof comment === "string" && comment.trim() ? "Annotation text\n" + comment.trim().slice(0, limit) : "",
+    ].filter(Boolean).join("\n\n");
+    const material = excerpts(16_000);
+    return { source: { ...anchor, page: annotation.page, label, excerpt: excerpts(1_980) }, material };
   }
 
   const session = findSessionFile(paths, anchor.sessionId);

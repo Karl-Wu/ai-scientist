@@ -42,11 +42,11 @@ const projectState: ProjectWorkspaceState = {
         ],
         researchRefs: [
           {
-            kind: "record",
-            type: "decision",
+            kind: "note",
+            type: "note",
             title: "Keep Emax",
-            source: { kind: "notebook", sessionId: "session-0", entryId: "e1" },
-            digest: "b".repeat(64),
+            id: "ad94e200-56c4-4100-98b4-e2e643a24b01",
+            version: 1,
           },
           { kind: "chat", sessionId: "session-0", title: "Earlier QC" },
         ],

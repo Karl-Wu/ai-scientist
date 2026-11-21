@@ -3,7 +3,6 @@ import path from "node:path";
 import { createMcpExtension, createCodemodeExtension, createToolSearchExtension, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerBackgroundWorkProvider } from "pi-subagents/background-work";
 import { registerChildGuard } from "../kady-guard/index.ts";
-import { registerChildNotebook } from "../kady-notebook/index.ts";
 import { registerChildModal } from "../kady-modal/index.ts";
 import { registerChildPdfAnnotations } from "../kady-pdf-annotations/index.ts";
 import { CHILD_OPERATING_GUIDANCE, setSubagentPromptSection } from "../../src/agent/subagent-prompts.ts";
@@ -18,7 +17,6 @@ export default function (pi: ExtensionAPI) {
   // env is not a reliable identity. This file is never installed in the lead.
   if (!process.env.PI_SUBAGENT_CHILD) {
     registerChildGuard(pi);
-    registerChildNotebook(pi);
     registerChildModal(pi);
     registerChildPdfAnnotations(pi);
   }

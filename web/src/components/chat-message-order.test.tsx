@@ -109,6 +109,40 @@ describe("AssistantMessageBody", () => {
     expect(screen.queryByText("pwd")).not.toBeInTheDocument();
   });
 
+  it("omits retired notebook activity without splitting or inflating the remaining tool group", () => {
+    const activities: NonNullable<ChatMessage["activities"]> = [
+      { id: "read", status: "complete", label: "read", toolName: "read", timestamp: 1, args: { path: "report.md" } },
+      { id: "journal", status: "complete", label: "notebook", toolName: "notebook", timestamp: 2, args: { title: "Old hypothesis" } },
+      { id: "recall", status: "error", label: "notebook_search", toolName: "notebook_search", timestamp: 3 },
+      { id: "bash", status: "complete", label: "bash", toolName: "bash", timestamp: 4, args: { command: "pwd" } },
+    ];
+    const message: ChatMessage = {
+      id: "old", role: "assistant", content: "Done.", timestamp: 1, activities,
+      segments: [
+        ...activities.map(({ id }) => ({ type: "activity" as const, activityId: id })),
+        { type: "text", content: "Done." },
+      ],
+    };
+
+    render(<AssistantMessageBody message={message} isStreaming={false} isLast sessionId="s" projectId="default" />);
+    const tools = screen.getByRole("button", { name: "Ran 2 tool calls" });
+    fireEvent.click(tools);
+    expect(screen.getByText("Done.")).toBeVisible();
+    expect(screen.getByText("report.md")).toBeVisible();
+    expect(screen.queryByText("Old hypothesis")).not.toBeInTheDocument();
+    expect(screen.queryByText(/notebook_search/)).not.toBeInTheDocument();
+  });
+
+  it("omits a historical row containing only a retired notebook call", () => {
+    const message: ChatMessage = {
+      id: "old", role: "assistant", content: "", timestamp: 1,
+      activities: [{ id: "journal", status: "complete", label: "notebook", toolName: "notebook", timestamp: 1 }],
+    };
+    const { container } = render(<ChatMessageRow message={message} isStreaming={false} isLast
+      sessionId="s" projectId="default" copied={false} onCopy={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("shows only a status while reasoning and hides completed reasoning by default", () => {
     const reasoning = "**检查输入**\n\n先核对两份文件。";
     const renderReply = (isStreaming: boolean, showReasoningDetails = false, hasReasoning = true) => (

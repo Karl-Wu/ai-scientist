@@ -27,10 +27,12 @@ export interface AnnotationLayerProps {
   height: number;
   annotations: Annotation[];
   activeAnnotationId: string | null;
+  linkedAnnotationId?: string;
   viewport: PdfjsViewport | null;
   colorForAuthor: (a: Author) => string;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Annotation>) => void;
+  onCreateNote?: (annotation: Annotation, comment: string) => void;
 }
 
 export function AnnotationLayer({
@@ -38,10 +40,12 @@ export function AnnotationLayer({
   height,
   annotations,
   activeAnnotationId,
+  linkedAnnotationId,
   viewport,
   colorForAuthor,
   onRemove,
   onUpdate,
+  onCreateNote,
 }: AnnotationLayerProps) {
   const [openNote, setOpenNote] = useState<{
     id: string;
@@ -81,6 +85,7 @@ export function AnnotationLayer({
                 <button
                   key={i}
                   type="button"
+                  data-pdf-linked-annotation={linkedAnnotationId === h.id && i === 0 ? "" : undefined}
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpenNote({
@@ -91,7 +96,8 @@ export function AnnotationLayer({
                   title={`${label}${h.note ? ": " + h.note : ""}`}
                   className={cn(
                     "absolute pointer-events-auto cursor-pointer",
-                    activeAnnotationId === h.id && "ring-2 ring-offset-1 ring-primary animate-pulse",
+                    (linkedAnnotationId === h.id || activeAnnotationId === h.id) && "ring-2 ring-offset-1 ring-primary",
+                    activeAnnotationId === h.id && "animate-pulse",
                   )}
                   style={{
                     left: css.left,
@@ -117,6 +123,7 @@ export function AnnotationLayer({
           <button
             key={n.id}
             type="button"
+            data-pdf-linked-annotation={linkedAnnotationId === n.id ? "" : undefined}
             onClick={(e) => {
               e.stopPropagation();
               setOpenNote({
@@ -127,7 +134,8 @@ export function AnnotationLayer({
             title={`${n.author.label}: ${n.body.slice(0, 60)}${n.body.length > 60 ? "…" : ""}`}
             className={cn(
               "absolute flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-foreground/30 shadow text-[10px] font-semibold text-foreground",
-              activeAnnotationId === n.id && "ring-2 ring-offset-1 ring-primary animate-pulse",
+              (linkedAnnotationId === n.id || activeAnnotationId === n.id) && "ring-2 ring-offset-1 ring-primary",
+              activeAnnotationId === n.id && "animate-pulse",
             )}
             style={{
               left: pos.left,
@@ -153,6 +161,10 @@ export function AnnotationLayer({
               author={ann.author}
               showDelete
               onCancel={() => setOpenNote(null)}
+              onCreateNote={onCreateNote ? (comment) => {
+                setOpenNote(null);
+                onCreateNote(ann, comment);
+              } : undefined}
               onSave={(body) => {
                 if (ann.type === "note") {
                   onUpdate(ann.id, { body } as Partial<Annotation>);
