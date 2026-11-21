@@ -22,7 +22,7 @@ describe("AssistantMessageBody", () => {
     expect(onCopy).toHaveBeenCalledWith("old", "Completed reply");
   });
   it("shows the original headings in stream order after expanding reasoning", () => {
-    const reasoning = "**Review the inputs**\n\nIntermediate reasoning.\n\n**Compare files**\n\nThe schemas match.";
+    const reasoning = "**Review the inputs**\n\nIntermediate reasoning with **inline emphasis**.\n\n## Compare files\n\nThe schemas match.\n\n~~~md\n**Example markup**\n~~~";
     const message: ChatMessage = {
       id: "assistant",
       role: "assistant",
@@ -47,24 +47,36 @@ describe("AssistantMessageBody", () => {
       ],
     };
 
-    render(
+    const reply = (showReasoningDetails: boolean) => (
       <AssistantMessageBody
         message={message}
-        isStreaming
+        isStreaming={false}
         isLast
-        showReasoningDetails
+        showReasoningDetails={showReasoningDetails}
         sessionId="session-1"
         projectId="default"
-      />,
+      />
     );
 
+    const { rerender } = render(reply(false));
     const before = screen.getByText("Before tool.");
-    const disclosure = screen.getByRole("button", { name: "Reasoning" });
+    const execution = screen.getByRole("button", { name: "Ran 1 tool call" });
+    expect(execution).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Review the inputs")).not.toBeInTheDocument();
+    fireEvent.click(execution);
+    const first = screen.getByText("Review the inputs");
+    const second = screen.getByText("Compare files");
+    expect(before.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/inline emphasis|Example markup/)).not.toBeInTheDocument();
+
+    rerender(reply(true));
+    const disclosure = screen.getByRole("button", { name: "Review the inputs, Compare files" });
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText(/Intermediate reasoning\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Intermediate reasoning/)).not.toBeInTheDocument();
     fireEvent.click(disclosure);
-    const summary = screen.getByText(/Intermediate reasoning\./);
-    const tool = screen.getByRole("button", { name: "Ran 1 tool call" });
+    const summary = screen.getByText(/Intermediate reasoning/);
+    const tool = screen.getByRole("button", { name: /bash.*sleep 5/ });
     const after = screen.getByText("After tool.");
 
     expect(summary.textContent).toBe(reasoning);
@@ -78,6 +90,40 @@ describe("AssistantMessageBody", () => {
     expect(
       tool!.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("shows only the latest live title and collapses titles and tools into one historical summary", () => {
+    const message: ChatMessage = {
+      id: "assistant", role: "assistant", content: "", timestamp: 1,
+      activities: [
+        { id: "read", label: "read", toolName: "read", status: "error", timestamp: 2, args: { path: "dataset.tsv" } },
+        { id: "bash", label: "bash", toolName: "bash", status: "unknown", timestamp: 3, args: { command: "python --version" } },
+      ],
+      segments: [
+        { type: "reasoning", content: "**Evaluating dataset accuracy**\n\n**Addressing coding issues**" },
+        { type: "reasoning", content: "**Fixing covariance issues**" },
+        { type: "activity", activityId: "read" },
+        { type: "reasoning", content: "**Checking Python version**\n\n**Choosing a runtime**" },
+        { type: "activity", activityId: "bash" },
+        { type: "reasoning", content: "An untitled continuation." },
+      ],
+    };
+    const props = { message, isLast: true, sessionId: "s", projectId: "default" };
+    const { rerender } = render(<AssistantMessageBody {...props} isStreaming />);
+    expect(screen.getByRole("status")).toHaveTextContent(/^Choosing a runtime$/);
+    expect(screen.queryByText(/Evaluating dataset accuracy|Checking Python version/)).not.toBeInTheDocument();
+
+    rerender(<AssistantMessageBody {...props} isStreaming={false} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evaluating dataset accuracy|Choosing a runtime|unknown status/)).not.toBeInTheDocument();
+    const execution = screen.getByRole("button", { name: /Ran 2 tool calls\s*·\s*1 failed/ });
+    expect(execution).toHaveTextContent("Ran 2 tool calls · 1 failed");
+    fireEvent.click(execution);
+    const titles = screen.getByText("Evaluating dataset accuracy").closest("p")!;
+    const tool = screen.getByRole("button", { name: /read.*dataset.tsv/ });
+    expect(titles).toHaveTextContent(/^Evaluating dataset accuracy · Addressing coding issues$/);
+    expect(screen.getByText("Fixing covariance issues").compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tool.compareDocumentPosition(screen.getByText("Checking Python version")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses a count for past tool groups and previews only the latest live call", () => {
@@ -143,11 +189,12 @@ describe("AssistantMessageBody", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows only a status while reasoning and hides completed reasoning by default", () => {
+  it("replaces the thinking status with the streamed title and keeps the body hidden by default", () => {
     const reasoning = "**检查输入**\n\n先核对两份文件。";
-    const renderReply = (isStreaming: boolean, showReasoningDetails = false, hasReasoning = true) => (
+    const renderReply = (isStreaming: boolean, content: string, showReasoningDetails = false) => (
       <AssistantMessageBody
-        message={{ id: "assistant", role: "assistant", content: "", timestamp: 1, ...(hasReasoning ? { reasoning, segments: [{ type: "reasoning", content: reasoning }] } : {}) }}
+        message={{ id: "assistant", role: "assistant", content: "", timestamp: 1,
+          ...(content ? { reasoning: content, segments: [{ type: "reasoning", content }] } : {}) }}
         isStreaming={isStreaming}
         isLast
         showReasoningDetails={showReasoningDetails}
@@ -156,19 +203,21 @@ describe("AssistantMessageBody", () => {
       />
     );
 
-    const { rerender } = render(renderReply(true, false, false));
+    const { rerender } = render(renderReply(true, ""));
     expect(screen.getByRole("status")).toHaveTextContent("Thinking...");
-    rerender(renderReply(true));
+    rerender(renderReply(true, "**检查输"));
     expect(screen.getByRole("status")).toHaveTextContent("Thinking...");
-    expect(screen.queryByRole("button", { name: "Thinking..." })).not.toBeInTheDocument();
-    expect(screen.queryByText(/先核对两份文件/)).not.toBeInTheDocument();
-    rerender(renderReply(false));
+    rerender(renderReply(true, reasoning));
+    expect(screen.getByRole("status")).toHaveTextContent(/^检查输入$/);
+    expect(screen.queryByRole("button", { name: "检查输入" })).not.toBeInTheDocument();
+    rerender(renderReply(false, reasoning));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.queryByText(/检查输入/)).not.toBeInTheDocument();
-    rerender(renderReply(true, true));
-    expect(screen.getByRole("button", { name: "Thinking..." })).toHaveAttribute("aria-expanded", "false");
-    rerender(renderReply(false, true));
-    expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("检查输入")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Execution details" }));
+    expect(screen.getByText("检查输入")).toBeVisible();
+    expect(screen.queryByText(/先核对两份文件/)).not.toBeInTheDocument();
+    rerender(renderReply(false, "先核对两份文件。"));
+    expect(screen.queryByText(/先核对两份文件/)).not.toBeInTheDocument();
   });
 
   it("applies the appearance setting to the open history and remembers it after reopening", async () => {
@@ -186,11 +235,13 @@ describe("AssistantMessageBody", () => {
       expect(screen.queryByRole("button", { name: "Reasoning" })).not.toBeInTheDocument();
       fireEvent.click(preference);
       expect(preference).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Execution details" }));
       expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute("aria-expanded", "false");
       unmount();
       render(ui);
       const reopenedPreference = await screen.findByRole("switch", { name: "Show reasoning details" });
       expect(reopenedPreference).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Execution details" }));
       fireEvent.click(screen.getByRole("button", { name: "Reasoning" }));
       expect(screen.getByText("Recorded summary.")).toBeVisible();
       fireEvent.click(reopenedPreference);

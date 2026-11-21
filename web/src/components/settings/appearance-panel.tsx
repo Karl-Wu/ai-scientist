@@ -40,7 +40,7 @@ export function AppearancePanel() {
         <div className="space-y-1">
           <label htmlFor="show-reasoning-details" className="text-sm font-medium">{t("Show reasoning details")}</label>
           <p id="reasoning-details-description" className="text-xs text-muted-foreground">
-            {t("Show collapsible reasoning details in current and past chats.")}
+            {t("Allow opening reasoning details inside the execution history.")}
           </p>
         </div>
         <Switch

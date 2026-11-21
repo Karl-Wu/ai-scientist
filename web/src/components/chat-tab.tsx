@@ -73,6 +73,8 @@ import {
   ModalJobChip,
   ToolTiming,
   ToolActivityList,
+  ToolActivityRows,
+  ToolActivitySummary,
   ToolDisclosure,
 } from "@/components/tool-activity";
 import type { FileSourceFocus } from "@/lib/provenance";
@@ -1441,12 +1443,49 @@ function ChatInput({
   );
 }
 
-function ReasoningLabel({ active }: { active: boolean }) {
+/** Reasoning summaries use headings or standalone bold lines for section titles. */
+function reasoningTitles(content: string): string[] {
+  const titles: string[] = [];
+  let fence: string | undefined;
+  for (const line of content.split(/\r?\n/)) {
+    const fenceLine = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fenceLine) {
+      const [, marker, suffix] = fenceLine;
+      if (!fence) fence = marker;
+      else if (marker.startsWith(fence) && !suffix.trim()) fence = undefined;
+      continue;
+    }
+    if (fence || /^(?: {4}|\t)/.test(line)) continue;
+
+    const text = line.trim();
+    const heading = /^#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?$/.exec(text)?.[1];
+    const label = heading ?? text;
+    const bold = label.startsWith("**") ? "**" : label.startsWith("__") ? "__" : undefined;
+    if (bold && label.length > 4 && label.indexOf(bold, 2) === label.length - 2) {
+      const title = label.slice(2, -2).trim();
+      if (title) titles.push(title);
+    } else if (heading) {
+      titles.push(heading);
+    }
+  }
+  return titles;
+}
+
+function ReasoningLabel({ titles = [] }: { titles?: string[] }) {
   const t = useT();
   return (
     <>
       <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
-      {active ? <Shimmer as="span" duration={1.5}>{t("Thinking...")}</Shimmer> : <span>{t("Reasoning")}</span>}
+      {titles.length ? (
+        <span className="min-w-0 break-words text-left leading-relaxed">
+          {titles.map((title, index) => (
+            <span key={index}>
+              {index > 0 && <span className="text-muted-foreground/60">{" · "}</span>}
+              <bdi>{title}</bdi>
+            </span>
+          ))}
+        </span>
+      ) : <span>{t("Reasoning")}</span>}
     </>
   );
 }
@@ -1462,6 +1501,27 @@ function formatExecutionDuration(ms: number, locale: string): string {
     minutes > 0 ? format(minutes, "minute") : "",
     format(elapsed % 60, "second"),
   ].filter(Boolean).join(" ");
+}
+
+function ExecutionDisclosure({ activities, children, elapsedLabel, focusNonce }: {
+  activities: ActivityItem[];
+  children: ReactNode;
+  elapsedLabel?: string;
+  focusNonce?: number;
+}) {
+  const t = useT();
+  return <ToolDisclosure className="my-1" focusNonce={focusNonce}>
+    <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60">
+      <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+      {activities.length ? <ToolActivitySummary activities={activities} /> : elapsedLabel ?? t("Execution details")}
+    </CollapsibleTrigger>
+    <CollapsibleContent>
+      <div className="mt-1 space-y-2 border-l-2 border-muted pl-2">
+        {activities.length > 0 && elapsedLabel && <p className="px-1 text-xs text-muted-foreground">{elapsedLabel}</p>}
+        {children}
+      </div>
+    </CollapsibleContent>
+  </ToolDisclosure>;
 }
 
 export const AssistantMessageBody = memo(function AssistantMessageBody({
@@ -1500,28 +1560,63 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const processBlocks: ReactNode[] = [];
   const summaryBlocks: ReactNode[] = [];
   const resultBlocks: ReactNode[] = [];
+  const processActivities: ActivityItem[] = [];
   let orderedBlocks = processBlocks;
   let chunk: ActivityItem[] = [];
+  let executionBlocks: ReactNode[] = [];
+  let executionActivities: ActivityItem[] = [];
+  let latestReasoningTitle: string | undefined;
   const flushChunk = (current = false) => {
     if (!chunk.length) return;
-    orderedBlocks.push(
-      <ToolActivityList
-        key={`tools-${chunk[0].id}`}
-        activities={chunk}
-        current={current}
-        fileSourceFocus={fileSourceFocus}
-      />,
-    );
+    const key = `tools-${chunk[0].id}`;
+    if (isStreaming) {
+      orderedBlocks.push(<ToolActivityList key={key} activities={chunk} current={current} fileSourceFocus={fileSourceFocus} />);
+    } else {
+      executionActivities.push(...chunk);
+      executionBlocks.push(<ToolActivityRows key={key} activities={chunk} fileSourceFocus={fileSourceFocus} />);
+    }
     chunk = [];
   };
-  const appendReasoning = (content: string, key: string, active: boolean) => {
+  const flushExecution = (current = false) => {
+    flushChunk(current);
+    if (!executionBlocks.length) return;
+    if (hasSummary && orderedBlocks === processBlocks) {
+      processBlocks.push(...executionBlocks);
+    } else {
+      const focused = executionActivities.some((item) => item.id === fileSourceFocus?.step.stepId);
+      orderedBlocks.push(
+        <ExecutionDisclosure key={`execution-${orderedBlocks.length}`} activities={executionActivities}
+          focusNonce={focused ? fileSourceFocus?.nonce : undefined}>
+          {executionBlocks}
+        </ExecutionDisclosure>,
+      );
+    }
+    executionBlocks = [];
+    executionActivities = [];
+  };
+  const appendReasoning = (content: string, key: string) => {
     if (!content.trim()) return;
+    const titles = reasoningTitles(content);
+    if (isStreaming) {
+      latestReasoningTitle = titles.at(-1) ?? latestReasoningTitle;
+      return;
+    }
+    if (!showReasoningDetails && !titles.length) return;
     flushChunk();
-    orderedBlocks.push(
+    if (!showReasoningDetails) {
+      executionBlocks.push(
+        <p key={key} className="flex items-start gap-1.5 px-1 py-0.5 text-xs text-muted-foreground">
+          <ReasoningLabel titles={titles} />
+        </p>,
+      );
+      return;
+    }
+    executionBlocks.push(
       <Collapsible key={key}>
-        <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground">
+        <CollapsibleTrigger aria-label={titles.length ? titles.join(", ") : undefined}
+          className="group flex items-start gap-1.5 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground">
           <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-          <ReasoningLabel active={active} />
+          <ReasoningLabel titles={titles} />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div dir="auto" className="mt-1 min-w-0 whitespace-pre-wrap break-words border-l-2 pl-3 text-xs leading-relaxed text-muted-foreground">
@@ -1532,8 +1627,9 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
     );
   };
   const appendActivity = (a: ActivityItem, current: boolean) => {
+    if (hasSummary && orderedBlocks === processBlocks && !a.scientificResult && a.toolName !== "permission") processActivities.push(a);
     if (a.toolName === "interview") {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
         <div key={a.id}>
           <InterviewCard item={a} sessionId={sessionId} projectId={projectId} />
@@ -1541,12 +1637,12 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
         </div>,
       );
     } else if (a.toolName === "permission") {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
         <PermissionCard key={a.id} item={a} sessionId={sessionId} projectId={projectId} />,
       );
     } else if (a.toolName?.startsWith("modal_")) {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
         <div key={a.id}>
           <ModalJobChip item={a} onView={onViewCompute} />
@@ -1554,7 +1650,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
         </div>,
       );
     } else if (a.scientificResult) {
-      flushChunk();
+      flushExecution();
       const result = a.scientificResult;
       (hasSummary ? resultBlocks : orderedBlocks).push(
         <ScientificResultCard key={a.id} item={a} projectId={projectId} onOpenFile={onOpenFile}
@@ -1563,9 +1659,9 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
           }) : undefined} />,
       );
     } else if (a.toolName === "generate_image") {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
-        <ToolActivityList key={a.id} activities={[a]} current={current} fileSourceFocus={fileSourceFocus} />,
+        <ToolActivityList key={a.id} activities={[a]} current={current} includeUnknown={isStreaming} fileSourceFocus={fileSourceFocus} />,
       );
     } else {
       chunk.push(a);
@@ -1596,23 +1692,18 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const focusInProcess = hasSummary && fileSourceFocus && segments.slice(0, summaryIndex).some(
     (segment) => segment.type === "activity" && segment.activityId === fileSourceFocus.step.stepId,
   );
-  const streamingReasoning = isStreaming && (lastSegment?.type === "reasoning" ||
-    (segments.length === 0 && Boolean(message.reasoning?.trim())));
-  if (showReasoningDetails && message.reasoning && !segments.some((segment) => segment.type === "reasoning")) {
-    appendReasoning(message.reasoning, "reasoning", streamingReasoning);
+  if (message.reasoning && !segments.some((segment) => segment.type === "reasoning")) {
+    appendReasoning(message.reasoning, "reasoning");
   }
   for (const [index, segment] of segments.entries()) {
-    if (index === summaryIndex) {
-      flushChunk();
-      orderedBlocks = summaryBlocks;
-    }
     if (segment.type === "reasoning") {
-      if (showReasoningDetails) appendReasoning(segment.content, `reasoning-${index}`, streamingReasoning && segment === lastSegment);
+      appendReasoning(segment.content, `reasoning-${index}`);
       continue;
     }
+    if (segment.type === "text" && !segment.content.trim()) continue;
     if (segment.type === "text") {
-      if (!segment.content.trim()) continue;
-      flushChunk();
+      flushExecution();
+      if (index === summaryIndex) orderedBlocks = summaryBlocks;
       replyWorkflowScript = workflowScriptsIn(segment.content).at(-1) ?? replyWorkflowScript;
       orderedBlocks.push(
         <MessageResponse
@@ -1635,28 +1726,21 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       isStreaming && segment === lastSegment,
     );
   }
-  flushChunk(isStreaming && lastSegment?.type === "activity");
-  const showThinkingStatus = isStreaming &&
-    (processBlocks.length + summaryBlocks.length + resultBlocks.length === 0 || (!showReasoningDetails && streamingReasoning));
-  const executionLabel = summary?.executionMs === undefined
-    ? t("Execution details") : t("Execution took {duration}", { duration: formatExecutionDuration(summary.executionMs, locale) });
+  flushExecution(isStreaming && lastSegment?.type === "activity");
+  const elapsedLabel = summary?.executionMs === undefined
+    ? undefined : t("Execution took {duration}", { duration: formatExecutionDuration(summary.executionMs, locale) });
 
   return (
     <>
       {hasSummary && processBlocks.length > 0 ? (
-        <ToolDisclosure focusNonce={focusInProcess ? fileSourceFocus?.nonce : undefined}>
-          <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md px-1 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-            {executionLabel}
-            <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-2 border-l border-border pl-3">
-            {processBlocks}
-          </CollapsibleContent>
-        </ToolDisclosure>
+        <ExecutionDisclosure activities={processActivities} elapsedLabel={elapsedLabel}
+          focusNonce={focusInProcess ? fileSourceFocus?.nonce : undefined}>
+          {processBlocks}
+        </ExecutionDisclosure>
       ) : (
         <>
-          {hasSummary && summaryIndex > 0 && summary?.executionMs !== undefined && (
-            <p className="px-1 text-sm text-muted-foreground">{executionLabel}</p>
+          {hasSummary && summaryIndex > 0 && elapsedLabel && (
+            <p className="px-1 text-sm text-muted-foreground">{elapsedLabel}</p>
           )}
           {processBlocks}
         </>
@@ -1671,9 +1755,12 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
           {resultBlocks}
         </div>
       )}
-      {showThinkingStatus ? (
+      {isStreaming ? (
         <p role="status" className="flex items-center gap-1.5 px-1 py-0.5 text-xs text-muted-foreground">
-          <ReasoningLabel active />
+          <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
+          <span dir="auto" className="min-w-0 break-words">
+            <Shimmer as="span" duration={1.5}>{latestReasoningTitle ?? t("Thinking...")}</Shimmer>
+          </span>
         </p>
       ) : endedWithoutReply ? (
         <p className="text-xs italic text-muted-foreground">

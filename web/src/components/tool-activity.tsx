@@ -436,22 +436,52 @@ export function ModalJobChip({
   );
 }
 
+export function ToolActivitySummary({ activities, includeUnknown = false }: {
+  activities: ActivityItem[];
+  includeUnknown?: boolean;
+}) {
+  const t = useT();
+  const failed = activities.filter((item) => item.status === "error").length;
+  const unknown = includeUnknown ? activities.filter((item) => item.status === "unknown").length : 0;
+  return <>
+    <WrenchIcon aria-hidden="true" className="size-3.5 shrink-0" />
+    <span className="min-w-0 flex-1 font-medium">
+      {t(activities.length === 1 ? "Ran 1 tool call" : "Ran {count} tool calls", { count: activities.length })}
+      {failed > 0 && <>{" · "}<span className="text-destructive">{t("{count} failed", { count: failed })}</span></>}
+      {unknown > 0 && ` · ${t("{count} of unknown status", { count: unknown })}`}
+    </span>
+  </>;
+}
+
+export function ToolActivityRows({ activities, inlineImages = false, fileSourceFocus }: {
+  activities: ActivityItem[];
+  inlineImages?: boolean;
+  fileSourceFocus?: FileSourceFocus;
+}) {
+  return <div className="space-y-1">
+    {activities.map((item) => (
+      <ToolCard key={item.id} item={item} inlineImages={inlineImages}
+        focusNonce={item.id === fileSourceFocus?.step.stepId ? fileSourceFocus?.nonce : undefined} />
+    ))}
+  </div>;
+}
+
 /** A single disclosure for consecutive tool calls within the transcript. */
 export function ToolActivityList({
   activities,
   current = false,
+  includeUnknown = true,
   fileSourceFocus,
 }: {
   activities: ActivityItem[];
   current?: boolean;
+  includeUnknown?: boolean;
   fileSourceFocus?: FileSourceFocus;
 }) {
   const t = useT();
   const latest = activities.at(-1);
   if (!latest) return null;
   const running = activities.some((item) => item.status === "running");
-  const failed = activities.filter((item) => item.status === "error").length;
-  const unknown = activities.filter((item) => item.status === "unknown").length;
   const inlineImages = activities.length === 1 && latest.toolName === "generate_image";
 
   return (
@@ -459,26 +489,12 @@ export function ToolActivityList({
       <ToolDisclosure focusNonce={activities.some((item) => item.id === fileSourceFocus?.step.stepId) ? fileSourceFocus?.nonce : undefined}>
         <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60">
           <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-          {current ? (
-            <ToolCallPreview item={latest} />
-          ) : (
-            <>
-              <WrenchIcon aria-hidden="true" className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {t(activities.length === 1 ? "Ran 1 tool call" : "Ran {count} tool calls", { count: activities.length })}
-                {failed > 0 && <span className="text-destructive"> · {t("{count} failed", { count: failed })}</span>}
-                {unknown > 0 && ` · ${t("{count} of unknown status", { count: unknown })}`}
-              </span>
-            </>
-          )}
+          {current ? <ToolCallPreview item={latest} /> : <ToolActivitySummary activities={activities} includeUnknown={includeUnknown} />}
           {running ? <Spinner aria-label={t("Tool calls running")} className="size-3 shrink-0" /> : current && <StatusDot status={latest.status} />}
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mt-1 space-y-1 border-l-2 border-muted pl-2">
-            {activities.map((item) => (
-              <ToolCard key={item.id} item={item} inlineImages={inlineImages}
-                focusNonce={item.id === fileSourceFocus?.step.stepId ? fileSourceFocus?.nonce : undefined} />
-            ))}
+          <div className="mt-1 border-l-2 border-muted pl-2">
+            <ToolActivityRows activities={activities} inlineImages={inlineImages} fileSourceFocus={fileSourceFocus} />
           </div>
         </CollapsibleContent>
       </ToolDisclosure>
