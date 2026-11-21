@@ -353,28 +353,6 @@ describe("ProvenancePanel", () => {
     expect(screen.getByText(/may\s+describe different bytes/i)).toBeInTheDocument();
   });
 
-  it("opens a cited notebook entry", async () => {
-    const onOpenNotebookEntry = vi.fn();
-    renderPanel(
-      makeProvenance({
-        citedBy: [
-          {
-            id: "nb_1",
-            sessionId: "sess-abcdef12",
-            type: "decision",
-            title: "Use DESeq2",
-            timestamp: 1_700_000_001_000,
-            role: "agent",
-            precedesLatestOutput: false,
-          },
-        ],
-      }),
-      { onOpenNotebookEntry },
-    );
-    await userEvent.click(await screen.findByText("Use DESeq2"));
-    expect(onOpenNotebookEntry).toHaveBeenCalledWith("nb_1");
-  });
-
   it("opens an input artifact as a file tab", async () => {
     const onOpenFile = vi.fn();
     renderPanel(

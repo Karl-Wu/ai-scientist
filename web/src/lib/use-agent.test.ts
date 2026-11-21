@@ -105,10 +105,10 @@ describe("parseContextUsage", () => {
   });
 });
 
-describe("useAgent notebook accumulation", () => {
+describe("useAgent tool activity and context updates", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("accumulates notebook entries from tool_start frames", async () => {
+  it("keeps legacy notebook tool activity in the transcript", async () => {
     vi.spyOn(projects, "apiFetch").mockImplementation(async (path: string) => {
       if (path === "/sessions") {
         return new Response(JSON.stringify({ id: "s1" }), { status: 200 });
@@ -134,7 +134,12 @@ describe("useAgent notebook accumulation", () => {
       await result.current.send("hi");
     });
 
-    expect(result.current.notebookEntries.map((e) => e.id)).toEqual(["tc_1"]);
+    const activities = result.current.messages.flatMap((message) => message.activities ?? []);
+    expect(activities).toContainEqual(expect.objectContaining({
+      id: "tc_1",
+      toolName: "notebook",
+      args: { type: "hypothesis", title: "Six types" },
+    }));
   });
 
   it("tracks Pi context utilization from the SSE stream", async () => {

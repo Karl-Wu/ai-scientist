@@ -315,20 +315,6 @@ describe("NotebookEntryChip", () => {
     );
     expect(container.querySelector('[data-tool-call-id="tc_9"]')).not.toBeNull();
   });
-
-  it("shows 'View in journal' only when onView is given, and fires it with the entry id", () => {
-    const onView = vi.fn();
-    const { rerender } = render(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} />,
-    );
-    expect(screen.queryByRole("button", { name: /view in journal/i })).not.toBeInTheDocument();
-
-    rerender(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} onView={onView} />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /view in journal/i }));
-    expect(onView).toHaveBeenCalledWith("tc_9");
-  });
 });
 
 describe("ModalJobChip", () => {

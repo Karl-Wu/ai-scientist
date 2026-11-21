@@ -437,18 +437,8 @@ export function ModalJobChip({
   );
 }
 
-/**
- * Compact chip for a `notebook` tool call: the entry itself renders in the
- * Journal panel, so the transcript shows a one-line pointer with an
- * optional jump ("View in journal"). item.id === the notebook entry id.
- */
-export function NotebookEntryChip({
-  item,
-  onView,
-}: {
-  item: ActivityItem;
-  onView?: (entryId: string) => void;
-}) {
+/** Compact chip for a historical `notebook` tool call in a transcript. */
+export function NotebookEntryChip({ item }: { item: ActivityItem }) {
   const t = useT();
   const args = (item.args ?? {}) as Record<string, unknown>;
   const typeLabel =
@@ -467,14 +457,6 @@ export function NotebookEntryChip({
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{title}</span>
       )}
       <StatusDot status={item.status} />
-      {onView && (
-        <button
-          type="button"
-          onClick={() => onView(item.id)}
-          className="shrink-0 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          {t("View in journal")}</button>
-      )}
     </div>
   );
 }

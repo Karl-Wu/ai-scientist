@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryTokens, rankMemory, normalizeMemoryQuery, normalizeMemorySource, memorySourceKey, memoryCitation } from "./notebook-memory";
-import { memoryHit } from "../test/memory-fixture";
-import { buildNotebookPrintHtml } from "./notebook-print";
+import { memoryTokens, rankMemory, normalizeMemoryQuery, normalizeMemorySource, memorySourceKey } from "./notebook-memory";
 const entry = (title: string, body: string, extra: object = {}) => ({ id: title, title, body, type: "note" as const, timestamp: 1, ...extra });
 describe("research-memory protocol", () => {
   it("matches scientific identifiers, paths, language labels and simple inflections", () => {
@@ -25,13 +23,5 @@ describe("research-memory protocol", () => {
     expect(() => normalizeMemorySource({ kind: "notebook", sessionId: "../x", entryId: "h" })).toThrow();
     expect(memorySourceKey({ kind: "notebook", sessionId: "a", entryId: "same" })).not.toBe(memorySourceKey({ kind: "notebook", sessionId: "b", entryId: "same" }));
     expect(memorySourceKey({ kind: "user-note", sessionId: "a", entryId: "same" })).not.toBe(memorySourceKey({ kind: "notebook", sessionId: "a", entryId: "same" }));
-  });
-  it("preserves source digest and cautions in a copied citation", () => {
-    const text = memoryCitation(memoryHit);
-    expect(text).toContain(memoryHit.digest); expect(text).toContain(memoryHit.sourceUri); expect(text).toContain("superseded");
-  });
-  it("preserves scope and reconsideration conditions in print without activating markup", () => {
-    const html = buildNotebookPrintHtml([{ ...entry("Decision", ""), scope: "Only cohort v2 <script>unsafe</script>", revisitWhen: "Balanced controls arrive" }]);
-    expect(html).toContain("Only cohort v2 &lt;script&gt;"); expect(html).not.toContain("<script>unsafe"); expect(html).toContain("Balanced controls arrive");
   });
 });

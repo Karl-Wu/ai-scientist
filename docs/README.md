@@ -17,12 +17,15 @@ These guides describe the current implementation; release history lives in
 
 - [Basic usage](basic-usage.md): chats, files, workflow inputs and settings.
 - [File previews](file-previews.md): supported formats and editing.
-- [Lab Notebook](lab-notebook.md): evidence, plans, result cards, exports and Methods drafts.
+- [Legacy Lab Notebook](lab-notebook.md): historical records, evidence and exports.
 - [Provenance](provenance.md): recorded execution, file lineage and freshness.
 - [Modal compute](modal-compute.md): remote jobs, transfers, recovery and budgets.
 - [Raw-data guard](data-guard.md): protected paths and destructive-command checks.
 
-## Notebook workflows
+## Legacy notebook workflows
+
+These guides include historical Lab Notebook screens. See the
+[legacy notebook overview](lab-notebook.md) for current availability.
 
 - [Robustness workflows](notebook-robustness.md): reviewed sensitivity analyses on Modal.
 - [Research memory](notebook-memory.md): source-linked recall across chats.

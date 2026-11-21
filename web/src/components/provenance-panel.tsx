@@ -593,12 +593,6 @@ export interface ProvenancePanelProps {
   embedded?: boolean;
   onOpenFile?: (path: string) => void;
   onOpenSourceInput?: (path: string, consumer: SourceStepReference) => void;
-  /**
-   * Jump to a notebook entry in the Lab Notebook view. The notebook view is
-   * scoped to the active tab's session, so a citation from a different session
-   * opens the notebook without focusing the entry.
-   */
-  onOpenNotebookEntry?: (entryId: string) => void;
 }
 
 export function ProvenancePanel({
@@ -606,7 +600,6 @@ export function ProvenancePanel({
   projectId,
   onOpenFile,
   onOpenSourceInput,
-  onOpenNotebookEntry,
   embedded = false,
 }: ProvenancePanelProps) {
   const t = useT();
@@ -766,15 +759,9 @@ export function ProvenancePanel({
           </p>
           <div className="space-y-1">
             {data.citedBy.map((citation) => (
-              <button
-                key={citation.id}
-                type="button"
-                disabled={!onOpenNotebookEntry}
-                onClick={() => onOpenNotebookEntry?.(citation.id)}
-                className={cn(
-                  "flex w-full items-start gap-1.5 rounded-md border bg-card/40 px-2 py-1.5 text-left",
-                  onOpenNotebookEntry && "hover:bg-muted/50",
-                )}
+              <div
+                key={`${citation.sessionId}:${citation.id}`}
+                className="flex w-full items-start gap-1.5 rounded-md border bg-card/40 px-2 py-1.5 text-left"
               >
                 <span className="mt-px shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                   {t(citation.type.charAt(0).toUpperCase() + citation.type.slice(1))}
@@ -793,7 +780,7 @@ export function ProvenancePanel({
                     </span>
                   )}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
         </div>

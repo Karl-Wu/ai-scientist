@@ -6,7 +6,8 @@ import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { withActiveProject } from "../src/scope.ts";
 import { emptySnapshot, recordRun, sessionCostSummary } from "../src/cost/ledger.ts";
-import { appendNotebookEntry, type NotebookEntry } from "../src/agent/notebook-store.ts";
+import type { NotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { previewAnalysisPlan, freezeAnalysisPlan, recordPlanDeviation } from "../src/agent/notebook-plans.ts";
 import {
   METHODS_DRAFT_SESSION_ID,

@@ -5,12 +5,12 @@ import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths } from "../src/projects.ts";
 import {
   appendNewNotebookEntries,
-  appendNotebookEntry,
   notebookPath,
   readNotebookEntries,
   readProjectNotebooks,
   type NotebookEntry,
 } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 
 const entry = (over: Partial<NotebookEntry> = {}): NotebookEntry => ({
   id: "tc_1",

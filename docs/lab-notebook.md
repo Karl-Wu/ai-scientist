@@ -1,4 +1,9 @@
-# Lab Notebook
+# Legacy Lab Notebook
+
+The workspace now opens **Notes**, which has its own project note pages. The
+screen and the live `notebook` writer described below were retired. Historical
+task playback, notebook search, project exports and the evidence-package API
+still use the existing records.
 
 The center-panel **Lab Notebook** contains entries authored through Kady's
 `notebook` tool, plus your notes and annotations. It is a research record, not

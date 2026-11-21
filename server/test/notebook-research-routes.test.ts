@@ -5,8 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths, createProject, getProject } from "../src/projects.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
-import { snapshotNotebookResults } from "../src/agent/notebook-results.ts";
+import { appendNotebookEntry, recordedResultSnapshot } from "./helpers/notebook-fixtures.ts";
 const app = await buildApp();
 afterAll(async () => { await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); });
 beforeEach(() => { fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); fs.mkdirSync(PROJECTS_ROOT, { recursive: true }); });
@@ -62,7 +61,7 @@ describe("analysis-plan HTTP workflow and exports", () => {
     const card = { schemaVersion: 1, kind: "table", title: "Actual data", columns: [{ key: "x", label: "x" }], rows: [[42]] };
     fs.writeFileSync(path.join(dir, "s1.jsonl"), JSON.stringify({ type: "message", message: { role: "toolResult", toolCallId: "result", toolName: "scientific_result", details: { scientificResult: card } } }) + "\n");
     const results = [{ toolCallId: "result" }];
-    appendNotebookEntry("s1", { id: "o1", type: "observation", title: "Observed", timestamp: 2, role: "agent", results, resultSnapshots: await snapshotNotebookResults("default", "s1", results) });
+    appendNotebookEntry("s1", { id: "o1", type: "observation", title: "Observed", timestamp: 2, role: "agent", results, resultSnapshots: [recordedResultSnapshot("s1", "result", card)] });
     const res = await app.inject({ method: "GET", url: "/sessions/s1/notebook/o1/results/0" });
     expect(res.statusCode).toBe(200); expect(res.json()).toMatchObject({ status: "available", card });
     const other = await app.inject({ method: "GET", url: "/sessions/s1/notebook/o1/results/0", headers: { "x-project-id": "other" } }); expect(other.statusCode).toBe(404);

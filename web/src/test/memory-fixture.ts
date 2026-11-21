@@ -1,4 +1,4 @@
-import type { MemoryHit, MemorySearchResponse, MemoryRecordResponse } from "../lib/notebook-memory";
+import type { MemoryHit, MemorySearchResponse } from "../lib/notebook-memory";
 export const memoryHit: MemoryHit = {
   source: { kind: "notebook", sessionId: "older-chat", entryId: "decision-1" },
   sourceUri: "/projects/project-a/notebook/memory/record?project=project-a&source=fixture",
@@ -10,4 +10,3 @@ export const memoryHit: MemoryHit = {
   related: [{ source: { kind: "notebook", sessionId: "older-chat", entryId: "decision-2" }, title: "Reconsider with balanced controls", relation: "superseded by", digest: "b".repeat(64) }],
 };
 export const memorySearch: MemorySearchResponse = { projectId: "project-a", query: "Harmony", hits: [memoryHit], totalMatches: 1, checkedAt: 2000, coverage: { complete: true, scannedFiles: 2, scannedBytes: 1000, indexedRecords: 2, skippedRecords: 0, warnings: [] } };
-export const memoryRecord: MemoryRecordResponse = { projectId: "project-a", hit: memoryHit, entry: { id: "decision-1", type: "decision", title: memoryHit.title, timestamp: 1000, role: "agent", body: "Original **Markdown** is shown as text. <img src=\"https://example.com/should-not-load\">", confidence: "medium", scope: memoryHit.scope, revisitWhen: memoryHit.revisitWhen }, truncated: false, changedSinceSearch: false, coverage: memorySearch.coverage };

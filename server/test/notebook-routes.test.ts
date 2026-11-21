@@ -11,7 +11,8 @@ import AdmZip from "adm-zip";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths } from "../src/projects.ts";
-import { appendNotebookEntry, type NotebookEntry } from "../src/agent/notebook-store.ts";
+import type { NotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { captureNotebookArtifacts } from "../src/agent/notebook-artifacts.ts";
 
 const app = await buildApp();

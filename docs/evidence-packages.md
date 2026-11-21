@@ -4,7 +4,11 @@
 records, linked evidence, provenance, plans, results and version-matched artifacts.
 It makes no model/compute call and never executes captured analyses.
 
-## Prepare and download
+The workspace Notes panel does not have the legacy evidence-package dialog.
+The backend still supports preparing and downloading packages from historical
+records through the project evidence-package API.
+
+## Legacy dialog workflow
 
 1. Select **Evidence package** in the notebook header or on a saved hypothesis, observation or decision. Choose **1–8 roots**; use All chats for cross-chat roots.
 2. Choose artifact inclusion. Optional current/unverified copies are labelled comparison material. Raw command arguments are excluded by default.

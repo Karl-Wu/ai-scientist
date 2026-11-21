@@ -103,10 +103,6 @@ export function normalizeMemoryQuery(raw: unknown): Required<Pick<MemoryQuery, "
   if (q.includeSuperseded !== undefined && typeof q.includeSuperseded !== "boolean") throw new Error("includeSuperseded must be boolean");
   return { query, limit: limit as number, includeSuperseded: q.includeSuperseded !== false, ...(q.type ? { type: q.type as MemoryKind } : {}), ...(q.outcome ? { outcome: q.outcome as NotebookOutcome } : {}) };
 }
-export function memoryCitation(hit: MemoryHit): string {
-  return `${hit.title}\nSource: ${hit.sourceUri}\nRecord digest: ${hit.digest}\n${hit.recordStatus}; ${hit.type}${hit.outcome ? `; outcome ${hit.outcome}` : ""}\n${hit.qualifiers.join(" ")}`;
-}
-
 const STOP = new Set(["a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "for", "from", "how", "i", "in", "is", "it", "of", "on", "or", "our", "the", "to", "was", "we", "were", "what", "when", "which", "why", "with"]);
 function root(word: string): string {
   if (/^(failed|failure|failures|failing)$/.test(word)) return "fail";

@@ -38,18 +38,18 @@ model call. An interrupted request with no outcome is **not automatically retrie
 usage may be unknown. Use **Check request status (no retry)** and inspect the
 notebook/cost ledger before approving another request.
 
-## Agent authoring and storage
+## Proposal history and storage
 
-The `notebook` tool accepts `nextExperiments` only on note entries targeting a
-saved hypothesis. Proposals require a question/decision, existing-data assessment,
-explanations with sources, and tests with predictions, decision branches,
-requirements and limitations. Use `notebook_search` to obtain exact source IDs.
-The server binds observable source versions; harvested child context stays
-unverified at authoring time.
+Historical entries may contain proposals authored through the retired `notebook`
+tool. New proposals generated through the API target a saved hypothesis and
+include the research question, existing-data assessment, competing explanations,
+and tests with predictions, decision branches, requirements and limitations.
+Use `notebook_search` to obtain exact source IDs. API-generated proposals record
+the source versions available during generation.
 
 Proposals/preferences append to `.kady/notebook/<sessionId>.jsonl`. Model-call
 receipts live in `.kady/notebook/next-experiment-generations/`. Hashes do not
-archive all earlier input bytes. JSON/Markdown/ZIP/print and evidence packages
+archive all earlier input bytes. JSON/Markdown/ZIP exports and evidence packages
 preserve proposals as planning context.
 
 Context uses [research memory's bounded scan](notebook-memory.md#coverage-and-privacy),
@@ -59,6 +59,6 @@ verify complete upstream lineage. Each hypothesis retains up to 100 call receipt
 
 Implementation: [`next-experiments.ts`](../server/src/agent/next-experiments.ts),
 [`next-experiment-receipts.ts`](../server/src/agent/next-experiment-receipts.ts) and
-[shared schema](../server/pi-packages/kady-notebook/next-experiments-schema.ts).
+[shared proposal schema](../web/src/lib/next-experiments.ts).
 Project-scoped routes under `/sessions/:sessionId/notebook/:entryId/next-experiments`
 provide read, generate, decision and request-status operations.

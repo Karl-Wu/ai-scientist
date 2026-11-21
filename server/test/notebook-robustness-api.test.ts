@@ -5,7 +5,7 @@ import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { withActiveProject } from "../src/scope.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { previewAnalysisPlan, freezeAnalysisPlan } from "../src/agent/notebook-plans.ts";
 import { NotebookRobustnessService } from "../src/agent/notebook-robustness.ts";
 import { registerNotebookRobustnessRoutes } from "../src/api/notebook-robustness.ts";

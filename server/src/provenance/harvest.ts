@@ -3,9 +3,8 @@
  *
  * A child `pi` process records every tool call it makes as an assistant
  * `toolCall` block, paired with a `toolResult` row carrying `isError`. The parent
- * learns each child's session file on completion — the same hook
- * notebook-harvest and usageFromSessionFile already use — so the calls can be
- * replayed into steps after the fact.
+ * learns each child's session file on completion, so the calls can be replayed
+ * into steps after the fact.
  *
  * WHAT AFTER-THE-FACT COSTS US. The lead agent's recorder sees the sandbox
  * before and after each call, so it can both attribute a file to a step and hash

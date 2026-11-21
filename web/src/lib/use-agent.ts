@@ -12,7 +12,6 @@ import {
 
 import { createFramePublisher } from "./frame-publisher";
 import type { PromptImage } from "./image-attachments";
-import { parseNotebookFrame, mergeNotebookEntries, type NotebookEntry } from "./notebook";
 
 // Keep the full tool-call trace per message: scientists rely on it to see and
 // reproduce what the agent ran, and the session export reads it too.
@@ -797,7 +796,6 @@ export function useAgent(projectId?: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagePublisher] = useState(() => createFramePublisher(setMessages));
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
-  const [notebookEntries, setNotebookEntries] = useState<NotebookEntry[]>([]);
   const [subagentCompletions, setSubagentCompletions] = useState(0);
   const [status, setStatus] = useState<Status>("ready");
   const [reconnecting, setReconnecting] = useState(false);
@@ -855,10 +853,6 @@ export function useAgent(projectId?: string) {
       if (frame.type === "context_usage") {
         const usage = parseContextUsage(frame);
         if (usage) setContextUsage(usage);
-      }
-      const notebook = parseNotebookFrame(frame, consumer.currentRunId);
-      if (notebook) {
-        setNotebookEntries((previous) => mergeNotebookEntries(previous, [notebook]));
       }
       if (frame.type === "tool_end" && frame.toolName === "subagent") {
         setSubagentCompletions((count) => count + 1);
@@ -1578,7 +1572,6 @@ export function useAgent(projectId?: string) {
     clientFetchRef.current = null;
     setMessages([]);
     setContextUsage(null);
-    setNotebookEntries([]);
     setSubagentCompletions(0);
     setPendingSteers([]);
     setPendingFollowUps([]);
@@ -1619,7 +1612,6 @@ export function useAgent(projectId?: string) {
     compact,
     pendingSteers,
     pendingFollowUps,
-    notebookEntries,
     subagentCompletions,
   };
 }

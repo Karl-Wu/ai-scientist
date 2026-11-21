@@ -1,19 +1,11 @@
-/**
- * Share read-only notebook search with child Pi sessions. Retain the old
- * harvest helpers for the legacy notebook code.
- */
+/** Share read-only notebook search with child Pi sessions. */
 import fs from "node:fs";
 import path from "node:path";
-import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import { boundedSetAdd } from "../bounded.ts";
-import { resolvePaths, type ProjectPaths } from "../projects.ts";
+import type { ProjectPaths } from "../projects.ts";
 import { subagentsPackageDir } from "./agent-files.ts";
 import { reconcileBuiltinTools, uniqueTools } from "./builtin-tool-overrides.ts";
 import { MODAL_TOOL_NAMES } from "./modal-tool.ts";
 import { PDF_ANNOTATION_TOOL_NAMES } from "./pdf-annotation-tool.ts";
-import { appendNewNotebookEntries, type NotebookEntry } from "./notebook-store.ts";
-import { notebookEntriesFromSessionFile } from "./notebook-harvest.ts";
-import { currentRunId } from "./run-ids.ts";
 
 /** Absolute dir of the vendored kady-notebook package. */
 export function kadyNotebookPackageDir(): string {
@@ -166,56 +158,4 @@ export function seedBuiltinAgentNotebookTools(paths: ProjectPaths): boolean {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   return true;
-}
-
-// Namespaced entry ids already harvested, so a re-delivered async completion
-// (delivered to every live session's listener) can't double-append. This is a
-// fast path only — it is empty after a restart, so the durable guard is the
-// parent notebook itself (appendNewNotebookEntries).
-const harvestedIds = new Set<string>();
-const MAX_HARVESTED_IDS = 5_000;
-
-/** Result shape we consume from both the sync and async completion payloads. */
-interface ChildResult {
-  agent?: string;
-  sessionFile?: string;
-}
-
-export function makeSubagentNotebookExtension(
-  projectId: string,
-  getSessionId: () => string,
-): ExtensionFactory {
-  const harvest = (results: ChildResult[] | undefined, synchronous: boolean) => {
-    const parentSession = getSessionId();
-    if (!parentSession) return;
-    const sandboxRoot = resolvePaths(projectId).sandbox;
-    // An async completion may arrive during a DIFFERENT run. Without durable
-    // launch correlation, unknown is more honest than misattribution. Sync
-    // results still inherit the active run; async entries remain unstamped.
-    const runId = synchronous ? currentRunId(projectId, parentSession) : undefined;
-    for (const r of results ?? []) {
-      if (!r.agent || !r.sessionFile) continue;
-      const entries = notebookEntriesFromSessionFile(r.sessionFile, r.agent, sandboxRoot);
-      const candidates: NotebookEntry[] = [];
-      for (const entry of entries) {
-        const dedupKey = JSON.stringify([projectId, parentSession, r.sessionFile, entry.id]);
-        if (harvestedIds.has(dedupKey)) continue;
-        boundedSetAdd(harvestedIds, dedupKey, MAX_HARVESTED_IDS);
-        candidates.push(runId ? { ...entry, runId } : entry);
-      }
-      appendNewNotebookEntries(parentSession, candidates, projectId);
-    }
-  };
-
-  return (pi) => {
-    pi.on("tool_result", async (event) => {
-      if (event.toolName !== "subagent") return;
-      const details = event.details as { results?: ChildResult[] } | undefined;
-      harvest(details?.results, true);
-    });
-    pi.events.on("subagent:async-complete", (data: unknown) => {
-      const payload = data as { results?: ChildResult[] };
-      harvest(payload.results, false);
-    });
-  };
 }

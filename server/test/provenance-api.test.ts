@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { ensureProjectExists } from "../src/projects.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import {
   appendStep,
   PROVENANCE_SCHEMA_VERSION,

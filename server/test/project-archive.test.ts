@@ -9,10 +9,8 @@ import {
   ensureProjectExists,
   resolvePaths,
 } from "../src/projects.ts";
-import {
-  appendNotebookEntry,
-  type NotebookEntry,
-} from "../src/agent/notebook-store.ts";
+import type { NotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { writeNotebookAnnotations } from "../src/agent/notebook-annotations.ts";
 import {
   buildProjectArchive,

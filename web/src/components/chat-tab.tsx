@@ -101,7 +101,6 @@ import {
   type ChatMessage,
   type ContextUsage,
 } from "@/lib/use-agent";
-import type { NotebookEntry } from "@/lib/notebook";
 import { routeSubmit, type SendIntent } from "@/lib/chat-routing";
 import {
   moveQueuedMessage,
@@ -1472,7 +1471,6 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   showReasoningDetails = false,
   sessionId,
   projectId,
-  onViewInNotebook,
   onViewCompute,
   onOpenFile,
   onCreateNote,
@@ -1484,7 +1482,6 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   showReasoningDetails?: boolean;
   sessionId: string | null;
   projectId: string;
-  onViewInNotebook?: (entryId: string) => void;
   onViewCompute?: (jobId?: string) => void;
   onOpenFile?: (path: string) => void;
   onCreateNote?: (source: NoteCreationSource) => void;
@@ -1552,7 +1549,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       flushChunk();
       orderedBlocks.push(
         <div key={a.id}>
-          <NotebookEntryChip item={a} onView={onViewInNotebook} />
+          <NotebookEntryChip item={a} />
           <ToolTiming item={a} className="mt-1 text-xs" />
         </div>,
       );
@@ -1702,7 +1699,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 /** Unchanged history rows keep their tool disclosures and skip token renders. */
 export const ChatMessageRow = memo(function ChatMessageRow({
   message, isStreaming, isLast, showReasoningDetails, sessionId, projectId,
-  onViewInNotebook, onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork, onCreateNote,
+  onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork, onCreateNote,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
@@ -1710,7 +1707,6 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   showReasoningDetails?: boolean;
   sessionId: string | null;
   projectId: string;
-  onViewInNotebook?: (id: string) => void;
   onViewCompute?: (id?: string) => void;
   onOpenFile?: (path: string) => void;
   fileSourceFocus?: FileSourceFocus;
@@ -1734,7 +1730,6 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             showReasoningDetails={showReasoningDetails}
             sessionId={sessionId}
             projectId={projectId}
-            onViewInNotebook={onViewInNotebook}
             onViewCompute={onViewCompute}
             onOpenFile={onOpenFile}
             onCreateNote={onCreateNote}
@@ -1835,7 +1830,6 @@ export interface ChatTabMeta {
   userMessageCount: number;
   hasCompletedTurn: boolean;
   suggestedTitle?: string;
-  notebookEntries: NotebookEntry[];
   subagentCompletions: number;
 }
 
@@ -1898,8 +1892,6 @@ export interface ChatTabProps {
   onWorkspaceStateChange?: (tabId: string, state: ChatWorkspaceState) => void;
   /** The stored session couldn't be reopened; forget the binding for this tab. */
   onSessionUnavailable?: (tabId: string) => void;
-  /** Open the Lab Notebook panel focused on this entry (chat → notebook). */
-  onViewInNotebook?: (entryId: string) => void;
   /** Open the Compute panel, optionally focused on a durable Modal job. */
   onViewCompute?: (jobId?: string) => void;
   /** Open a typed result artifact in the center file preview. */
@@ -1931,7 +1923,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     onMetaChange,
     onWorkspaceStateChange,
     onSessionUnavailable,
-    onViewInNotebook,
     onViewCompute,
     onOpenFile,
   },
@@ -1954,7 +1945,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     pendingFollowUps,
     getSessionId,
     loadSession,
-    notebookEntries,
     subagentCompletions,
   } = useAgent(projectId);
   const isStreaming = status === "streaming" || status === "submitted";
@@ -2345,7 +2335,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       userMessageCount,
       hasCompletedTurn,
       suggestedTitle,
-      notebookEntries,
       subagentCompletions,
     });
   }, [
@@ -2358,7 +2347,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     userMessageCount,
     hasCompletedTurn,
     suggestedTitle,
-    notebookEntries,
     subagentCompletions,
     onMetaChange,
   ]);
@@ -2660,7 +2648,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
                 showReasoningDetails={showReasoningDetails}
                 sessionId={sessionId}
                 projectId={projectId}
-                onViewInNotebook={onViewInNotebook}
                 onViewCompute={onViewCompute}
                 onOpenFile={onOpenFile}
                 fileSourceFocus={message.activities?.some((item) => item.id === fileSourceFocus?.step.stepId) ? fileSourceFocus : undefined}

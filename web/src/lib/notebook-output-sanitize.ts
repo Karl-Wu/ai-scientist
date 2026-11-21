@@ -6,7 +6,7 @@
  * outputs are untrusted markup. Rendering them raw in the app origin is
  * stored XSS with access to every backend route the UI uses, including the
  * one that runs `bash` as the OS user. Everything else that renders markup
- * (Streamdown, notebook-print) already sanitizes; this is the equivalent for
+ * (Streamdown) already sanitizes; this is the equivalent for
  * the notebook viewer.
  */
 import DOMPurify from "dompurify";

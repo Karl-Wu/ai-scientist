@@ -3,7 +3,7 @@ import { beforeEach, afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject } from "../src/projects.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 const app = await buildApp();
 beforeEach(() => { fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); fs.mkdirSync(PROJECTS_ROOT, { recursive: true }); createProject({ name: "A", projectId: "a" }); createProject({ name: "B", projectId: "b" }); });
 afterAll(async () => { await app.close(); fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); });

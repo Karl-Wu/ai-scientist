@@ -586,7 +586,7 @@ function WorkspacePage({
       setTabsMeta((prev) => {
         const existing = prev[tabId];
         // Token deltas stay local to ChatTab. Only workspace-visible state
-        // crosses this boundary; notebook-only updates must still propagate.
+        // crosses this boundary.
         if (
           existing &&
           existing.sessionId === meta.sessionId &&
@@ -596,7 +596,6 @@ function WorkspacePage({
           existing.userMessageCount === meta.userMessageCount &&
           existing.hasCompletedTurn === meta.hasCompletedTurn &&
           existing.needsInput === meta.needsInput &&
-          existing.notebookEntries === meta.notebookEntries &&
           existing.subagentCompletions === meta.subagentCompletions
         ) {
           return prev;

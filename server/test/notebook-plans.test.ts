@@ -5,8 +5,8 @@ import { promisify } from "node:util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths } from "../src/projects.ts";
-import { appendNotebookEntry, readNotebookEntries } from "../src/agent/notebook-store.ts";
-import { makeNotebookTool } from "../src/agent/notebook.ts";
+import { readNotebookEntries } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { previewAnalysisPlan, freezeAnalysisPlan, recordPlanDeviation, readAnalysisPlans, planDirectory, PLAN_PREVIEW_TTL_MS } from "../src/agent/notebook-plans.ts";
 import { withNotebookPlanHistory } from "../src/agent/notebook-research.ts";
 import type { AnalysisPlanInput } from "../../web/src/lib/notebook-plans.ts";
@@ -135,14 +135,5 @@ describe("immutable analysis plans", () => {
     const target = path.join(resolvePaths("other").notebookDir, "plans"); fs.mkdirSync(target, { recursive: true });
     fs.symlinkSync(target, path.join(resolvePaths("default").notebookDir, "plans"));
     expect(() => readAnalysisPlans("default", source)).toThrow(/leaves the project/);
-  });
-
-  it("a notebook-tool proposal cannot forge an approval or result snapshot", async () => {
-    const tool = makeNotebookTool("default", () => source.sessionId);
-    await tool.execute(source.entryId, { type: "hypothesis", title: "Draft", analysisPlan: { ...plan, approved: true }, planHistory: { events: [{ kind: "freeze" }] }, resultSnapshots: [{ sha256: "fake" }] } as never, undefined as never);
-    const [entry] = readNotebookEntries(source.sessionId);
-    expect(entry.analysisPlan).toEqual(plan);
-    expect(entry.planHistory).toBeUndefined(); expect(entry.resultSnapshots).toBeUndefined();
-    expect(readAnalysisPlans("default", source).events).toHaveLength(0);
   });
 });

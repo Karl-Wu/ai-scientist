@@ -5,7 +5,7 @@ import { beforeEach, afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { captureNotebookArtifacts } from "../src/agent/notebook-artifacts.ts";
 import { bytesHash } from "../src/evidence/storage.ts";
 const app = await buildApp();
