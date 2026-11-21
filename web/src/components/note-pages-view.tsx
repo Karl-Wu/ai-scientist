@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronRightIcon, FileTe
 import { MessageResponse } from "@/components/ai-elements/message";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -246,13 +247,14 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   );
 }
 
-function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCreated }: {
+export function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCreated, dialog }: {
   projectId: string;
   currentTask?: NoteTaskReference;
   model?: string;
   source?: NoteCreationSource;
   onCancel: () => void;
   onCreated: (page: NotePage) => void;
+  dialog?: { returnFocus: () => void };
 }) {
   const t = useT();
   const locale = useLocale();
@@ -356,9 +358,12 @@ function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCre
     }
   }
 
-  return (
+  const editor = (
     <section className="flex min-h-0 flex-1 flex-col" aria-label={t("New note page")}>
-      <header className="border-b px-4 py-3"><h2 className="font-semibold">{t("New note page")}</h2></header>
+      <header className="shrink-0 border-b px-4 py-3">
+        {dialog ? <DialogTitle className="text-base leading-normal">{t("New note page")}</DialogTitle>
+          : <h2 className="font-semibold">{t("New note page")}</h2>}
+      </header>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <fieldset className="min-w-0 space-y-3" disabled={busy}>
@@ -448,6 +453,16 @@ function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCre
       </div>
     </section>
   );
+
+  if (!dialog) return editor;
+  return <Dialog open onOpenChange={(open) => { if (!open && !pending) onCancel(); }}>
+    <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      aria-describedby={undefined} showCloseButton={!pending}
+      onInteractOutside={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => { event.preventDefault(); dialog.returnFocus(); }}>
+      {editor}
+    </DialogContent>
+  </Dialog>;
 }
 
 function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialPage, focusSources }: NotesProps & {

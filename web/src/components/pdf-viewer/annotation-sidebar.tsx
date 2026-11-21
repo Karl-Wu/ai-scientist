@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 export interface AnnotationSidebarProps {
   annotations: Annotation[];
   onJump: (a: Annotation) => void;
-  onRemove: (id: string) => void;
 }
 
 export function AnnotationSidebar({

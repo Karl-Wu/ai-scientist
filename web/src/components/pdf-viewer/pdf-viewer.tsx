@@ -218,6 +218,8 @@ export function PdfViewer({
     anchor: { x: number; y: number };
     screen: { x: number; y: number };
   } | null>(null);
+  const [savingPendingNote, setSavingPendingNote] = useState(false);
+  const [pendingNoteError, setPendingNoteError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { zoom, setZoom, fitWidth, fitToWidth } = usePdfZoom(containerRef, pageSize?.w ?? 0, initialFitWidth);
@@ -384,7 +386,6 @@ export function PdfViewer({
           version: 1,
           annotations: Array.from(byId.values()),
         };
-        setAnnotations(merged);
         setLastModified(fresh.lastModified);
         etagRef.current = fresh.etag;
         const retry = await saveAnnotations(
@@ -394,15 +395,17 @@ export function PdfViewer({
           scopedProjectId,
         );
         if (retry.ok) {
+          setAnnotations(merged);
           setLastModified(retry.lastModified);
           etagRef.current = retry.etag;
         }
-        return;
+        return retry.ok;
       }
       if (res.ok) {
         setLastModified(res.lastModified);
         etagRef.current = res.etag;
       }
+      return res.ok;
     },
     [path, scopedProjectId],
   );
@@ -557,6 +560,7 @@ export function PdfViewer({
       const viewport = readViewport(el);
       if (!viewport) return;
       const [x, y] = viewport.convertToPdfPoint(cssX, cssY);
+      setPendingNoteError(null);
       setPendingNote({
         page,
         anchor: { x, y },
@@ -628,7 +632,10 @@ export function PdfViewer({
     }
   }, [focusToken, linkedPage, pagesReady]);
 
-  const createNoteFromAnnotation = onCreateNote ? (annotation: Annotation, comment: string) => {
+  const createNoteFromAnnotation = onCreateNote ? (
+    annotation: Annotation,
+    comment = annotation.type === "highlight" ? annotation.note ?? "" : annotation.body,
+  ) => {
     const highlighted = annotation.type === "highlight" ? annotation.text : "";
     const initialSummary = [
       highlighted?.trim() && `### ${t("Highlighted text")}\n\n${highlighted.trim().slice(0, 15_000)}`,
@@ -640,6 +647,40 @@ export function PdfViewer({
       initialSummary,
     });
   } : undefined;
+
+  async function savePendingNote(body: string, createPage: boolean) {
+    if (!pendingNote || savingPendingNote) return;
+    const annotation: NoteAnnotation = {
+      id: newAnnotationId(),
+      type: "note",
+      page: pendingNote.page,
+      anchor: pendingNote.anchor,
+      body,
+      color: USER_COLOR,
+      author: USER_AUTHOR,
+      createdAt: new Date().toISOString(),
+    };
+    setSavingPendingNote(true);
+    setPendingNoteError(null);
+    try {
+      const saved = await persist({ version: 1, annotations: [...annotationsRef.current.annotations, annotation] });
+      if (!saved) {
+        setPendingNoteError(t("Could not save the PDF annotation."));
+        return;
+      }
+      setAnnotations((current) => current.annotations.some(({ id }) => id === annotation.id) ? current : {
+        ...current,
+        annotations: [...current.annotations, annotation],
+      });
+      setPendingNote(null);
+      if (createPage) createNoteFromAnnotation?.(annotation);
+    } catch {
+      setPendingNoteError(t("Could not save the PDF annotation."));
+    } finally {
+      setSavingPendingNote(false);
+    }
+  }
+
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
@@ -776,7 +817,6 @@ export function PdfViewer({
           <AnnotationSidebar
             annotations={visibleAnnotations}
             onJump={jumpToAnnotation}
-            onRemove={removeAnnotation}
           />
         )}
       </div>
@@ -786,21 +826,11 @@ export function PdfViewer({
           screen={pendingNote.screen}
           initialBody=""
           author={USER_AUTHOR}
+          saving={savingPendingNote}
+          error={pendingNoteError}
           onCancel={() => setPendingNote(null)}
-          onSave={(body) => {
-            const ann: NoteAnnotation = {
-              id: newAnnotationId(),
-              type: "note",
-              page: pendingNote.page,
-              anchor: pendingNote.anchor,
-              body,
-              color: USER_COLOR,
-              author: USER_AUTHOR,
-              createdAt: new Date().toISOString(),
-            };
-            addAnnotation(ann);
-            setPendingNote(null);
-          }}
+          onSave={(body) => void savePendingNote(body, false)}
+          onCreateNote={createNoteFromAnnotation ? (body) => void savePendingNote(body, true) : undefined}
         />
       )}
     </div>

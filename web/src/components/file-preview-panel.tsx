@@ -6,7 +6,7 @@ import { TableFileViewer } from "./table-explorer";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { PdfViewer } from "@/components/pdf-viewer/pdf-viewer";
 import { KadyFileIcon } from "@/components/file-icon";
-import { NotePagesView } from "@/components/note-pages-view";
+import { NotePageCreate, NotePagesView } from "@/components/note-pages-view";
 import { ModalJobsPanel } from "@/components/modal-jobs-panel";
 import { AutomationPanel } from "@/components/automation-panel";
 import { ProvenancePanel } from "@/components/provenance-panel";
@@ -32,6 +32,7 @@ import {
   type LatexCompileResult,
 } from "@/lib/use-sandbox";
 import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import {
   FilesIcon,
   GitBranchIcon,
@@ -1688,7 +1689,6 @@ export interface FilePreviewPanelProps {
   noteTask?: NoteTaskReference;
   noteCreation?: NoteCreationSource;
   onNoteCreationHandled?: (source: NoteCreationSource) => void;
-  onCreateNote?: (source: NoteCreationSource) => void;
   onOpenNoteSource: (source: NoteSourceLink) => void;
   pdfAnnotationFocus?: PdfAnnotationFocus;
   fileSourceInput?: { path: string; consumer: SourceStepReference; nonce: number };
@@ -1723,7 +1723,6 @@ export function FilePreviewPanel({
   noteTask,
   noteCreation,
   onNoteCreationHandled,
-  onCreateNote,
   onOpenNoteSource,
   pdfAnnotationFocus,
   fileSourceInput,
@@ -1734,6 +1733,8 @@ export function FilePreviewPanel({
   // Per-tab mode tracking
   const [tabModes, setTabModes] = useState<Record<string, PanelMode>>({});
   const [dismissedSource, setDismissedSource] = useState<number>();
+  const [fileNoteCreation, setFileNoteCreation] = useState<NoteCreationSource>();
+  const fileNoteButton = useRef<HTMLButtonElement>(null);
   const dirtyPaths = useRef(new Set<string>());
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -1817,10 +1818,10 @@ export function FilePreviewPanel({
           <GitBranchIcon aria-hidden="true" className="size-3" /> {t("Provenance")}
         </button>
       )}
-      {mode === "view" && onCreateNote && !loadingFile && <button type="button"
+      {mode === "view" && !loadingFile && <button type="button" ref={fileNoteButton}
         className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         title={t("Write a note for this file")} aria-label={t("Write a note for this file")}
-        onClick={() => onCreateNote({ title: selectedName ?? selectedPath, anchor: { kind: "file", path: selectedPath } })}>
+        onClick={() => setFileNoteCreation({ title: selectedName ?? selectedPath, anchor: { kind: "file", path: selectedPath } })}>
         <NotebookPenIcon aria-hidden="true" className="size-3.5" />
       </button>}
       {canEdit && mode === "view" && (
@@ -1984,7 +1985,7 @@ export function FilePreviewPanel({
               onRetry={onRetry ? () => onRetry(selectedPath) : undefined}
               onSave={(content) => onSaveText(selectedPath, content)}
               pdfAnnotationFocus={pdfAnnotationFocus?.path === selectedPath ? pdfAnnotationFocus : undefined}
-              onCreateNote={onCreateNote}
+              onCreateNote={setFileNoteCreation}
               revealLine={
                 revealTarget && revealTarget.path === selectedPath
                   ? revealTarget.line
@@ -2006,6 +2007,15 @@ export function FilePreviewPanel({
       )}
       </>
       ))}
+      {isActive && fileNoteCreation && (
+        <NotePageCreate projectId={projectId} model={oneShotModelRef} source={fileNoteCreation}
+          dialog={{ returnFocus: () => fileNoteButton.current?.focus({ preventScroll: true }) }}
+          onCancel={() => setFileNoteCreation(undefined)}
+          onCreated={() => {
+            setFileNoteCreation(undefined);
+            toast.success(t("Note page saved."));
+          }} />
+      )}
     </div>
   );
 }

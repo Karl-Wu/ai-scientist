@@ -1362,7 +1362,6 @@ function WorkspacePage({
                 } : undefined}
                 noteCreation={noteCreation}
                 onNoteCreationHandled={handleNoteCreationHandled}
-                onCreateNote={handleCreateNote}
                 onOpenNoteSource={handleOpenNoteSource}
                 pdfAnnotationFocus={pdfAnnotationFocus}
                 fileSourceInput={fileSourceInput}
