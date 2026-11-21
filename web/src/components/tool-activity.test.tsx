@@ -12,6 +12,51 @@ const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({
 });
 
 describe("ToolActivityList", () => {
+  it("shows multiline file content as a field and lets the user view the raw JSON", () => {
+    const path = "scripts/export.py";
+    const content = 'def export():\n    return "ready"\n';
+    const args = { path, content, overwrite: false, mode: null };
+    const { container } = render(<ToolActivityList activities={[
+      item({ toolName: "write", args, result: "Saved export.py" }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ran 1 tool call" }));
+    fireEvent.click(screen.getByRole("button", { name: /^write/i }));
+
+    const fields = container.querySelector("dl")!;
+    expect(within(fields).getByText(path)).toBeVisible();
+    expect(within(fields).getByText("false")).toBeVisible();
+    expect(within(fields).getByText("null")).toBeVisible();
+    expect(fields.querySelectorAll("code")[1].textContent).toBe(content);
+
+    fireEvent.click(screen.getByRole("button", { name: "View raw JSON" }));
+    expect(container.querySelector("dl")).not.toBeInTheDocument();
+    expect(container.querySelector("pre")?.textContent).toBe(JSON.stringify(args, null, 2));
+    fireEvent.click(screen.getByRole("button", { name: "View fields" }));
+    expect(container.querySelectorAll("dl code")[1].textContent).toBe(content);
+  });
+
+  it("separates the shell command from its parameters and formats JSON in output without changing values", () => {
+    const command = "python example.py <<'PY'\nprint(42)\nPY";
+    const output = 'exit=0\nsummary {"id":9007199254740993,"values":[1,"line\\n2"]}\ncut {"unfinished":…';
+    const { container } = render(<ToolActivityList activities={[
+      item({ toolName: "bash", args: { command, timeout: 120 }, result: output }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ran 1 tool call" }));
+    fireEvent.click(screen.getByRole("button", { name: /^bash/i }));
+    expect(screen.getByText("Command")).toBeVisible();
+    expect(screen.getByText("Parameters")).toBeVisible();
+    const [commandBlock, parametersBlock, outputBlock] = container.querySelectorAll("pre");
+    expect(commandBlock.textContent).toBe(command);
+    expect(parametersBlock.textContent).toBe('{\n  "timeout": 120\n}');
+    expect(outputBlock.textContent).toBe(
+      'exit=0\nsummary {\n  "id": 9007199254740993,\n  "values": [\n    1,\n    "line\\n2"\n  ]\n}\ncut {"unfinished":…',
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View raw output" }));
+    expect(outputBlock.textContent).toBe(output);
+    fireEvent.click(screen.getByRole("button", { name: "View formatted output" }));
+    expect(outputBlock.textContent).toContain('\n  "id": 9007199254740993,');
+  });
+
   it("shows elapsed time and status on each row, with start time and results inside", () => {
     render(<ToolActivityList activities={[
       item({ id: "finished", toolName: "read", startedAt: 1000, durationMs: 1240, result: "file content" }),

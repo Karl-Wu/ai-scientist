@@ -10,6 +10,8 @@ import { LabNotebookView } from "@/components/lab-notebook-view";
 import { ModalJobsPanel } from "@/components/modal-jobs-panel";
 import { AutomationPanel } from "@/components/automation-panel";
 import { ProvenancePanel } from "@/components/provenance-panel";
+import { FileOriginControl } from "@/components/file-origin-control";
+import type { FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import type { ModalComputeScope } from "@/lib/modal-jobs";
 import type { NotebookEntry } from "@/lib/notebook";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,7 @@ import {
 import dynamic from "next/dynamic";
 import {
   FilesIcon,
+  GitBranchIcon,
   DownloadIcon,
   PencilIcon,
   BrushIcon,
@@ -46,7 +49,6 @@ import {
   ChevronUpIcon,
   RefreshCcwIcon,
   AlertCircleIcon,
-  GitBranchIcon,
 } from "lucide-react";
 import {
   Suspense,
@@ -1690,6 +1692,9 @@ export interface FilePreviewPanelProps {
   onNotebookJumpToChat?: (entryId: string) => void;
   /** Open the Lab Notebook focused on an entry (used by artifact citations). */
   onOpenNotebookEntry?: (entryId: string) => void;
+  fileSourceInput?: { path: string; consumer: SourceStepReference; nonce: number };
+  onJumpToFileSource?: (step: FileSourceStep) => void;
+  onOpenSourceInput?: (path: string, consumer: SourceStepReference) => void;
 }
 
 export function FilePreviewPanel({
@@ -1724,10 +1729,14 @@ export function FilePreviewPanel({
   notebookFocus,
   onNotebookJumpToChat,
   onOpenNotebookEntry,
+  fileSourceInput,
+  onJumpToFileSource,
+  onOpenSourceInput,
 }: FilePreviewPanelProps) {
   const t = useT();
   // Per-tab mode tracking
   const [tabModes, setTabModes] = useState<Record<string, PanelMode>>({});
+  const [dismissedSource, setDismissedSource] = useState<number>();
   const dirtyPaths = useRef(new Set<string>());
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -1764,7 +1773,9 @@ export function FilePreviewPanel({
   const selectedPath = activeTab?.path ?? null;
   const fileContent = activeTab?.content ?? null;
   const loadingFile = activeTab?.loading ?? false;
-  const mode = selectedPath ? (tabModes[selectedPath] ?? "view") : "view";
+  const tabMode = selectedPath ? (tabModes[selectedPath] ?? "view") : "view";
+  const sourceInput = fileSourceInput?.path === selectedPath ? fileSourceInput : undefined;
+  const mode = tabMode === "view" && sourceInput && sourceInput.nonce !== dismissedSource ? "provenance" : tabMode;
 
   const selectedName = selectedPath?.split("/").pop() ?? null;
   const cat = selectedName ? fileCategory(selectedName) : "text";
@@ -1791,16 +1802,20 @@ export function FilePreviewPanel({
       </span>
       {(mode === "view" || mode === "provenance") && (
         <button
-          onClick={() => setMode(selectedPath, mode === "provenance" ? "view" : "provenance")}
+          type="button"
+          aria-pressed={mode === "provenance"}
+          onClick={() => {
+            setDismissedSource(mode === "provenance" ? sourceInput?.nonce : undefined);
+            setMode(selectedPath, mode === "provenance" ? "view" : "provenance");
+          }}
           className={cn(
             "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
-            mode === "provenance"
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            mode === "provenance" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
           title={t("Where this file came from")}
         >
-          <GitBranchIcon className="size-3" /> {t("Provenance")}</button>
+          <GitBranchIcon aria-hidden="true" className="size-3" /> {t("Provenance")}
+        </button>
       )}
       {canEdit && mode === "view" && (
         <button
@@ -1936,18 +1951,18 @@ export function FilePreviewPanel({
         </div>
       )}
 
-      {/* Provenance mode — lineage instead of contents */}
       {selectedPath && mode === "provenance" && (
         <>
           {header}
-          <div className="flex-1 min-h-0">
-            <ProvenancePanel
-              key={selectedPath}
-              path={selectedPath}
-              projectId={projectId}
-              onOpenFile={onTabSelect}
-              onOpenNotebookEntry={onOpenNotebookEntry}
-            />
+          <div className="min-h-0 flex-1 overflow-auto">
+            {onJumpToFileSource && (
+              <FileOriginControl key={JSON.stringify([projectId, selectedPath, sourceInput?.nonce])}
+                path={selectedPath} projectId={projectId} consumer={sourceInput?.consumer} onJump={onJumpToFileSource} />
+            )}
+            {sourceInput && <p className="px-3 pt-3 text-xs text-muted-foreground">{t("Technical details for the current file")}</p>}
+            <ProvenancePanel key={selectedPath} path={selectedPath} projectId={projectId}
+              onOpenFile={onTabSelect} onOpenSourceInput={onOpenSourceInput}
+              onOpenNotebookEntry={onOpenNotebookEntry} embedded />
           </div>
         </>
       )}

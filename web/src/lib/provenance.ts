@@ -41,6 +41,7 @@ export interface ArtifactRef {
   mtimeMs: number;
   change: ArtifactChange;
   confidence: EdgeConfidence;
+  via?: "sandbox-scan";
   identityAt?: IdentityTiming;
   hashSkipped?: "too-large" | "unreadable";
 }
@@ -178,4 +179,57 @@ export async function getArtifactProvenance(
     throw new Error(data?.detail || `getArtifactProvenance ${res.status}`);
   }
   return (await res.json()) as ArtifactProvenance;
+}
+
+export interface SourceStepReference {
+  sessionId: string;
+  stepId: string;
+  runId?: string;
+}
+
+export type SourceEvidence = "recorded" | "scan" | "scan-inferred" | "inferred" | "harvest" | "declared";
+
+export interface FileSourceStep extends SourceStepReference {
+  toolName: string;
+  role: StepRole;
+  timestamp: number;
+  change: ArtifactChange;
+  evidence: SourceEvidence;
+  inputs: { path: string; confidence: EdgeConfidence }[];
+  outputs: { path: string; evidence: SourceEvidence }[];
+}
+
+export interface FileOrigin {
+  status: "matched" | "edited" | "historical" | "changed" | "unknown" | "unrecorded";
+  changedSinceUse: boolean | null;
+  inputConfidence?: EdgeConfidence;
+  source?: FileSourceStep;
+  lastKnown?: FileSourceStep;
+  history: FileSourceStep[];
+}
+
+export interface FileSourceFocus {
+  step: FileSourceStep;
+  nonce: number;
+}
+
+export const SOURCE_EVIDENCE_LABELS: Record<SourceEvidence, string> = {
+  recorded: "Recorded association",
+  scan: "Detected by sandbox scan",
+  "scan-inferred": "Inferred from sandbox scan",
+  inferred: "Inferred association",
+  harvest: "Collected after execution",
+  declared: "Declared association",
+};
+
+export async function getFileOrigin(path: string, projectId: string, consumer?: SourceStepReference, signal?: AbortSignal) {
+  const query = new URLSearchParams({ path });
+  if (consumer) {
+    query.set("sessionId", consumer.sessionId);
+    query.set("stepId", consumer.stepId);
+    if (consumer.runId) query.set("runId", consumer.runId);
+  }
+  const response = await apiFetch(`/sandbox/file-origin?${query}`, { signal }, projectId);
+  if (!response.ok) throw new Error("File source lookup failed");
+  return (await response.json()) as FileOrigin;
 }

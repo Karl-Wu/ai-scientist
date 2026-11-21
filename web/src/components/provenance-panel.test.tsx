@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { I18nProvider, useI18n } from "./i18n-provider";
 import { ProvenancePanel } from "./provenance-panel";
+import * as localeSettings from "@/lib/ui-locale-settings";
 import type {
   ArtifactProvenance,
   ArtifactRef,
@@ -139,6 +141,51 @@ beforeEach(() => {
 });
 
 describe("ProvenancePanel", () => {
+  it("updates technical details when the interface language changes", async () => {
+    function LanguageSwitch() {
+      const { setLocale } = useI18n();
+      return <button onClick={() => setLocale("zh-CN")}>简体中文</button>;
+    }
+
+    const readLocale = vi.spyOn(localeSettings, "readSavedLocale").mockResolvedValue("en");
+    const saveLocale = vi.spyOn(localeSettings, "saveLocale").mockResolvedValue(undefined);
+    const data = makeProvenance({
+      lineage: makeLineage(),
+      producedBy: [makeStep({ environmentId: "env", args: { command: "python analysis.py" } })],
+      environments: { env: makeEnv() },
+      citedBy: [{
+        id: "note-1", sessionId: "sess-abcdef12", type: "observation", title: "Six clusters",
+        role: "agent", timestamp: 1_700_000_000_000, precedesLatestOutput: true,
+      }],
+      readBy: [makeStep({ id: "read-1", toolName: "read" })],
+      readByTotal: 1,
+    });
+    getArtifactProvenance.mockResolvedValue(data);
+    try {
+      render(<I18nProvider><LanguageSwitch /><ProvenancePanel path={data.path} projectId="proj" /></I18nProvider>);
+      expect(await screen.findByText("This version")).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "简体中文" }));
+
+      expect(screen.getByText("当前版本")).toBeVisible();
+      expect(screen.getByRole("button", { name: "刷新" })).toHaveAttribute("title", "重新读取磁盘文件");
+      expect(screen.getByText("当前文件内容与写入步骤的记录一致。")).toBeVisible();
+      expect(screen.getByText("上游来源")).toBeVisible();
+      expect(screen.getByText("使用后已变化")).toBeVisible();
+      expect(screen.getByText("写入步骤（1）")).toBeVisible();
+      expect(screen.getByText("已观测")).toBeVisible();
+      expect(screen.getByText(/Python 3\.12\.4 · 2 个软件包/)).toBeVisible();
+      expect(screen.getByText("研究日志引用（1）")).toBeVisible();
+      expect(screen.getByText("观察")).toBeVisible();
+      expect(screen.getByText("Six clusters")).toBeVisible();
+      expect(screen.getByText("读取记录（1）")).toBeVisible();
+      expect(getArtifactProvenance).toHaveBeenCalledTimes(1);
+    } finally {
+      window.localStorage.removeItem("kady:locale");
+      readLocale.mockRestore();
+      saveLocale.mockRestore();
+    }
+  });
+
   it("shows the producing step with its tool, model and run", async () => {
     renderPanel(makeProvenance());
     expect(await screen.findByText("bash")).toBeInTheDocument();

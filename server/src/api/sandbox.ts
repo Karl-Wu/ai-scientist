@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { activePaths, getProject, touchProject } from "../projects.ts";
 import { buildProjectArchive } from "../project-archive.ts";
 import { artifactProvenance } from "../provenance/lookup.ts";
+import { fileOrigin } from "../provenance/file-origin.ts";
 import {
   collectPrior,
   priorIdentity,
@@ -803,6 +804,21 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
   });
 
   // --- provenance ---
+  app.get<{ Querystring: { path?: string; sessionId?: string; stepId?: string; runId?: string } }>(
+    "/sandbox/file-origin", async (req, reply) => {
+      const { path, sessionId, stepId, runId } = req.query;
+      if (!path || (Boolean(sessionId) !== Boolean(stepId)) || (runId && !sessionId)) {
+        return reply.code(400).send({ detail: "A file path and a complete reading step reference are required" });
+      }
+      try {
+        reply.header("Cache-Control", "no-store");
+        return await fileOrigin(currentProjectId(), path, sessionId && stepId ? { sessionId, stepId, runId } : undefined);
+      } catch (err) {
+        return handle(reply, err);
+      }
+    },
+  );
+
   app.get<{ Querystring: { path: string } }>("/sandbox/provenance", async (req, reply) => {
     try {
       const rel = req.query.path;

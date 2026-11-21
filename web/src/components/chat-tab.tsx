@@ -1,5 +1,7 @@
 "use client";
 
+import taskSummaryStyles from "./task-summary.module.css";
+
 import { ConversationMap } from "@/components/conversation-map";
 import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
 import { useSessionModel } from "@/lib/use-session-model";
@@ -71,7 +73,9 @@ import {
   NotebookEntryChip,
   ToolTiming,
   ToolActivityList,
+  ToolDisclosure,
 } from "@/components/tool-activity";
+import type { FileSourceFocus } from "@/lib/provenance";
 import { InterviewCard } from "@/components/interview-form";
 import { SystemCard } from "@/components/system-card";
 import { PermissionCard } from "@/components/permission-card";
@@ -1470,6 +1474,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   onViewInNotebook,
   onViewCompute,
   onOpenFile,
+  fileSourceFocus,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
@@ -1480,6 +1485,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   onViewInNotebook?: (entryId: string) => void;
   onViewCompute?: (jobId?: string) => void;
   onOpenFile?: (path: string) => void;
+  fileSourceFocus?: FileSourceFocus;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -1503,6 +1509,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
         key={`tools-${chunk[0].id}`}
         activities={chunk}
         current={current}
+        fileSourceFocus={fileSourceFocus}
       />,
     );
     chunk = [];
@@ -1561,7 +1568,9 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       );
     } else if (a.toolName === "generate_image") {
       flushChunk();
-      orderedBlocks.push(<ToolActivityList key={a.id} activities={[a]} current={current} />);
+      orderedBlocks.push(
+        <ToolActivityList key={a.id} activities={[a]} current={current} fileSourceFocus={fileSourceFocus} />,
+      );
     } else {
       chunk.push(a);
     }
@@ -1588,6 +1597,9 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const summaryIndex = summary ? segments.findIndex((segment) =>
     segment.type === "text" && segment.blockId === summary.blockId && Boolean(segment.content.trim())) : -1;
   const hasSummary = summaryIndex >= 0;
+  const focusInProcess = hasSummary && fileSourceFocus && segments.slice(0, summaryIndex).some(
+    (segment) => segment.type === "activity" && segment.activityId === fileSourceFocus.step.stepId,
+  );
   const streamingReasoning = isStreaming && (lastSegment?.type === "reasoning" ||
     (segments.length === 0 && Boolean(message.reasoning?.trim())));
   if (showReasoningDetails && message.reasoning && !segments.some((segment) => segment.type === "reasoning")) {
@@ -1607,7 +1619,13 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       flushChunk();
       replyWorkflowScript = workflowScriptsIn(segment.content).at(-1) ?? replyWorkflowScript;
       orderedBlocks.push(
-        <MessageResponse key={`text-${index}`} onOpenFile={onOpenFile}>{segment.content}</MessageResponse>,
+        <MessageResponse
+          key={`text-${index}`}
+          className={hasSummary && index >= summaryIndex ? taskSummaryStyles.prose : undefined}
+          onOpenFile={onOpenFile}
+        >
+          {segment.content}
+        </MessageResponse>,
       );
       continue;
     }
@@ -1630,7 +1648,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   return (
     <>
       {hasSummary && processBlocks.length > 0 ? (
-        <Collapsible>
+        <ToolDisclosure focusNonce={focusInProcess ? fileSourceFocus?.nonce : undefined}>
           <CollapsibleTrigger className="group flex items-center gap-1.5 rounded-md px-1 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
             {executionLabel}
             <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
@@ -1638,7 +1656,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
           <CollapsibleContent className="mt-2 space-y-2 border-l border-border pl-3">
             {processBlocks}
           </CollapsibleContent>
-        </Collapsible>
+        </ToolDisclosure>
       ) : (
         <>
           {hasSummary && summaryIndex > 0 && summary?.executionMs !== undefined && (
@@ -1648,7 +1666,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
         </>
       )}
       {summaryBlocks.length > 0 && (
-        <div className="flex min-w-0 flex-col gap-2 ps-2">
+        <div data-task-summary="" className="flex min-w-0 flex-col gap-3 ps-2 pe-1 pt-1">
           {summaryBlocks}
         </div>
       )}
@@ -1677,7 +1695,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 /** Unchanged history rows keep their tool disclosures and skip token renders. */
 export const ChatMessageRow = memo(function ChatMessageRow({
   message, isStreaming, isLast, showReasoningDetails, sessionId, projectId,
-  onViewInNotebook, onViewCompute, onOpenFile, onCopy, copied, response, onOpenTask, canFork,
+  onViewInNotebook, onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
@@ -1688,6 +1706,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onViewInNotebook?: (id: string) => void;
   onViewCompute?: (id?: string) => void;
   onOpenFile?: (path: string) => void;
+  fileSourceFocus?: FileSourceFocus;
   onCopy: (id: string, content: string) => void;
   copied: boolean;
   response?: TaskResponse;
@@ -1710,6 +1729,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             onViewInNotebook={onViewInNotebook}
             onViewCompute={onViewCompute}
             onOpenFile={onOpenFile}
+            fileSourceFocus={fileSourceFocus}
           />
         ) : (
           <>
@@ -1849,6 +1869,7 @@ export interface ChatTabProps {
   initialSessionId?: string | null;
   onOpenTask?: OpenTask;
   focusResponse?: { entryId: string; nonce: number };
+  fileSourceFocus?: FileSourceFocus;
   /** Browser-persisted controls, queue, and composer state for this tab. */
   initialWorkspaceState?: ChatWorkspaceState;
   // Shared sandbox/state passed in (one instance for the whole project)
@@ -1883,6 +1904,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     initialSessionId,
     onOpenTask,
     focusResponse,
+    fileSourceFocus,
     initialWorkspaceState,
     allFiles,
     sandboxReady,
@@ -2247,6 +2269,24 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   // strip badges from the active tab.
   const sessionId = getSessionId();
   const taskResponses = useTaskResponses(projectId, sessionId, isStreaming, messages);
+  const handledSourceJump = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!isActive || !fileSourceFocus || !transcriptReady || handledSourceJump.current === fileSourceFocus.nonce) return;
+    const frame = requestAnimationFrame(() => {
+      handledSourceJump.current = fileSourceFocus.nonce;
+      const id = CSS.escape(fileSourceFocus.step.stepId);
+      const target = rootRef.current?.querySelector<HTMLElement>(`[data-tool-call-id="${id}"]`);
+      if (!target) {
+        toast.error(t("The recorded writing step is unavailable in this task."));
+        return;
+      }
+      target.querySelector("button")?.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.classList.add("kady-flash");
+      setTimeout(() => target.classList.remove("kady-flash"), 1800);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fileSourceFocus, isActive, messages, transcriptReady, t]);
   useEffect(() => {
     if (!isActive || !focusResponse) return;
     const target = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-response-entry-id]") ?? [])
@@ -2607,6 +2647,7 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
                 onViewInNotebook={onViewInNotebook}
                 onViewCompute={onViewCompute}
                 onOpenFile={onOpenFile}
+                fileSourceFocus={message.activities?.some((item) => item.id === fileSourceFocus?.step.stepId) ? fileSourceFocus : undefined}
                 onCopy={handleCopy}
                 copied={copiedId === message.id}
                 response={taskResponses.byMessage.get(message.id)}

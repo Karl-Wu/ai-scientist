@@ -7,6 +7,7 @@ import { FileTreePanel } from "@/components/sandbox-panel";
 import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/lazy-surfaces";
 import type { Model } from "@/components/model-selector";
 import { ChatTab, type ChatTabHandle, type ChatTabMeta } from "@/components/chat-tab";
+import type { FileSourceFocus, FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import { ChatTabsBar, type ChatTabDescriptor } from "@/components/chat-tabs-bar";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { ProjectView } from "@/components/project-view";
@@ -957,18 +958,27 @@ function WorkspacePage({
   );
 
   const [responseFocus, setResponseFocus] = useState<{ sessionId: string; entryId: string; nonce: number } | null>(null);
+  const [fileSourceFocus, setFileSourceFocus] = useState<FileSourceFocus>();
+  const [fileSourceInput, setFileSourceInput] = useState<{ path: string; consumer: SourceStepReference; nonce: number }>();
+  const sourceNonce = useRef(0);
   const openTask = useCallback((sessionId: string, title: string, entryId?: string) => {
     const alreadyOpen = tabsRef.current.some((tab) => tab.sessionId === sessionId) ||
       Object.values(tabsMeta).some((meta) => meta.sessionId === sessionId);
     if (!alreadyOpen && tabsRef.current.length >= MAX_CHAT_TABS) {
       toast.error(t("Close a task before opening another one. The new task is saved in the task list."));
-      return;
+      return false;
     }
     setChatNavigationOpen(true);
     setView("chat");
     openSession(sessionId, title);
     if (entryId) setResponseFocus({ sessionId, entryId, nonce: Date.now() });
+    return true;
   }, [openSession, tabsMeta, t]);
+
+  const jumpToFileSource = useCallback((step: FileSourceStep) => {
+    if (!openTask(step.sessionId, t("Source task"))) return;
+    setFileSourceFocus({ step, nonce: ++sourceNonce.current });
+  }, [openTask, t]);
 
   // ------------------------------------------------------------------
   // Workflow launch — routes to the active chat tab via its imperative
@@ -985,12 +995,17 @@ function WorkspacePage({
   );
 
   const handleFileSelect = useCallback((path: string) => {
+    setFileSourceInput(undefined);
     sandboxSelectFile(path);
     setView("chat");
     setShowNotebook(false);
     setShowCompute(false);
     setShowAutomation(false);
   }, [sandboxSelectFile]);
+  const handleOpenSourceInput = useCallback((path: string, consumer: SourceStepReference) => {
+    handleFileSelect(path);
+    setFileSourceInput({ path, consumer, nonce: ++sourceNonce.current });
+  }, [handleFileSelect]);
   const handleOrganizeFiles = useCallback(() => {
     const handle = tabHandles.current.get(activeTabId);
     if (!handle) return;
@@ -1352,6 +1367,9 @@ function WorkspacePage({
                 notebookFocus={notebookFocus}
                 onNotebookJumpToChat={handleNotebookJumpToChat}
                 onOpenNotebookEntry={handleViewInNotebook}
+                fileSourceInput={fileSourceInput}
+                onJumpToFileSource={jumpToFileSource}
+                onOpenSourceInput={handleOpenSourceInput}
               />
               </div>
             </div>
@@ -1466,6 +1484,7 @@ function WorkspacePage({
                 initialSessionId={t.sessionId ?? null}
                 onOpenTask={openTask}
                 focusResponse={responseFocus && responseFocus.sessionId === t.sessionId ? responseFocus : undefined}
+                fileSourceFocus={fileSourceFocus?.step.sessionId === t.sessionId ? fileSourceFocus : undefined}
                 initialWorkspaceState={tabWorkspaceStates[t.id]}
                 isActive={isActive && t.id === activeTabId}
                 isActiveTab={isActive && t.id === activeTabId}

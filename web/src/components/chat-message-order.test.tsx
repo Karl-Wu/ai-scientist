@@ -287,7 +287,7 @@ describe("AssistantMessageBody", () => {
         { type: "text", blockId: "progress", content: "Checked the inputs." },
         { type: "activity", activityId: "A" },
         { type: "activity", activityId: "B" },
-        { type: "text", blockId: "summary", content: "Both inputs passed." },
+        { type: "text", blockId: "summary", content: "Both inputs passed.\n\n**Checks**\n\n- Matches the **reference**." },
       ],
     };
     const reply = (confirmed: boolean) => (
@@ -302,6 +302,7 @@ describe("AssistantMessageBody", () => {
     const { rerender } = render(reply(false));
     expect(screen.getByText("Checked the inputs.")).toBeVisible();
     expect(screen.queryByRole("button", { name: /^Execution took/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Both inputs passed.").closest("[data-task-summary]")).toBeNull();
     const before = screen.getByRole("heading", { name: "Result A" });
     expect(before.compareDocumentPosition(screen.getByText("Both inputs passed.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -310,12 +311,16 @@ describe("AssistantMessageBody", () => {
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Checked the inputs.")).not.toBeInTheDocument();
     const summary = screen.getByText("Both inputs passed.");
+    expect(summary.closest("[data-task-summary]")).not.toBeNull();
+    expect(screen.getByText("Checks").closest("p")).toHaveAttribute("data-standalone-strong");
+    expect(screen.getByText("reference").closest("li")).toBeInTheDocument();
     const first = screen.getByRole("heading", { name: "Result A" });
     const second = screen.getByRole("heading", { name: "Result B" });
     expect(summary.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(disclosure);
     expect(screen.getByText("Checked the inputs.")).toBeVisible();
+    expect(screen.getByText("Checked the inputs.").closest("[data-task-summary]")).toBeNull();
     expect(screen.getAllByRole("heading", { name: /^Result (A|B)$/ })).toHaveLength(2);
   });
 });

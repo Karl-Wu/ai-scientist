@@ -13,6 +13,9 @@
  *     cannot be regenerated from what is on disk now
  */
 import { cn } from "@/lib/utils";
+import { useLocale, useT } from "@/components/i18n-provider";
+import type { Locale } from "@/lib/i18n";
+import type { Translate } from "@/lib/translations";
 import {
   getArtifactProvenance,
   type ArtifactProvenance,
@@ -22,6 +25,7 @@ import {
   type Lineage,
   type LineageNode,
   type ProvenanceStep,
+  type SourceStepReference,
 } from "@/lib/provenance";
 import {
   AlertTriangleIcon,
@@ -47,8 +51,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatWhen(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, {
+function formatWhen(ms: number, locale: Locale): string {
+  return new Date(ms).toLocaleString(locale, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -74,10 +78,11 @@ const CONFIDENCE_COPY: Record<EdgeConfidence, { label: string; title: string }> 
 };
 
 function ConfidenceBadge({ confidence }: { confidence: EdgeConfidence }) {
+  const t = useT();
   const copy = CONFIDENCE_COPY[confidence];
   return (
     <span
-      title={copy.title}
+      title={t(copy.title)}
       className={cn(
         "shrink-0 rounded px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider",
         confidence === "observed" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
@@ -85,7 +90,7 @@ function ConfidenceBadge({ confidence }: { confidence: EdgeConfidence }) {
         confidence === "declared" && "bg-muted text-muted-foreground",
       )}
     >
-      {copy.label}
+      {t(copy.label)}
     </span>
   );
 }
@@ -101,6 +106,7 @@ function ArtifactRow({
   ref_: ArtifactRef;
   onOpenFile?: (path: string) => void;
 }) {
+  const t = useT();
   const hash = shortHash(ref_.sha256);
   return (
     <li className="flex items-baseline gap-1.5 py-0.5">
@@ -120,7 +126,7 @@ function ArtifactRow({
         {ref_.path}
       </button>
       <span className="shrink-0 text-[10px] text-muted-foreground">
-        {ref_.change === "deleted" ? "deleted" : formatBytes(ref_.size)}
+        {ref_.change === "deleted" ? t("deleted") : formatBytes(ref_.size)}
       </span>
       {hash && (
         <span
@@ -133,21 +139,21 @@ function ArtifactRow({
       {ref_.identityAt === "harvest" && (
         <span
           className="shrink-0 text-[10px] text-muted-foreground"
-          title="Hashed when the subagent's record was parsed, not when the step wrote the file — the bytes may already have changed by then."
+          title={t("Hashed when the subagent's record was parsed, not when the step wrote the file — the bytes may already have changed by then.")}
         >
-          hashed later
+          {t("hashed later")}
         </span>
       )}
       {ref_.hashSkipped && (
         <span
           className="shrink-0 text-[10px] text-amber-600 dark:text-amber-400"
-          title={
+          title={t(
             ref_.hashSkipped === "too-large"
               ? "Not hashed: above the size limit. Identity is size+mtime only."
-              : "Not hashed: the file could not be read."
-          }
+              : "Not hashed: the file could not be read.",
+          )}
         >
-          unhashed
+          {t("unhashed")}
         </span>
       )}
       <ConfidenceBadge confidence={ref_.confidence} />
@@ -156,12 +162,12 @@ function ArtifactRow({
 }
 
 /** Who did it, in words a reader can act on. */
-function actorLabel(step: ProvenanceStep): string {
+function actorLabel(step: ProvenanceStep, t: Translate): string {
   switch (step.role) {
     case "subagent":
-      return `subagent${step.agentName ? `: ${step.agentName}` : ""}`;
+      return step.agentName ? t("subagent: {name}", { name: step.agentName }) : t("subagent");
     case "user":
-      return step.toolName === "upload"
+      return t(step.toolName === "upload"
         ? "uploaded by you"
         : step.toolName === "save"
           ? "saved by you in the editor"
@@ -169,11 +175,11 @@ function actorLabel(step: ProvenanceStep): string {
             ? "moved by you"
             : step.toolName === "delete"
               ? "deleted by you"
-              : "you";
+              : "you");
     case "compute":
-      return "remote compute";
+      return t("remote compute");
     default:
-      return "lead agent";
+      return t("lead agent");
   }
 }
 
@@ -201,14 +207,15 @@ function EnvironmentLine({
   env: EnvironmentSnapshot;
   atHarvest?: boolean;
 }) {
+  const t = useT();
   const parts: string[] = [];
   if (env.python) {
     parts.push(
-      `Python ${env.python.version ?? "?"}${env.python.source === "system" ? " (system)" : ""}` +
-        (env.python.packages.length ? ` · ${env.python.packages.length} packages` : ""),
+      `Python ${env.python.version ?? "?"}${env.python.source === "system" ? ` ${t("(system)")}` : ""}` +
+        (env.python.packages.length ? ` · ${t("{count} packages", { count: env.python.packages.length })}` : ""),
     );
   }
-  if (env.r) parts.push(`${env.r.version} · ${env.r.packages.length} packages`);
+  if (env.r) parts.push(`${env.r.version} · ${t("{count} packages", { count: env.r.packages.length })}`);
   for (const lock of env.lockfiles) parts.push(`${lock.path} ${lock.sha256.slice(0, 8)}`);
   if (env.git) parts.push(`git ${env.git.head.slice(0, 8)}`);
   if (parts.length === 0) parts.push(`${env.os.platform} ${env.os.arch}`);
@@ -217,16 +224,16 @@ function EnvironmentLine({
     <details className="mt-1.5">
       <summary
         className="flex cursor-pointer items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
-        title={`Environment ${env.id}`}
+        title={t("Environment {id}", { id: env.id })}
       >
         <PackageIcon className="size-2.5 shrink-0" />
         <span className="truncate">{parts.join(" · ")}</span>
         {atHarvest && (
           <span
             className="shrink-0 text-muted-foreground/70"
-            title="Captured when the subagent's record was parsed, not when the step ran — the subagent may have changed the environment in between."
+            title={t("Captured when the subagent's record was parsed, not when the step ran — the subagent may have changed the environment in between.")}
           >
-            (captured later)
+            {t("(captured later)")}
           </span>
         )}
       </summary>
@@ -250,7 +257,7 @@ function EnvironmentLine({
             ))}
             {env.python?.packagesTruncated ? (
               <p className="text-muted-foreground">
-                + {env.python.packagesTruncated} more Python packages not recorded
+                {t("+ {count} more Python packages not recorded", { count: env.python.packagesTruncated })}
               </p>
             ) : null}
             {env.r?.packages.map((pkg) => (
@@ -260,7 +267,7 @@ function EnvironmentLine({
             ))}
             {env.r?.packagesTruncated ? (
               <p className="text-muted-foreground">
-                + {env.r.packagesTruncated} more R packages not recorded
+                {t("+ {count} more R packages not recorded", { count: env.r.packagesTruncated })}
               </p>
             ) : null}
           </div>
@@ -275,12 +282,16 @@ function StepCard({
   target,
   environment,
   onOpenFile,
+  onOpenInput,
 }: {
   step: ProvenanceStep;
   target: string;
   environment?: EnvironmentSnapshot;
   onOpenFile?: (path: string) => void;
+  onOpenInput?: (path: string, step: ProvenanceStep) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const outputRef = step.outputs.find((o) => o.path === target);
   const otherOutputs = step.outputs.filter((o) => o.path !== target);
   return (
@@ -290,7 +301,7 @@ function StepCard({
         <span className="font-mono text-xs font-medium">{step.toolName}</span>
         {step.isError && (
           <span className="rounded bg-destructive/10 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-destructive">
-            error
+            {t("Error")}
           </span>
         )}
         {outputRef && <ConfidenceBadge confidence={outputRef.confidence} />}
@@ -300,13 +311,13 @@ function StepCard({
         {outputRef?.identityAt === "harvest" && (
           <span
             className="shrink-0 text-[10px] text-muted-foreground"
-            title="This step ran inside a subagent, so the file was hashed when its record was parsed rather than when the step wrote it."
+            title={t("This step ran inside a subagent, so the file was hashed when its record was parsed rather than when the step wrote it.")}
           >
-            hashed later
+            {t("hashed later")}
           </span>
         )}
         <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-          {formatWhen(step.timestamp)}
+          {formatWhen(step.timestamp, locale)}
         </span>
       </div>
 
@@ -317,27 +328,30 @@ function StepCard({
             <span className="font-mono">{step.model}</span>
           </span>
         )}
-        <span title={step.role === "subagent" ? step.agentName : undefined}>{actorLabel(step)}</span>
+        <span title={step.role === "subagent" ? step.agentName : undefined}>{actorLabel(step, t)}</span>
         {step.compute && (
           <span
             className="font-mono"
-            title={`Modal job ${step.compute.jobId}${step.compute.sandboxId ? ` · sandbox ${step.compute.sandboxId}` : ""}`}
+            title={[
+              t("Modal job {id}", { id: step.compute.jobId }),
+              step.compute.sandboxId && t("sandbox {id}", { id: step.compute.sandboxId }),
+            ].filter(Boolean).join(" · ")}
           >
             {step.compute.instance ?? "modal"}
             {step.compute.gpu ? ` · ${step.compute.gpu}` : ""}
             {step.compute.environment ? ` · ${step.compute.environment}` : ""}
-            {step.compute.exitCode !== undefined ? ` · exit ${step.compute.exitCode}` : ""}
-            {` · job ${shortId(step.compute.jobId)}`}
+            {step.compute.exitCode !== undefined ? ` · ${t("exit {code}", { code: step.compute.exitCode })}` : ""}
+            {` · ${t("job {id}", { id: shortId(step.compute.jobId) })}`}
           </span>
         )}
         {step.runId && (
-          <span className="font-mono" title={`Run ${step.runId}`}>
-            run {step.runId.replace(/^run_/, "").slice(0, 8)}
+          <span className="font-mono" title={t("run {id}", { id: step.runId })}>
+            {t("run {id}", { id: shortId(step.runId.replace(/^run_/, "")) })}
           </span>
         )}
         {step.role !== "user" && (
-          <span className="font-mono" title={`Session ${step.sessionId}`}>
-            session {step.sessionId.slice(0, 8)}
+          <span className="font-mono" title={t("session {id}", { id: step.sessionId })}>
+            {t("session {id}", { id: shortId(step.sessionId) })}
           </span>
         )}
       </div>
@@ -346,8 +360,8 @@ function StepCard({
         <p className="mt-1.5 flex items-start gap-1 text-[10px] text-amber-600 dark:text-amber-400">
           <AlertTriangleIcon className="mt-px size-2.5 shrink-0" />
           {step.compute.missingOutputs.length === 1
-            ? `The remote job never produced ${step.compute.missingOutputs[0]}.`
-            : `The remote job never produced ${step.compute.missingOutputs.length} requested outputs.`}
+            ? t("The remote job never produced {file}.", { file: step.compute.missingOutputs[0] })
+            : t("The remote job never produced {count} requested outputs.", { count: step.compute.missingOutputs.length })}
         </p>
       ) : null}
 
@@ -356,22 +370,23 @@ function StepCard({
       {step.degraded && (
         <p className="mt-1.5 flex items-start gap-1 text-[10px] text-amber-600 dark:text-amber-400">
           <AlertTriangleIcon className="mt-px size-2.5 shrink-0" />
-          {step.degraded === "sandbox-too-large"
+          {t(step.degraded === "sandbox-too-large"
             ? "Sandbox exceeded the scan budget — file attribution for this step is incomplete."
             : step.degraded === "scan-failed"
               ? "The sandbox scan failed — file attribution for this step is incomplete."
-              : "Ran inside a subagent and was reconstructed afterward, so this step's file effects could not be observed directly. Any files below are attributed by timing, not observation."}
+              : "Ran inside a subagent and was reconstructed afterward, so this step's file effects could not be observed directly. Any files below are attributed by timing, not observation.")}
         </p>
       )}
 
       {step.inputs.length > 0 && (
         <div className="mt-2">
           <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <FileInputIcon className="size-2.5" /> Inputs
+            <FileInputIcon className="size-2.5" /> {t("Inputs")}
           </p>
           <ul className="mt-0.5">
             {step.inputs.map((input) => (
-              <ArtifactRow key={input.path} ref_={input} onOpenFile={onOpenFile} />
+              <ArtifactRow key={input.path} ref_={input}
+                onOpenFile={onOpenInput ? (path) => onOpenInput(path, step) : onOpenFile} />
             ))}
           </ul>
         </div>
@@ -380,7 +395,7 @@ function StepCard({
       {otherOutputs.length > 0 && (
         <div className="mt-2">
           <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <FileOutputIcon className="size-2.5" /> Also wrote
+            <FileOutputIcon className="size-2.5" /> {t("Also wrote")}
           </p>
           <ul className="mt-0.5">
             {otherOutputs.map((output) => (
@@ -392,15 +407,15 @@ function StepCard({
 
       {step.truncatedEdges ? (
         <p className="mt-1.5 text-[10px] text-muted-foreground">
-          + {step.truncatedEdges} more file{step.truncatedEdges === 1 ? "" : "s"} not recorded
-          (per-step limit)
+          {t(step.truncatedEdges === 1 ? "+ 1 more file not recorded (per-step limit)" :
+            "+ {count} more files not recorded (per-step limit)", { count: step.truncatedEdges })}
         </p>
       ) : null}
 
       {step.args !== undefined && (
         <details className="mt-2">
           <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">
-            Arguments
+            {t("Arguments")}
           </summary>
           <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted/50 p-1.5 font-mono text-[10px] leading-relaxed">
             {JSON.stringify(step.args, null, 2)}
@@ -437,11 +452,15 @@ function LineageTree({
   lineage,
   target,
   onOpenFile,
+  onOpenInput,
 }: {
   lineage: Lineage;
   target: string;
   onOpenFile?: (path: string) => void;
+  onOpenInput?: (path: string, step: ProvenanceStep) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const nodes = new Map(lineage.nodes.map((node) => [node.path, node]));
   const inputsOf = new Map<string, Lineage["edges"]>();
   for (const edge of lineage.edges) {
@@ -454,10 +473,13 @@ function LineageTree({
   const renderNode = (
     path: string,
     depth: number,
-    viaConfidence?: EdgeConfidence,
+    via?: Lineage["edges"][number],
   ): ReactNode => {
     const node = nodes.get(path);
     const step = node?.stepId ? lineage.steps[node.stepId] : undefined;
+    const consumer = via && lineage.steps[via.stepId];
+    const open = consumer && onOpenInput ? () => onOpenInput(path, consumer) :
+      onOpenFile && node?.current !== null ? () => onOpenFile(path) : undefined;
     const repeated = expanded.has(path);
     expanded.add(path);
     const inputs = repeated ? [] : (inputsOf.get(path) ?? []);
@@ -470,11 +492,11 @@ function LineageTree({
           {depth > 0 && <span className="shrink-0 text-muted-foreground/60">└</span>}
           <button
             type="button"
-            disabled={!onOpenFile || node?.current === null}
-            onClick={() => onOpenFile?.(path)}
+            disabled={!open}
+            onClick={open}
             className={cn(
               "truncate font-mono text-[11px]",
-              onOpenFile && node?.current !== null
+              open
                 ? "text-foreground/80 underline-offset-2 hover:underline"
                 : "text-foreground/60",
               node?.current === null && "line-through",
@@ -487,38 +509,38 @@ function LineageTree({
           {step && (
             <span
               className="shrink-0 truncate text-[10px] text-muted-foreground"
-              title={`${step.toolName} · ${actorLabel(step)} · ${formatWhen(step.timestamp)}`}
+              title={`${step.toolName} · ${actorLabel(step, t)} · ${formatWhen(step.timestamp, locale)}`}
             >
               {step.role === "agent" || step.role === "subagent" ? `${step.toolName} · ` : ""}
-              {actorLabel(step)}
+              {actorLabel(step, t)}
             </span>
           )}
-          {viaConfidence && viaConfidence !== "observed" && (
-            <ConfidenceBadge confidence={viaConfidence} />
+          {via && via.confidence !== "observed" && (
+            <ConfidenceBadge confidence={via.confidence} />
           )}
           {node?.root && node.root !== "user" && node.root !== "upload" && (
             <span
               className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground"
-              title={ROOT_COPY[node.root].title}
+              title={t(ROOT_COPY[node.root].title)}
             >
-              {ROOT_COPY[node.root].label}
+              {t(ROOT_COPY[node.root].label)}
             </span>
           )}
           {node?.changedSinceUse === true && (
             <span
               className="flex shrink-0 items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400"
-              title="The bytes on disk differ from the version this step consumed. Whatever was built from it may not be reproducible from the current file."
+              title={t("The bytes on disk differ from the version this step consumed. Whatever was built from it may not be reproducible from the current file.")}
             >
-              <AlertTriangleIcon className="size-2.5" /> changed since use
+              <AlertTriangleIcon className="size-2.5" /> {t("changed since use")}
             </span>
           )}
           {repeated && (
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">(shown above)</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/70">{t("(shown above)")}</span>
           )}
         </div>
         {inputs.length > 0 && (
           <ul>
-            {inputs.map((edge) => renderNode(edge.from, depth + 1, edge.confidence))}
+            {inputs.map((edge) => renderNode(edge.from, depth + 1, edge))}
           </ul>
         )}
       </li>
@@ -530,7 +552,7 @@ function LineageTree({
       <ul>{renderNode(target, 0)}</ul>
       {lineage.truncated && (
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Upstream walk stopped at its limit — the record continues beyond what is shown.
+          {t("Upstream walk stopped at its limit — the record continues beyond what is shown.")}
         </p>
       )}
     </div>
@@ -568,7 +590,9 @@ const STALENESS_COPY = {
 export interface ProvenancePanelProps {
   path: string;
   projectId: string;
+  embedded?: boolean;
   onOpenFile?: (path: string) => void;
+  onOpenSourceInput?: (path: string, consumer: SourceStepReference) => void;
   /**
    * Jump to a notebook entry in the Lab Notebook view. The notebook view is
    * scoped to the active tab's session, so a citation from a different session
@@ -581,8 +605,12 @@ export function ProvenancePanel({
   path,
   projectId,
   onOpenFile,
+  onOpenSourceInput,
   onOpenNotebookEntry,
+  embedded = false,
 }: ProvenancePanelProps) {
+  const t = useT();
+  const locale = useLocale();
   const [data, setData] = useState<ArtifactProvenance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -610,29 +638,40 @@ export function ProvenancePanel({
 
   if (loading && !data) {
     return (
-      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Loading provenance…
+      <div className={cn("flex items-center justify-center text-xs text-muted-foreground", embedded ? "p-6" : "h-full")}>
+        {t("Loading provenance…")}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+      <div className={cn("flex flex-col items-center justify-center gap-2 px-6 text-center", embedded ? "py-6" : "h-full")}>
         <AlertTriangleIcon className="size-5 text-muted-foreground/40" />
-        <p className="text-xs text-muted-foreground">{error}</p>
+        <p role="alert" className="text-xs text-muted-foreground">{t("Could not load provenance.")}</p>
         <button
           onClick={load}
           className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <RefreshCcwIcon className="size-3" /> Retry
+          <RefreshCcwIcon className="size-3" /> {t("Retry")}
         </button>
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">{t("Error details")}</summary>
+          <p>{error}</p>
+        </details>
       </div>
     );
   }
 
   if (!data) return null;
 
+  const openInput = onOpenSourceInput
+    ? (path: string, step: ProvenanceStep) => onOpenSourceInput(path, {
+        sessionId: step.sessionId,
+        stepId: step.id,
+        runId: step.runId,
+      })
+    : undefined;
   const hasHistory = data.producedBy.length > 0;
   // Distinguish "we have no hash" from "we have one, but it was taken too late
   // to certify anything" — both arrive as `unknown`.
@@ -643,20 +682,20 @@ export function ProvenancePanel({
       : STALENESS_COPY[data.staleness];
 
   return (
-    <div className="h-full overflow-auto px-3 py-3">
+    <div className={cn("px-3 py-3", !embedded && "h-full overflow-auto")}>
       {/* Identity */}
       <div className="rounded-md border bg-card/40 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            This version
+            {t("This version")}
           </p>
           <button
             onClick={load}
             disabled={loading}
             className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-            title="Re-read from disk"
+            title={t("Re-read from disk")}
           >
-            <RefreshCcwIcon className={cn("size-2.5", loading && "animate-spin")} /> Refresh
+            <RefreshCcwIcon className={cn("size-2.5", loading && "animate-spin")} /> {t("Refresh")}
           </button>
         </div>
         {data.current ? (
@@ -665,17 +704,17 @@ export function ProvenancePanel({
               sha256:{data.current.sha256 ?? "—"}
             </p>
             <p className="text-[10px] text-muted-foreground">
-              {formatBytes(data.current.size)} · modified {formatWhen(data.current.mtimeMs)}
+              {formatBytes(data.current.size)} · {t("modified {time}", { time: formatWhen(data.current.mtimeMs, locale) })}
             </p>
           </div>
         ) : (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            This file no longer exists in the sandbox.
+            {t("This file no longer exists in the sandbox.")}
           </p>
         )}
         <p className={cn("mt-2 flex items-start gap-1 text-[10px]", staleness.className)}>
           <staleness.Icon className="mt-px size-2.5 shrink-0" />
-          {staleness.text}
+          {t(staleness.text)}
         </p>
       </div>
 
@@ -684,10 +723,10 @@ export function ProvenancePanel({
       {data.lineage && data.lineage.edges.length > 0 && (
         <div className="mt-3">
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Lineage
+            {t("Lineage")}
           </p>
           <div data-testid="provenance-lineage" className="rounded-md border bg-card/40 px-2.5 py-2">
-            <LineageTree lineage={data.lineage} target={data.path} onOpenFile={onOpenFile} />
+            <LineageTree lineage={data.lineage} target={data.path} onOpenFile={onOpenFile} onOpenInput={openInput} />
           </div>
         </div>
       )}
@@ -695,7 +734,7 @@ export function ProvenancePanel({
       {/* Producing steps */}
       <div className="mt-3">
         <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Produced by {hasHistory ? `(${data.producedBy.length})` : ""}
+          {hasHistory ? t("Produced by ({count})", { count: data.producedBy.length }) : t("Produced by")}
         </p>
         {hasHistory ? (
           <div className="space-y-2">
@@ -708,14 +747,13 @@ export function ProvenancePanel({
                   step.environmentId ? data.environments?.[step.environmentId] : undefined
                 }
                 onOpenFile={onOpenFile}
+                onOpenInput={openInput}
               />
             ))}
           </div>
         ) : (
           <p className="rounded-md border border-dashed px-2.5 py-3 text-[11px] leading-relaxed text-muted-foreground">
-            No recorded provenance. Either this file predates provenance recording,
-            it was uploaded rather than produced by the agent, or it was written
-            during a run whose attribution degraded.
+            {t("No recorded provenance. Either this file predates provenance recording, it was uploaded rather than produced by the agent, or it was written during a run whose attribution degraded.")}
           </p>
         )}
       </div>
@@ -724,7 +762,7 @@ export function ProvenancePanel({
       {data.citedBy.length > 0 && (
         <div className="mt-3">
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Cited in the notebook ({data.citedBy.length})
+            {t("Cited in the notebook ({count})", { count: data.citedBy.length })}
           </p>
           <div className="space-y-1">
             {data.citedBy.map((citation) => (
@@ -739,20 +777,19 @@ export function ProvenancePanel({
                 )}
               >
                 <span className="mt-px shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {citation.type}
+                  {t(citation.type.charAt(0).toUpperCase() + citation.type.slice(1))}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[11px] text-foreground/90">
                     {citation.title}
                   </span>
                   <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                    {citation.role} · {formatWhen(citation.timestamp)}
+                    {t(citation.role)} · {formatWhen(citation.timestamp, locale)}
                   </span>
                   {citation.precedesLatestOutput && (
                     <span className="mt-0.5 flex items-start gap-1 text-[10px] text-amber-600 dark:text-amber-400">
                       <AlertTriangleIcon className="mt-px size-2.5 shrink-0" />
-                      Written before the latest version of this file — the entry may
-                      describe different bytes.
+                      {t("Written before the latest version of this file — the entry may describe different bytes.")}
                     </span>
                   )}
                 </span>
@@ -766,7 +803,7 @@ export function ProvenancePanel({
       {data.readByTotal > 0 && (
         <div className="mt-3">
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Read by ({data.readByTotal})
+            {t("Read by ({count})", { count: data.readByTotal })}
           </p>
           <ul className="space-y-0.5">
             {data.readBy.map((step) => (
@@ -776,13 +813,13 @@ export function ProvenancePanel({
               >
                 <ArrowRightIcon className="size-2.5 shrink-0" />
                 <span className="font-mono">{step.toolName}</span>
-                <span className="text-[10px]">{formatWhen(step.timestamp)}</span>
+                <span className="text-[10px]">{formatWhen(step.timestamp, locale)}</span>
               </li>
             ))}
           </ul>
           {data.readByTotal > data.readBy.length && (
             <p className="mt-1 text-[10px] text-muted-foreground">
-              + {data.readByTotal - data.readBy.length} more
+              {t("+ {count} more", { count: data.readByTotal - data.readBy.length })}
             </p>
           )}
         </div>

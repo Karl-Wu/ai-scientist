@@ -74,6 +74,8 @@ export interface ArtifactRef {
   mtimeMs: number;
   change: ArtifactChange;
   confidence: EdgeConfidence;
+  /** Output discovered by comparing sandbox snapshots. */
+  via?: "sandbox-scan";
   /** Omitted means "write" — measured right after the producing call. */
   identityAt?: IdentityTiming;
   hashSkipped?: "too-large" | "unreadable";
@@ -336,6 +338,10 @@ function parseStepsFile(file: string): ProvenanceStep[] {
     if ((exc as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw exc;
   }
+  return parseSteps(raw);
+}
+
+function parseSteps(raw: string): ProvenanceStep[] {
   const out: ProvenanceStep[] = [];
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
@@ -373,4 +379,29 @@ export function readProjectSteps(projectId: string): ProvenanceStep[] {
     out.push(...parseStepsFile(path.join(dir, sessionId, "steps.jsonl")));
   }
   return out.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Asynchronous lookup for the file-header shortcut. Keep only relevant rows. */
+export async function findProjectSteps(
+  projectId: string,
+  matches: (step: ProvenanceStep) => boolean,
+): Promise<ProvenanceStep[]> {
+  const dir = resolvePaths(projectId).provenanceDir;
+  const sessions = await fs.promises.readdir(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  const steps: ProvenanceStep[] = [];
+  for (const sessionId of sessions) {
+    if (!isValidSessionId(sessionId)) continue;
+    const raw = await fs.promises.readFile(path.join(dir, sessionId, "steps.jsonl"), "utf8")
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return "";
+        throw error;
+      });
+    for (const step of parseSteps(raw)) {
+      if (matches(step)) steps.push(step);
+    }
+  }
+  return steps.sort((a, b) => b.timestamp - a.timestamp);
 }

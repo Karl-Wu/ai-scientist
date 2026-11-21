@@ -386,10 +386,11 @@ const SafeParagraph = memo(
       (c) => c != null && c !== ""
     ) as ReactNode[];
 
-    if (kids.length === 1 && isValidElement(kids[0])) {
-      const tag = (kids[0].props as Record<string, unknown>)?.node as { tagName?: string } | undefined;
-      if (tag?.tagName === "img") return <>{children}</>;
-      if (tag?.tagName === "code" && "data-block" in (kids[0].props as Record<string, unknown>))
+    const onlyChild = kids.length === 1 && isValidElement(kids[0]) ? kids[0].props as Record<string, unknown> : null;
+    const tag = (onlyChild?.node as { tagName?: string } | undefined)?.tagName;
+    if (onlyChild) {
+      if (tag === "img") return <>{children}</>;
+      if (tag === "code" && "data-block" in onlyChild)
         return <>{children}</>;
     }
 
@@ -397,7 +398,11 @@ const SafeParagraph = memo(
       return <div {...(rest as React.HTMLAttributes<HTMLDivElement>)}>{children}</div>;
     }
 
-    return <p {...(rest as React.HTMLAttributes<HTMLParagraphElement>)}>{children}</p>;
+    return (
+      <p {...(rest as React.HTMLAttributes<HTMLParagraphElement>)} data-standalone-strong={tag === "strong" ? "" : undefined}>
+        {children}
+      </p>
+    );
   }
 );
 SafeParagraph.displayName = "SafeParagraph";
