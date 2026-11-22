@@ -15,3 +15,34 @@ it("binds live and restored bubbles to persisted IDs, preserving duplicate answe
   expect(result.has("partial")).toBe(false);
   expect(matchTaskResponses([{ ...messages[1], entryId: "b" }], responses).get("local-1")?.entryId).toBe("b");
 });
+
+it.each([false, true])("skips a pre-compaction fragment when the reply continues (restored=%s)", (restored) => {
+  const before: ChatMessage = {
+    id: "before", role: "assistant", content: "Checking the data.", timestamp: 1,
+    ...(restored ? { entryId: "partial" } : {}),
+  };
+  const marker: ChatMessage = {
+    id: "marker", role: "system", customType: "compaction", content: "Context compacted", timestamp: 2,
+  };
+  const after: ChatMessage = {
+    id: "after", role: "assistant", content: before.content, timestamp: 3,
+    ...(restored ? { entryId: "final" } : {}),
+  };
+  const finalAnswer: TaskResponse = { entryId: "final", content: after.content, feedback: null, children: [] };
+  const responses = restored ? [{ ...finalAnswer, entryId: "partial" }, finalAnswer] : [finalAnswer];
+  expect([...matchTaskResponses([before, marker, after], responses)]).toEqual([["after", finalAnswer]]);
+  const pending: ChatMessage = { id: "pending", role: "assistant", content: "", timestamp: 3 };
+  const sameTextDuringCompaction = matchTaskResponses([before, marker, pending], responses, true);
+  expect(sameTextDuringCompaction.size).toBe(0);
+});
+
+it("keeps actions on completed answers followed by a compaction notice and a new prompt", () => {
+  const answer: TaskResponse = { entryId: "saved-answer", content: "Finished.", feedback: null, children: [] };
+  const messages: ChatMessage[] = [
+    { id: "reply", entryId: answer.entryId, role: "assistant", content: answer.content, timestamp: 1 },
+    { id: "marker", role: "system", customType: "compaction", content: "Context compacted", timestamp: 2 },
+    { id: "user", role: "user", content: "A different question.", timestamp: 3 },
+    { id: "next", role: "assistant", content: "", timestamp: 4 },
+  ];
+  expect(matchTaskResponses(messages, [answer], true).get("reply")).toBe(answer);
+});

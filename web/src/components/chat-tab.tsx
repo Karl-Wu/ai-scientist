@@ -1809,6 +1809,11 @@ export const ChatMessageRow = memo(function ChatMessageRow({
     !message.reasoning?.trim() && !message.citations && message.activities?.length &&
     message.activities.every((activity) => isRetiredNotebookTool(activity.toolName))
   ) return null;
+  const hasAnswerActions = message.role === "assistant" && Boolean(response) && !isStreaming;
+  const hasUsage = message.role === "assistant" && (
+    (typeof message.runCostUsd === "number" && message.runCostUsd > 0) ||
+    (message.runBillingMode === "subscription" && (message.runTokens ?? 0) > 0)
+  );
   return (
     <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId ?? message.entryId}>
       <MessageContent>
@@ -1856,17 +1861,14 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           </span>
         )}
       </MessageContent>
-      {message.role === "assistant" && message.content && (
+      {(hasAnswerActions || hasUsage) && (
         <MessageToolbar>
-          <MessageActions className="min-w-0 flex-wrap">
+          {hasAnswerActions && <MessageActions className="min-w-0 flex-wrap">
             <AnswerActions projectId={projectId} sessionId={sessionId} response={response}
-              canFork={canFork ?? !isStreaming} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask}
-              onCreateNote={isStreaming ? undefined : onCreateNote} />
-          </MessageActions>
-          {((typeof message.runCostUsd === "number" &&
-            message.runCostUsd > 0) ||
-            (message.runBillingMode === "subscription" &&
-              (message.runTokens ?? 0) > 0)) && (
+              canFork={canFork ?? true} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask}
+              onCreateNote={onCreateNote} />
+          </MessageActions>}
+          {hasUsage && (
               <InfoTooltip
                 content={
                   <>
@@ -1892,7 +1894,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                   </>
                 }
               >
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
                   {message.runBillingMode === "subscription"
                     ? `subscription · ${(message.runTokens ?? 0).toLocaleString()} tok`
                     : formatUsd(message.runCostUsd ?? 0)}

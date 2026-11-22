@@ -13,13 +13,33 @@ describe("AssistantMessageBody", () => {
     const content = vi.fn(() => "Completed reply");
     const message: ChatMessage = { id: "old", role: "assistant", timestamp: 1, get content() { return content(); } };
     const onCopy = vi.fn();
-    const props = { message, isStreaming: false, isLast: false, sessionId: "s", projectId: "default", copied: false, onCopy };
+    const response = { entryId: "completed-answer", content: "Completed reply", feedback: null, children: [] };
+    const props = { message, response, isStreaming: false, isLast: false, sessionId: "s", projectId: "default", copied: false, onCopy };
     const { rerender } = render(<ChatMessageRow {...props} />);
     const reads = content.mock.calls.length;
     rerender(<ChatMessageRow {...props} />);
     expect(content).toHaveBeenCalledTimes(reads);
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     expect(onCopy).toHaveBeenCalledWith("old", "Completed reply");
+  });
+
+  it("shows answer controls only when a reply has finished and matches a saved answer", () => {
+    const message: ChatMessage = { id: "reply", role: "assistant", timestamp: 1, content: "Checked the sample." };
+    const response = { entryId: "saved-answer", content: message.content, feedback: null, children: [] };
+    const props = {
+      message, sessionId: "s", projectId: "default", copied: false,
+      onCopy: vi.fn(), onOpenTask: vi.fn(), onCreateNote: vi.fn(),
+    };
+    const actions = /^(Like|Dislike|Copy|New task from here|Create note from this answer)$/;
+    const { rerender } = render(<ChatMessageRow {...props} isLast={false} isStreaming={false} />);
+    expect(screen.getByText(message.content)).toBeVisible();
+    expect(screen.queryByRole("button", { name: actions })).not.toBeInTheDocument();
+
+    rerender(<ChatMessageRow {...props} isLast isStreaming response={response} />);
+    expect(screen.queryByRole("button", { name: actions })).not.toBeInTheDocument();
+
+    rerender(<ChatMessageRow {...props} isLast isStreaming={false} response={response} />);
+    expect(screen.getAllByRole("button", { name: actions })).toHaveLength(5);
   });
   it("shows the original headings in stream order after expanding reasoning", () => {
     const reasoning = "**Review the inputs**\n\nIntermediate reasoning with **inline emphasis**.\n\n## Compare files\n\nThe schemas match.\n\n~~~md\n**Example markup**\n~~~";
