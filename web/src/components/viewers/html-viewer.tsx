@@ -12,8 +12,8 @@ import { apiFetch } from "@/lib/projects";
 import type { ViewerProps } from "@/lib/viewers/registry";
 
 export default function HtmlViewer({
-  content, name, path, projectId, revealLine, revealToken, standalone = false,
-}: ViewerProps & { standalone?: boolean }) {
+  content, name, path, projectId, revealLine, revealToken,
+}: ViewerProps) {
   const t = useT();
   const [view, setView] = useState<"preview" | "source">(revealLine ? "source" : "preview");
   const [zoom, setZoom] = useState(1);
@@ -56,7 +56,7 @@ export default function HtmlViewer({
       <Button type="button" size="xs" variant={view === "source" ? "secondary" : "ghost"}
         aria-pressed={view === "source"} onClick={() => setView("source")}>{t("Source")}</Button>
       {view === "preview" && <PreviewZoomControls zoom={zoom} setZoom={setZoom} />}
-      {!standalone && projectId && <Button asChild size="xs" variant="ghost" className="ml-auto">
+      {projectId && <Button asChild size="xs" variant="ghost" className="ml-auto">
         <a href={htmlPreviewPath(path, projectId)} target="_blank" rel="noopener noreferrer" onClick={openExternal}>
           <ExternalLinkIcon aria-hidden />
           {t(opening ? "Opening…" : openFailed ? "Open in new tab" : "Open in external browser")}
