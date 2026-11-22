@@ -173,7 +173,10 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     const infos = await listSessions(paths);
     // Kady-owned resident sessions (the scheduler host) are not chats.
     const hidden = schedulerSessionId(paths);
-    const running = new Set(runBroker.activeForProject(projectId).map((run) => run.sessionId));
+    // A stopped task can still hold its run slot while the pipeline saves results.
+    const running = new Set(runBroker.activeForProject(projectId)
+      .filter((run) => !run.isAbortRequested)
+      .map((run) => run.sessionId));
     return infos.filter((i) => i.id !== hidden).map((i) => {
       let visibleInHistory = i.messageCount > 1;
       let firstMessage = i.firstMessage;

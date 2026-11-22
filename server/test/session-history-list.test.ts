@@ -66,6 +66,31 @@ it("reads a cold chat from disk and opens the assistant only when continuing it"
   }
 }, 30_000);
 
+it("clears the sidebar running state after stop while the run is still finalizing", async () => {
+  const project = createProject({ name: "Stopped chat history" });
+  const session = await createSession(project.id, resolvePaths(project.id));
+  const id = session.sessionId;
+  const prompt = "Check the sample data";
+  session.sessionManager.appendMessage({ role: "user", content: prompt, timestamp: Date.now() });
+  const headers = { "X-Project-Id": project.id };
+  const list = async () => (await app.inject({ method: "GET", url: "/sessions", headers })).json();
+  const run = runBroker.start(project.id, id, {
+    runId: "stopping-run", prompt, images: [], baseline: { messages: [], contextUsage: null },
+  });
+  try {
+    expect(await list()).toEqual([expect.objectContaining({ id, isRunning: true })]);
+    const response = await app.inject({ method: "POST", url: `/sessions/${id}/abort`, headers });
+    expect(response.statusCode).toBe(200);
+    expect(run.isAbortRequested).toBe(true);
+    expect(run.isComplete).toBe(false);
+    expect(await list()).toEqual([expect.objectContaining({ id, isRunning: false })]);
+  } finally {
+    run.complete();
+    await disposeSession(project.id, id);
+    runBroker.clear();
+  }
+}, 30_000);
+
 it("lists the saved prompt during a slow first answer and preserves it after an error", async () => {
   const project = createProject({ name: "First prompt history" });
   const session = await createSession(project.id, resolvePaths(project.id));

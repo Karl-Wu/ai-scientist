@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatTabsBar } from "./chat-tabs-bar";
 import { apiFetch } from "@/lib/projects";
+import { useAgent } from "@/lib/use-agent";
 import { toast } from "sonner";
-vi.mock("@/lib/projects", () => ({ apiFetch: vi.fn() }));
+vi.mock("@/lib/projects", () => ({ apiFetch: vi.fn(), useProjectScopeId: () => "project-a" }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/components/ui/confirm-dialog", () => ({ useConfirm: () => ({ confirm: async () => true, dialog: null }) }));
 const saved = { id: "saved-chat", name: "Historical chat", created: Date.now(), modified: Date.now(), messageCount: 2, visibleInHistory: true, isRunning: false };
@@ -69,6 +70,58 @@ describe("historical chat deletion", () => {
     expect(screen.getByText("Historical chat")).toBeInTheDocument();
     expect(props.onClose).not.toHaveBeenCalled();
   });
+});
+
+it("refreshes the sidebar after stopping even when it already fetched while the abort was pending", async () => {
+  let serverRunning = false;
+  const abortReply = Promise.withResolvers<Response>();
+  fetchMock.mockImplementation(async (path, options) => {
+    if (path === "/sessions" && options?.method === "POST") return Response.json({ id: saved.id });
+    if (path === "/sessions") return Response.json([{ ...saved, isRunning: serverRunning }]);
+    if (path.endsWith("/run")) {
+      serverRunning = true;
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"type":"message_end","role":"user"}\n\n'));
+          options?.signal?.addEventListener("abort", () => {
+            controller.error(new DOMException("aborted", "AbortError"));
+          });
+        },
+      }));
+    }
+    if (path.endsWith("/abort")) return abortReply.promise;
+    throw new Error(`Unexpected request: ${path}`);
+  });
+
+  function ChatWithSidebar() {
+    const agent = useAgent("project-a");
+    const isStreaming = agent.status === "submitted" || agent.status === "streaming";
+    return (
+      <TooltipProvider>
+        <button onClick={() => void agent.send("Check the sample data")}>Send</button>
+        <button onClick={() => void agent.stop()} disabled={!isStreaming}>Stop</button>
+        <ChatTabsBar {...props} tabs={[{ ...props.tabs[0], sessionId: agent.sessionId, isStreaming }]} />
+      </TooltipProvider>
+    );
+  }
+
+  const user = userEvent.setup();
+  render(<ChatWithSidebar />);
+  await screen.findByText(saved.name);
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  expect(await screen.findByRole("status", { name: "Task is running" })).toBeInTheDocument();
+  const stop = screen.getByRole("button", { name: "Stop" });
+  const listRequests = () => fetchMock.mock.calls.filter(([path, init]) => path === "/sessions" && !init?.method);
+  const beforeStop = listRequests().length;
+  await user.click(stop);
+  await waitFor(() => expect(stop).toBeDisabled());
+  await waitFor(() => expect(listRequests().length).toBeGreaterThan(beforeStop));
+  expect(screen.getByRole("status", { name: "Task is running" })).toBeInTheDocument();
+
+  serverRunning = false;
+  await act(async () => abortReply.resolve(Response.json({ ok: true, restored: [] })));
+  await waitFor(() => expect(screen.queryByRole("status", { name: "Task is running" })).not.toBeInTheDocument());
+  expect(screen.getByText(saved.name)).toBeInTheDocument();
 });
 
 describe("draft conversation visibility", () => {

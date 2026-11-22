@@ -1551,6 +1551,9 @@ export function useAgent(projectId?: string) {
           scopedProjectId,
         );
         if (response.ok) {
+          // Disconnecting the stream can trigger a list refresh before the
+          // server has received the stop request. Refresh again after it has.
+          window.dispatchEvent(new Event("kady:tasks-changed"));
           const data = (await response.json()) as { restored?: unknown };
           if (Array.isArray(data.restored)) restored = data.restored.map(String);
         }
