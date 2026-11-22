@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronRightIcon, FileTextIcon, LinkIcon, ListFilterIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
+import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, FileTextIcon, LinkIcon, ListFilterIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
@@ -404,17 +404,20 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
             <section className="space-y-3 rounded-md border p-3" aria-label={t("Note assistant")}>
               <div className="space-y-2">
                 <label className="block space-y-1 text-xs font-medium">{t("Note expert")}
-                  <select className={`${selectClass} block w-full`} disabled={busy} value={expert} onChange={(event) => {
-                    setExpert(event.target.value);
-                    setSuggestion(undefined);
-                    setDraftError(undefined);
-                  }}>
-                    <option value="">{t("General assistant")}</option>
-                    {expert && !selectedExpert && <option value={expert} disabled>{t(expert)} · {t("Unavailable")}</option>}
-                    {experts.map((option) => <option key={option.name} value={option.name} disabled={!option.available}>
-                      {t(option.name)}{!option.available ? ` · ${t("Unavailable")}` : ""}
-                    </option>)}
-                  </select>
+                  <span className="relative block">
+                    <select className={cn(selectClass, "block w-full appearance-none truncate pr-8")} disabled={busy} value={expert} onChange={(event) => {
+                      setExpert(event.target.value);
+                      setSuggestion(undefined);
+                      setDraftError(undefined);
+                    }}>
+                      <option value="">{t("General assistant")}</option>
+                      {expert && !selectedExpert && <option value={expert} disabled>{t(expert)} · {t("Unavailable")}</option>}
+                      {experts.map((option) => <option key={option.name} value={option.name} disabled={!option.available}>
+                        {t(option.name)}{!option.available ? ` · ${t("Unavailable")}` : ""}
+                      </option>)}
+                    </select>
+                    <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  </span>
                 </label>
                 {selectedExpert && <p className="text-xs text-muted-foreground">{t("Drafting skill: {skill}", { skill: selectedExpert.skill })}</p>}
                 {expertListError && <p className="text-xs text-muted-foreground">{t("Could not load note experts. You can still use the general assistant.")}</p>}
