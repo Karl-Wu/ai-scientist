@@ -35,6 +35,20 @@ describe("conditional file previews", () => {
     fs.writeFileSync(target(), content);
     expect((await get()).statusCode).toBe(413);
   });
+  it("gives HTML reports a separate size limit while serving them as inert text", async () => {
+    const name = "research.HTM";
+    const file = path.join(resolvePaths("default").sandbox, name);
+    const preview = () => app.inject({ url: "/sandbox/file?path=" + name });
+    const html = "<!doctype html><script type=\"application/json\">" + " ".repeat(658_000) + "</script>";
+    fs.writeFileSync(file, html);
+    const loaded = await preview();
+    expect(loaded.statusCode).toBe(200);
+    expect(loaded.headers["content-type"]).toMatch(/^text\/plain/);
+    expect(loaded.headers["content-security-policy"]).toMatch(/^sandbox;/);
+    expect(loaded.body).toBe(html);
+    fs.writeFileSync(file, Buffer.alloc(8_000_001, 32));
+    expect((await preview()).statusCode).toBe(413);
+  });
   it("saves an edit beyond 5,000 CSV rows and rejects a stale save", async () => {
     const name = "editable.csv";
     const file = path.join(resolvePaths("default").sandbox, name);

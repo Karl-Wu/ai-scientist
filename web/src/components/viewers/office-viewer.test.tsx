@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import OfficeViewer from "./office-viewer";
-vi.mock("@/lib/office-render", () => ({ renderOffice: vi.fn(async () => ({ html: "<p>Rendered document</p>" })) }));
+vi.mock("@/lib/office-render", () => ({ renderOffice: vi.fn(async () => ({ html: "<p>Rendered document</p>", layoutWidth: 800 })) }));
 vi.mock("./arraydata-viewer", () => ({ default: ({ toolbarActions }: { toolbarActions?: import("react").ReactNode }) => <div>{toolbarActions}Workbook data preview</div> }));
 const original = { kind: "docx", revision: "a".repeat(64), readOnly: false, data: "", groups: [] };
 let fetcher: ReturnType<typeof vi.fn>;
@@ -12,6 +12,40 @@ it("opens the isolated full editor with the file's project and path", async () =
   render(<OfficeViewer {...props} />); await screen.findByTitle("Word document preview");
   expect(screen.getByRole("link", { name: /Edit in Office/ })).toHaveAttribute("href", "/office?path=report.docx&project=office-tests");
   expect(new Headers(fetcher.mock.calls[0][1].headers).get("X-Project-Id")).toBe("office-tests");
+});
+it("groups zoom, refresh and editing while keeping the rendered document mounted", async () => {
+  render(<OfficeViewer {...props} />);
+  const frame = await screen.findByTitle("Word document preview");
+  const toolbar = within(screen.getByRole("group", { name: "Document preview" }));
+  expect(toolbar.getByRole("button", { name: "Refresh Office preview" })).toBeVisible();
+  expect(toolbar.getByRole("link", { name: "Edit in Office" })).toBeVisible();
+  fireEvent.click(toolbar.getByRole("button", { name: "Zoom in" }));
+  expect(toolbar.getByText("110%")).toBeVisible();
+  expect(frame).toHaveStyle({ transform: "scale(1.1)" });
+  expect(screen.getByTitle("Word document preview")).toBe(frame);
+  fireEvent.click(toolbar.getByRole("button", { name: "Fit width" }));
+  expect(toolbar.getByRole("button", { name: "Fit width" })).toHaveAttribute("aria-pressed", "true");
+});
+it("fits a document in wider and narrower panes and keeps 100% as a separate reset", async () => {
+  let paneWidth = 1_000;
+  let resize!: () => void;
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => paneWidth);
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: () => void) { resize = callback; }
+    observe() {}
+    disconnect() {}
+  });
+  render(<OfficeViewer {...props} />);
+  const frame = await screen.findByTitle("Word document preview");
+  const toolbar = within(screen.getByRole("group", { name: "Document preview" }));
+  expect(await toolbar.findByText("125%")).toBeVisible();
+  fireEvent.click(toolbar.getByRole("button", { name: "Reset zoom to 100%" }));
+  expect(toolbar.getByText("100%")).toBeVisible();
+  fireEvent.click(toolbar.getByRole("button", { name: "Fit width" }));
+  expect(toolbar.getByText("125%")).toBeVisible();
+  act(() => { paneWidth = 600; resize(); });
+  expect(toolbar.getByText("75%")).toBeVisible();
+  expect(screen.getByTitle("Word document preview")).toBe(frame);
 });
 it("refreshes after a matching save from the editor window", async () => {
   render(<OfficeViewer {...props} />); await screen.findByTitle("Word document preview");

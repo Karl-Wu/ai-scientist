@@ -25,6 +25,7 @@ export type FileCategory =
   | "image"
   | "pdf"
   | "markdown"
+  | "html"
   | "csv"
   | "notebook"
   | "fasta"
@@ -80,6 +81,7 @@ export function fileCategory(name: string): FileCategory {
   if (["docx", "pptx", "xlsx"].includes(ext)) return "office";
   if (ext === "pdf") return "pdf";
   if (ext === "md" || ext === "mdx") return "markdown";
+  if (ext === "html" || ext === "htm") return "html";
   if (["csv", "tsv", "jsonl", "ndjson"].includes(ext)) return "csv";
   if (ext === "ipynb") return "notebook";
   if (FASTA_EXTS.has(ext)) return "fasta";
@@ -450,7 +452,9 @@ export function useSandbox(
         const content = res.ok ? (delimited
           ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer())
           : await res.text()) : res.status === 413
-          ? "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
+          ? fileCategory(path) === "html"
+            ? "[Error: HTML previews are limited to 8 MB. Use Download to access the complete file.]"
+            : "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
           : `[Error: ${res.status} ${res.statusText}]`;
         if (!isCurrent() || controller.signal.aborted) return;
         const nextEtag = res.ok ? res.headers.get("etag") : null;

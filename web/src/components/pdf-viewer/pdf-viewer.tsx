@@ -50,7 +50,8 @@ import { cn } from "@/lib/utils";
 
 import { AnnotationLayer } from "./annotation-layer";
 import { usePdfPageRendering } from "./use-pdf-page-rendering";
-import { usePdfZoom } from "./use-pdf-zoom";
+import { usePreviewZoom } from "@/components/use-preview-zoom";
+import { PreviewZoomControls } from "@/components/preview-zoom-controls";
 import { AnnotationSidebar } from "./annotation-sidebar";
 import { NotePopover } from "./note-popover";
 
@@ -223,7 +224,7 @@ export function PdfViewer({
   const [pendingNoteError, setPendingNoteError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const { zoom, setZoom, fitWidth, fitToWidth } = usePdfZoom(containerRef, pageSize?.w ?? 0, initialFitWidth);
+  const { zoom, setZoom, fitWidth, fitToWidth } = usePreviewZoom(containerRef, pageSize?.w ?? 0, initialFitWidth);
   const [currentPage, setCurrentPage] = useState(1);
   const docRef = useRef<PdfDoc | null>(null);
   const loadedPathRef = useRef<string | null>(null);
@@ -868,39 +869,7 @@ function Toolbar({
   const t = useT();
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-background/60 px-2 py-1 text-xs">
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        title="Zoom out"
-        onClick={() => setZoom(Math.max(0.1, +(zoom - 0.1).toFixed(2)))}
-      >
-        −
-      </button>
-      <span className="w-12 text-center tabular-nums">
-        {Math.round(zoom * 100)}%
-      </span>
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        title="Zoom in"
-        onClick={() => setZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))}
-      >
-        +
-      </button>
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        onClick={() => setZoom(1)}
-        title="Fit 100%"
-      >
-        100%
-      </button>
-
-      <button
-        className={cn("rounded px-2 py-1 hover:bg-muted", fitWidth && "bg-muted")}
-        onClick={onFitWidth}
-        aria-pressed={fitWidth}
-        title="Fit page to pane width"
-      >
-        Fit width
-      </button>
+      <PreviewZoomControls zoom={zoom} setZoom={setZoom} fitWidth={fitWidth} onFitWidth={onFitWidth} />
 
       <div className="mx-2 h-4 w-px bg-border" />
 

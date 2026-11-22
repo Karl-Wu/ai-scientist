@@ -289,7 +289,7 @@ function FileLoadError({
       </div>
       <div className="space-y-1">
         <p className="text-sm font-medium">{t("Could not load file")}</p>
-        <p className="max-w-md text-xs text-muted-foreground">{message}</p>
+        <p className="max-w-md text-xs text-muted-foreground">{t(message)}</p>
       </div>
       {onRetry && (
         <button
@@ -376,6 +376,8 @@ function FileViewer({
           onRetry={onRetry}
           onDirtyChange={onDirtyChange}
           onSavingChange={onSavingChange}
+          revealLine={revealLine}
+          revealToken={revealToken}
         />
       </Suspense>
     );

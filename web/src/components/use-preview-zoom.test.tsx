@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { usePdfZoom } from "./use-pdf-zoom";
+import { usePreviewZoom } from "./use-preview-zoom";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -15,7 +15,7 @@ it("fits on resize, retains scale when hidden, and respects manual zoom until fi
   let width = 524;
   Object.defineProperty(el, "clientWidth", { get: () => width });
   const ref = { current: el };
-  const { result } = renderHook(() => usePdfZoom(ref, 1000, true));
+  const { result } = renderHook(() => usePreviewZoom(ref, 1000, true));
   expect(result.current.zoom).toBe(0.5);
   act(() => { width = 824; resize(); });
   expect(result.current.zoom).toBe(0.8);
