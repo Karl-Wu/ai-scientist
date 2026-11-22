@@ -141,7 +141,7 @@ describe("toHistory system items", () => {
     });
     expect(history[2].details).not.toHaveProperty("interview");
     expect(history[4]).toMatchObject({ role: "system", customType: "compaction", details: { tokensBefore: 50_000 } });
-    expect(history[3].frames).toEqual([{ type: "text_delta", delta: "relaying" }]);
-    expect(history[5].frames).toEqual([{ type: "text_delta", delta: "after compaction" }]);
+    expect(history[3].frames).toEqual([{ type: "text_delta", delta: "relaying", blockId: "text-2" }]);
+    expect(history[5].frames).toEqual([{ type: "text_delta", delta: "after compaction", blockId: "text-3" }]);
   });
 });

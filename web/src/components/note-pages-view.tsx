@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   NOTE_INSTRUCTION_MAX_CHARS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
   type NoteContent, type NoteCreationSource, type NoteDraft, type NoteDraftCredit, type NoteExpertOption,
-  type NotePage, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
+  type NoteListResult, type NotePage, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
 import { apiFetch } from "@/lib/projects";
 import { useCapabilitiesRevision } from "@/lib/capability-events";
@@ -103,6 +103,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   const t = useT();
   const [pages, setPages] = useState<NoteSummary[]>();
   const [matches, setMatches] = useState<NoteSummary[]>();
+  const [unavailableCount, setUnavailableCount] = useState(0);
   const [tasks, setTasks] = useState<Record<string, string>>({});
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -129,9 +130,10 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
       try {
         const response = await apiFetch("/notes", { signal: controller.signal }, projectId);
         if (!response.ok) throw new Error("Notes request failed");
-        const data = await response.json() as { pages: NoteSummary[] };
+        const data = await response.json() as NoteListResult;
         if (!controller.signal.aborted) {
           setPages(data.pages);
+          setUnavailableCount(data.unavailableCount ?? 0);
           setError(false);
         }
       } catch {
@@ -148,10 +150,11 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
       void (async () => {
         const response = await apiFetch("/notes?" + new URLSearchParams({ q: search }), { signal: controller.signal }, projectId);
         if (!response.ok) throw new Error("Notes search failed");
-        const data = await response.json() as { pages: NoteSummary[] };
+        const data = await response.json() as NoteListResult;
         if (!controller.signal.aborted) {
           setError(false);
           setMatches(data.pages);
+          setUnavailableCount(data.unavailableCount ?? 0);
         }
       })().catch(() => { if (!controller.signal.aborted) setError(true); });
     }, 150);
@@ -251,10 +254,13 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-auto bg-muted/20 px-3 py-2.5 @min-[32rem]/notes:px-4">
+        {!error && unavailableCount > 0 && <p role="status" className={cn(noteListWidth, "mb-2 text-xs text-muted-foreground")}>
+          {unavailableCount === 1 ? t("1 note page could not be read.") : t("{count} note pages could not be read.", { count: unavailableCount })}
+        </p>}
         {error ? <div className="flex items-center gap-2 text-sm" role="alert">
           {t("Could not load notes.")}<Button size="sm" variant="ghost" onClick={() => setRefresh((value) => value + 1)}>{t("Retry")}</Button>
         </div> : !pages ? <p role="status" className="text-sm text-muted-foreground">{t("Loading notes…")}</p>
-          : !pages.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t("No note pages yet")}</p>
+          : !pages.length ? (unavailableCount === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("No note pages yet")}</p>)
           : !visible ? <p role="status" className="text-sm text-muted-foreground">{t("Searching notes…")}</p>
           : !visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t("No matching note pages")}</p>
           : <ul className={cn(noteListWidth, "grid grid-cols-1 gap-2.5 @min-[54rem]/notes:grid-cols-2")}>

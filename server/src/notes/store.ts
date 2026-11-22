@@ -2,15 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { atomicJson } from "../atomic-json.ts";
-import { getProject, resolvePaths } from "../projects.ts";
-import { isUserVisible, safePath, SandboxError } from "../sandbox-fs.ts";
+import { getProject, resolvePaths, type ProjectPaths } from "../projects.ts";
+import { apiRelative, isUserVisible, safePath, SandboxError } from "../sandbox-fs.ts";
 import { findSessionFile, readEntries, type SessionEntryRow } from "../agent/session-export.ts";
 import { isValidSessionId } from "../agent/notebook-store.ts";
 import { AGENT_NAME_RE } from "../agent/agent-files.ts";
 import { SKILL_NAME_RE } from "../agent/skills.ts";
 import { matchesNoteAnchor, parseNoteAnchor, resolveNoteAnchor } from "./source.ts";
 import {
-  NOTE_PAGE_ID, NOTE_TYPES, type NoteCitation, type NoteContent, type NoteDraftCredit, type NotePage, type NoteRevision, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
+  NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteRevision, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
 } from "../../../web/src/lib/note-pages.ts";
 
 // Keep previously recorded events in their original on-disk revisions.
@@ -25,9 +25,13 @@ type LegacyPage = Omit<NotePage, "schemaVersion" | "type" | "sources" | "revisio
   revisions: (Omit<NoteRevision, "summary"> & { body: string })[];
 };
 
+function notePagesDirectory(paths: ProjectPaths) {
+  return safePath(path.join(paths.kadyDir, "note-pages"), paths.sandbox);
+}
+
 function notesDir(projectId: string) {
   if (!getProject(projectId)) throw new SandboxError(404, "Project not found");
-  return path.join(resolvePaths(projectId).kadyDir, "note-pages");
+  return notePagesDirectory(resolvePaths(projectId));
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -105,7 +109,7 @@ function normalizeSource(
       if (sha256 !== undefined && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) {
         throw new SandboxError(400, "Invalid source file digest");
       }
-      return { ...common, kind: "file", path: path.relative(paths.sandbox, absolute).split(path.sep).join("/"), sessionId, sha256 };
+      return { ...common, kind: "file", path: apiRelative(paths.sandbox, absolute), sessionId, sha256 };
     }
     case "task":
     case "message":
@@ -136,22 +140,44 @@ function normalizeSource(
 
 function readPage(dir: string, id: string): StoredPage {
   if (!NOTE_PAGE_ID.test(id)) throw new SandboxError(404, "Note page not found");
+  let raw: string;
   try {
-    const page = JSON.parse(fs.readFileSync(path.join(dir, id + ".json"), "utf8")) as StoredPage | TimelinePage | LegacyPage;
-    const type = page.schemaVersion === undefined && page.type === "general" ? "note" : page.type;
-    if (page.id !== id || !Object.hasOwn(NOTE_TYPES, type) || page.typeVersion !== 1 || !page.revisions?.length) {
-      throw new Error("Invalid saved note page");
-    }
-    if (page.schemaVersion === 3) return page;
-    if (page.schemaVersion === 2) return { ...page, schemaVersion: 3 };
-    if (page.schemaVersion !== undefined) throw new Error("Unsupported note page schema version");
-    return {
-      ...page, schemaVersion: 3, type: type as NoteType, sources: page.sources.map(cite),
-      revisions: page.revisions.map(({ body, ...revision }) => ({ ...revision, summary: body })),
-    };
+    raw = fs.readFileSync(safePath(id + ".json", dir), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new SandboxError(404, "Note page not found");
     throw error;
+  }
+
+  try {
+    const saved = JSON.parse(raw) as StoredPage | TimelinePage | LegacyPage;
+    const type = saved.schemaVersion === undefined && saved.type === "general" ? "note" : saved.type;
+    if (saved.id !== id || !Object.hasOwn(NOTE_TYPES, type) || saved.typeVersion !== 1 ||
+        typeof saved.organizer !== "string" || !Array.isArray(saved.sources) || !Array.isArray(saved.revisions) || !saved.revisions.length) {
+      throw new Error("Invalid saved note page");
+    }
+    if (saved.sources.some((source) => !source || typeof source.label !== "string" || !Object.hasOwn(NOTE_SOURCE_LABELS, source.kind))) {
+      throw new Error("Invalid saved note source");
+    }
+    let page: StoredPage;
+    if (saved.schemaVersion === undefined) {
+      page = {
+        ...saved, schemaVersion: 3, type: type as NoteType, sources: saved.sources.map(cite),
+        revisions: saved.revisions.map(({ body, ...revision }) => ({ ...revision, summary: body })),
+      };
+    } else if (saved.schemaVersion === 2 || saved.schemaVersion === 3) {
+      page = { ...saved, schemaVersion: 3 };
+    } else {
+      throw new Error("Unsupported note page schema version");
+    }
+    if (page.revisions.some((revision) => !revision || typeof revision.title !== "string" || typeof revision.summary !== "string" ||
+        !Number.isSafeInteger(revision.version) || !Number.isFinite(revision.savedAt) || !Object.hasOwn(NOTE_STATUS_LABELS, revision.status) ||
+        !revision.fields || typeof revision.fields !== "object" || Array.isArray(revision.fields) ||
+        Object.values(revision.fields).some((value) => typeof value !== "string"))) {
+      throw new Error("Invalid saved note revision");
+    }
+    return page;
+  } catch {
+    throw new SandboxError(422, "Could not read this note page");
   }
 }
 
@@ -252,30 +278,57 @@ export function readNoteRevision(projectId: string, id: string, version: number)
   };
 }
 
-export function listNotePages(projectId: string, search = ""): NoteSummary[] {
-  const dir = notesDir(projectId);
-  let files: string[];
-  try { files = fs.readdirSync(dir); }
+function* readProjectNotePages(dir: string): Generator<{ id: string; page?: StoredPage }> {
+  let files: fs.Dirent[];
+  try { files = fs.readdirSync(dir, { withFileTypes: true }); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  return files.flatMap((file) => {
-    if (!file.endsWith(".json") || !NOTE_PAGE_ID.test(file.slice(0, -5))) return [];
-    const page = readPage(dir, file.slice(0, -5));
+  for (const file of files) {
+    if (!file.name.endsWith(".json")) continue;
+    const id = file.name.slice(0, -5);
+    if (!NOTE_PAGE_ID.test(id)) continue;
+    let page: StoredPage | undefined;
+    try { if (file.isFile()) page = readPage(dir, id); }
+    catch { /* Keep other pages readable when this one cannot be loaded. */ }
+    yield { id, page };
+  }
+}
+
+export function exportNotePages(paths: ProjectPaths) {
+  const pages: NotePage[] = [];
+  const unavailablePageIds: string[] = [];
+  for (const { id, page } of readProjectNotePages(notePagesDirectory(paths))) {
+    if (page) pages.push(publicPage(page));
+    else unavailablePageIds.push(id);
+  }
+  return { pages, unavailablePageIds: unavailablePageIds.sort() };
+}
+
+export function listNotePages(projectId: string, search = ""): NoteListResult {
+  const pages: NoteSummary[] = [];
+  let unavailableCount = 0;
+  for (const { page } of readProjectNotePages(notesDir(projectId))) {
+    if (!page) {
+      unavailableCount++;
+      continue;
+    }
     const revision = page.revisions.at(-1)!;
     if (search && ![revision.title, revision.summary,
       ...page.sources.map((source) => source.label), ...Object.values(revision.fields)]
-      .some((value) => value.toLowerCase().includes(search))) return [];
+      .some((value) => value.toLowerCase().includes(search))) continue;
     const tasks = [...new Set(page.sources.flatMap((source) => "sessionId" in source && source.sessionId ? [source.sessionId] : []))];
     const primarySource = page.sources[0];
-    return [{
+    pages.push({
       id: page.id, type: page.type, version: revision.version, organizer: page.organizer, title: revision.title,
       excerpt: revision.summary.slice(0, 320), savedAt: revision.savedAt, status: revision.status,
       tasks, draftExpert: revision.draftCredit?.expert, sourceCount: page.sources.length,
       source: primarySource ? sourceLink(primarySource) : undefined,
-    }];
-  }).sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id));
+    });
+  }
+  pages.sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id));
+  return { pages, unavailableCount };
 }
 
 export function reviseNotePage(projectId: string, id: string, input: unknown): NotePage {

@@ -43,7 +43,7 @@ it("uses the selected expert model, bound skill, instructions and prior draft as
   expect(firstContext.tools).toBeUndefined();
   expect(JSON.parse(firstContext.messages[0].content as string)).toMatchObject({ instructions: "Write two paragraphs.", note: "" });
   expect(initial.draftCredit).toMatchObject({ expert: "calibration-reviewer", skill: { name: "custom-review", scope: "project", sha256: expect.stringMatching(/^[a-f0-9]{64}$/) } });
-  expect(listNotePages(project.id)).toEqual([]);
+  expect(listNotePages(project.id).pages).toEqual([]);
 
   fs.writeFileSync(reference, "Compare the reference scale against the measurements.");
   const refined = await generateNoteDraft(project.id, {
@@ -56,7 +56,7 @@ it("uses the selected expert model, bound skill, instructions and prior draft as
   expect(refined.draftCredit?.skill.sha256).not.toBe(initial.draftCredit?.skill.sha256);
   const page = createManualNotePage(project.id, { title: refined.title, summary: refined.summary, draftCredit: refined.draftCredit });
   expect(getNotePage(project.id, page.id).revisions[0].draftCredit).toEqual(refined.draftCredit);
-  expect(listNotePages(project.id)).toMatchObject([{ id: page.id, organizer: "Created manually", draftExpert: "calibration-reviewer", sourceCount: 0 }]);
+  expect(listNotePages(project.id).pages).toMatchObject([{ id: page.id, organizer: "Created manually", draftExpert: "calibration-reviewer", sourceCount: 0 }]);
 
   expect(disableSkill(paths, "custom-review").ok).toBe(true);
   expect(listNoteExperts(project.id)).toContainEqual({ name: "calibration-reviewer", skill: "custom-review", available: false });
@@ -91,7 +91,7 @@ it("drafts from a selected task and user text using only the bounded, redacted m
   await expect(generateNoteDraft(project.id, { summary: "Mark the unit as unresolved.", taskId: "task-a" }, complete))
     .resolves.toEqual({ title: "Inclusion criteria", summary: "Unit unresolved.", taskExcerptShortened: false });
   expect(complete).toHaveBeenCalledOnce();
-  expect(listNotePages(project.id)).toEqual([]);
+  expect(listNotePages(project.id).pages).toEqual([]);
   expect(sessionCostSummary(NOTE_DRAFT_SESSION_ID, project.id).entries).toHaveLength(1);
 });
 

@@ -40,7 +40,7 @@ export async function registerNotesRoutes(app: FastifyInstance): Promise<void> {
     try {
       const q = req.query.q;
       if (q !== undefined && (typeof q !== "string" || q.length > 300)) throw new SandboxError(400, "Invalid note search");
-      return { pages: listNotePages(requireRequestedProject(req), q?.trim().toLowerCase()) };
+      return listNotePages(requireRequestedProject(req), q?.trim().toLowerCase());
     }
     catch (error) {
       if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });

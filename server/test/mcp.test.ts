@@ -424,9 +424,11 @@ describe("lead session", () => {
     expect(session.getCallableToolNames()).toContain("mcp__echo__echo");
     expect(session.getCallableToolNames().some((n) => n.startsWith("mcp__off__"))).toBe(false);
     // The denylist keeps the lead's own tools and hides the lazy loaders.
-    for (const name of ["grep", "find", "ls", "subagent", "bg_wait", "web_search", "interview", "notebook"]) {
+    for (const name of ["grep", "find", "ls", "subagent", "bg_wait", "web_search", "interview", "note_read"]) {
       expect(active).toContain(name);
     }
+    expect(active).not.toContain("notebook");
+    expect(active).not.toContain("notebook_search");
     expect(active).not.toContain("subagents_enable");
     expect(active).not.toContain("web_enable");
   }, 30_000);

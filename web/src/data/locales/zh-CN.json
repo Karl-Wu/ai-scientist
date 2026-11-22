@@ -69,6 +69,8 @@
   "Organizer": "整理专家",
   "All organizers": "全部整理专家",
   "Could not load notes.": "无法加载笔记。",
+  "1 note page could not be read.": "有 1 页笔记无法读取。",
+  "{count} note pages could not be read.": "有 {count} 页笔记无法读取。",
   "Loading notes…": "正在加载笔记…",
   "Searching notes…": "正在搜索笔记…",
   "No note pages yet": "还没有笔记页",

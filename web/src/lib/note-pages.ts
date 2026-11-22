@@ -115,6 +115,11 @@ export interface NoteSummary {
   sourceCount: number;
 }
 
+export interface NoteListResult {
+  pages: NoteSummary[];
+  unavailableCount: number;
+}
+
 export function noteTypesIn(pages: readonly NoteSummary[] = []): NoteType[] {
   const present = new Set(pages.map((page) => page.type));
   return (Object.keys(NOTE_TYPES) as NoteType[]).filter((type) => present.has(type));

@@ -264,6 +264,34 @@ describe("project note pages", () => {
     } finally { await reopened.close(); }
   });
 
+  it("lists and searches readable pages when another page cannot be decoded", async () => {
+    const app = await notesApp();
+    try {
+      const created = await app.inject({ method: "POST", url: "/notes", payload: { title: "Readable finding", summary: "Original assessment" } });
+      expect(created.statusCode).toBe(201);
+      const page = created.json<NotePage>();
+      const truncatedId = "01aa4567-0123-0123-0123-0123456789ab";
+      const invalidId = "01bb4567-0123-0123-0123-0123456789ab";
+      const truncatedPath = path.join(pageDir, truncatedId + ".json");
+      const truncated = '{"schemaVersion":3,';
+      fs.writeFileSync(truncatedPath, truncated);
+      fs.writeFileSync(path.join(pageDir, invalidId + ".json"), JSON.stringify({
+        ...page, id: invalidId, revisions: [{ ...page.revisions[0], fields: null }],
+      }));
+
+      for (const url of ["/notes", "/notes?q=assessment"]) {
+        const result = await app.inject({ url });
+        expect(result.statusCode).toBe(200);
+        expect(result.json()).toMatchObject({ unavailableCount: 2, pages: [{ id: page.id, title: "Readable finding" }] });
+      }
+      expect((await app.inject("/notes?q=unrelated")).json()).toEqual({ pages: [], unavailableCount: 2 });
+      expect((await app.inject("/notes/" + page.id)).json()).toEqual(page);
+      expect((await app.inject("/notes/" + truncatedId)).statusCode).toBe(422);
+      expect((await app.inject("/notes/" + invalidId)).statusCode).toBe(422);
+      expect(fs.readFileSync(truncatedPath, "utf8")).toBe(truncated);
+    } finally { await app.close(); }
+  });
+
   it("rejects foreign scope, unknown anchors, and paths that are not visible", async () => {
     writeTask(task);
     const note = { type: "hypothesis", organizer: "Test", title: "Scope", body: "", fields: {} };

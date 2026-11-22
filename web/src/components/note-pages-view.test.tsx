@@ -87,6 +87,17 @@ it("shows the list's type filter with the only available note type", async () =>
   expect(within(typeFilter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All note types", "General note"]);
 });
 
+it("shows readable notes alongside a warning about unavailable pages", async () => {
+  vi.mocked(apiFetch).mockResolvedValue(Response.json({ unavailableCount: 1, pages: [{
+    id: "readable", type: "note", version: 1, organizer: "Created manually", title: "Readable note", savedAt: 1,
+    status: "saved", tasks: [], excerpt: "Review findings", sourceCount: 0,
+  } satisfies NoteSummary] }));
+  render(<NotePagesView projectId="default" onOpenSource={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "Readable note" })).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("1 note page could not be read.");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 it("prefills a PDF annotation note and passes its exact source to the workspace", async () => {
   const anchor = { kind: "pdfAnnotation", path: "papers/study.pdf", annotationId: "highlight-3" } as const;
   const initialSummary = "### Highlighted text\n\nSelected passage\n\n### Annotation text\n\nReview this claim.";
