@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fetchAnnotations, saveAnnotations, type FetchResult, type HighlightAnnotation, type SaveResult } from "@/lib/pdf-annotations";
+import { fetchAnnotations, saveAnnotations, USER_AUTHOR, type FetchResult, type HighlightAnnotation, type SaveResult } from "@/lib/pdf-annotations";
 import { PdfViewer } from "./pdf-viewer";
 
 vi.mock("@/lib/pdf-annotations", async (original) => ({
@@ -83,6 +83,48 @@ it("keeps the sidebar for navigation to the annotation", async () => {
   fireEvent.click(sidebar.getByRole("button", { name: /Selected passage/ }));
   expect(scroll.mock.instances).toContain(marker.closest('[data-pdf-page="3"]'));
   expect(marker).toHaveClass("ring-primary");
+});
+
+it("disables the expert filter when the PDF has no expert annotations", async () => {
+  vi.mocked(fetchAnnotations).mockResolvedValue({ doc: { version: 1, annotations: [] }, etag: null, lastModified: null });
+  render(<PdfViewer path={path} />);
+  const toggle = screen.getByRole("checkbox", { name: "Show expert annotations" });
+  await waitFor(() => expect(toggle.closest("label")).toHaveTextContent("(0)"));
+  expect(toggle).toBeDisabled();
+  expect(toggle.closest("label")).toHaveAttribute("title", "No expert annotations in this PDF.");
+  expect(screen.getByText(/No annotations yet/)).toBeVisible();
+});
+
+it("toggles expert marks in both the page and sidebar, including an annotation opened from a citation", async () => {
+  const personal = { ...highlight, id: "personal", text: "Personal passage", note: "My comment.", author: USER_AUTHOR };
+  vi.mocked(fetchAnnotations).mockResolvedValue({ doc: { version: 1, annotations: [highlight, personal] }, etag: null, lastModified: null });
+  const { rerender } = render(<PdfViewer path={path} />);
+  const toggle = screen.getByRole("checkbox", { name: "Show expert annotations" });
+  await screen.findByTitle("Reviewer: Review this claim.");
+  const sidebar = within(screen.getByRole("complementary"));
+  expect(toggle).toBeChecked();
+  expect(toggle.closest("label")).toHaveTextContent("(1)");
+  fireEvent.click(toggle);
+  expect(screen.queryByTitle("Reviewer: Review this claim.")).not.toBeInTheDocument();
+  expect(sidebar.queryByText("Selected passage")).not.toBeInTheDocument();
+  expect(screen.getByTitle("You: My comment.")).toBeVisible();
+  expect(sidebar.getByText("Personal passage")).toBeVisible();
+
+  rerender(<PdfViewer path={path} annotationFocus={{ path, annotationId: highlight.id, page: 3, token: 1 }} />);
+  expect(toggle).toBeChecked();
+  expect(await screen.findByTitle("Reviewer: Review this claim.")).toHaveClass("ring-primary");
+  fireEvent.click(toggle);
+  expect(toggle).not.toBeChecked();
+  expect(screen.queryByTitle("Reviewer: Review this claim.")).not.toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(await screen.findByTitle("Reviewer: Review this claim.")).toBeVisible();
+});
+
+it("explains the empty sidebar when all annotations are hidden", async () => {
+  render(<PdfViewer path={path} />);
+  await screen.findByTitle("Reviewer: Review this claim.");
+  fireEvent.click(screen.getByRole("checkbox", { name: "Show expert annotations" }));
+  expect(within(screen.getByRole("complementary")).getByRole("status")).toHaveTextContent("Expert annotations are hidden.");
 });
 
 it("saves a new PDF annotation before opening its linked note draft", async () => {

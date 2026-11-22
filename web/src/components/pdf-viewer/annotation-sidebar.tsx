@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useT } from "@/components/i18n-provider";
 
 import {
   type Annotation,
@@ -10,13 +11,18 @@ import { cn } from "@/lib/utils";
 
 export interface AnnotationSidebarProps {
   annotations: Annotation[];
+  loading: boolean;
+  expertAnnotationsHidden: boolean;
   onJump: (a: Annotation) => void;
 }
 
 export function AnnotationSidebar({
   annotations,
+  loading,
+  expertAnnotationsHidden,
   onJump,
 }: AnnotationSidebarProps) {
+  const t = useT();
   const groups = useMemo(() => {
     const byPage = new Map<number, Annotation[]>();
     for (const a of annotations) {
@@ -29,21 +35,20 @@ export function AnnotationSidebar({
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-l bg-background/40 md:flex">
       <div className="shrink-0 border-b px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Annotations
+        {t("Annotations")}
         <span className="ml-1 text-foreground/60">({annotations.length})</span>
       </div>
       <div className="flex-1 overflow-auto">
         {groups.length === 0 && (
-          <div className="px-3 py-4 text-xs text-muted-foreground">
-            No annotations yet. Select text and click{" "}
-            <span className="font-medium">Highlight</span> or click{" "}
-            <span className="font-medium">Add note</span>.
-          </div>
+          <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
+            {t(loading ? "Loading annotations…" : expertAnnotationsHidden ? "Expert annotations are hidden."
+              : "No annotations yet. Select text to highlight it or add a note.")}
+          </p>
         )}
         {groups.map(([page, anns]) => (
           <div key={page} className="border-b">
             <div className="sticky top-0 z-10 bg-background/90 px-3 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
-              Page {page}
+              {t("Page {page}", {page})}
             </div>
             <ul>
               {anns.map((a) => {
