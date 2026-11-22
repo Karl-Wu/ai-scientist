@@ -145,6 +145,7 @@ import {
 import { cn, formatUsd } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
+  Fragment,
   forwardRef,
   memo,
   useCallback,
@@ -167,6 +168,12 @@ import { workflowScriptsIn } from "@/lib/workflow-script";
 /** Toast action for "provider disconnected" errors. */
 const PROVIDERS_TOAST_ACTION = {
   action: { label: "Open Settings", onClick: () => openSettings({ tab: "providers" }) },
+};
+
+const SEND_SHORTCUTS: Readonly<Record<string, ReactNode>> = {
+  "{enter}": <kbd>↵</kbd>,
+  "{newLine}": <><kbd>⇧</kbd>+<kbd>↵</kbd></>,
+  "{queue}": <><kbd>⌥</kbd>+<kbd>↵</kbd></>,
 };
 
 const MAX_QUEUE = 5;
@@ -1385,33 +1392,29 @@ function ChatInput({
                     <>
                       <b>
                         {modelAvailability === "checking"
-                          ? "Checking model provider"
-                          : "Model provider disconnected"}
+                          ? t("Checking model provider")
+                          : t("Model provider disconnected")}
                       </b>
                       <br />
                       {modelAvailability === "checking"
-                        ? "Wait a moment for provider status to load."
-                        : "Reconnect it in Settings → Providers or choose another model."}
+                        ? t("Wait a moment for provider status to load.")
+                        : t("Reconnect it in Settings → Providers or choose another model.")}
                     </>
                   ) : budgetBlocked ? (
                     <>
                       <b>{t("Spend limit reached")}</b>
                       <br />
-                      Project has hit its spend limit (
-                      {formatUsd(budgetTotalUsd)}
-                      {budgetLimitUsd !== null
-                        ? ` / ${formatUsd(budgetLimitUsd)}`
-                        : ""}
-                      ). Raise the limit in Settings → Project → General to continue.
+                      {t("Project has hit its spend limit ({amount}). Raise the limit in Settings → Project → General to continue.", {
+                        amount: budgetLimitUsd !== null
+                          ? `${formatUsd(budgetTotalUsd)} / ${formatUsd(budgetLimitUsd)}`
+                          : formatUsd(budgetTotalUsd),
+                      })}
                     </>
                   ) : isStreaming ? (
                     <>
                       <b>{t("Stop")}</b>
                       <br />
-                      Cancel the current turn (⏎ steers it instead). Undelivered
-                      steering messages return to the composer, queued prompts
-                      pause until you resume them, and files the agent already
-                      wrote stay in the sandbox.
+                      {t("Stop the current turn. Press ↵ to steer it. Undelivered messages return to the composer, queued messages pause until resumed, and files already written stay in the sandbox.")}
                     </>
                   ) : queuedMessages.length >= MAX_QUEUE ? (
                     <>
@@ -1422,14 +1425,15 @@ function ChatInput({
                     <>
                       <b>{t("Send message")}</b>
                       <br />
-                      Press <kbd>↵</kbd> to send, <kbd>⇧</kbd>+<kbd>↵</kbd> for
-                      a new line. Prompts sent while the agent is busy steer
-                      the live run; ⌥⏎ queues a new run instead.
+                      {t("Press {enter} to send and {newLine} for a new line. While the agent is running, {enter} steers the current turn and {queue} queues a follow-up.")
+                        .split(/(\{(?:enter|newLine|queue)\})/g)
+                        .map((part, index) => <Fragment key={index}>{SEND_SHORTCUTS[part] ?? part}</Fragment>)}
                     </>
                   )
                 }
               >
                 <PromptInputSubmit
+                  aria-label={isStreaming ? t("Stop") : t("Send message")}
                   status={submitStatus as "streaming" | "error" | "ready"}
                   onStop={onStop}
                   disabled={(budgetBlocked || !modelAvailable || tableSubmitting) && !isStreaming}

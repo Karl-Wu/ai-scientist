@@ -2,6 +2,7 @@
 
 import { GaugeIcon, ScissorsIcon, SlidersHorizontalIcon } from "lucide-react";
 
+import { useLocale, useT } from "@/components/i18n-provider";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { cn, formatCompactTokens } from "@/lib/utils";
 import type { ContextUsage } from "@/lib/use-agent";
@@ -18,6 +19,8 @@ export function ContextUsageIndicator({
   /** True while a run streams (Pi's compact() would abort it). */
   compactDisabled?: boolean;
 }) {
+  const t = useT();
+  const locale = useLocale();
   if (!usage) return null;
 
   const known = usage.tokens !== null && usage.percent !== null;
@@ -27,23 +30,28 @@ export function ContextUsageIndicator({
   const critical = known && percent > 90;
   const warning = known && percent > 70;
   const value = known ? `${Math.round(percent)}%` : "?%";
+  const percentText = percent.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const ariaLabel = known
-    ? `Model context ${percent.toFixed(1)} percent, ${tokens.toLocaleString()} of ${usage.contextWindow.toLocaleString()} tokens`
-    : `Model context usage awaiting provider measurement, ${usage.contextWindow.toLocaleString()} token window`;
+    ? t("Model context {percent} percent, {used} of {total} tokens", {
+      percent: percentText, used: tokens.toLocaleString(locale), total: usage.contextWindow.toLocaleString(locale),
+    })
+    : t("Model context usage awaiting provider measurement, {total} token window", { total: usage.contextWindow.toLocaleString(locale) });
 
   const gauge = (
     <InfoTooltip
       content={
         <>
-          <b>Model context</b>
+          <b>{t("Model context")}</b>
           <br />
           {known
-            ? `${formatCompactTokens(tokens)} of ${formatCompactTokens(usage.contextWindow)} tokens (${percent.toFixed(1)}%)`
-            : `Awaiting provider measurement · ${formatCompactTokens(usage.contextWindow)} token window`}
+            ? t("{used} of {total} tokens ({percent}%)", {
+              used: formatCompactTokens(tokens), total: formatCompactTokens(usage.contextWindow), percent: percentText,
+            })
+            : t("Awaiting provider measurement · {total} token window", { total: formatCompactTokens(usage.contextWindow) })}
           <br />
           {known
-            ? "Pi estimates how much of the selected model's context window this conversation currently uses."
-            : "Available after the first model response and temporarily unavailable after compaction."}
+            ? t("Pi estimates how much of the selected model's context window this conversation currently uses.")
+            : t("Available after the first model response and temporarily unavailable after compaction.")}
         </>
       }
     >
@@ -78,11 +86,10 @@ export function ContextUsageIndicator({
       <InfoTooltip
         content={
           <>
-            <b>Compact now</b>
+            <b>{t("Compact now")}</b>
             <br />
-            Summarize older messages to free context. AI Scientist keeps a state block
-            (plan, notebook entries, result ids, environment) ahead of the summary.
-            {compactDisabled ? " Available once the current run finishes." : ""}
+            {t("Summarize older messages to free context. AI Scientist keeps a state block (plan, notebook entries, result ids, environment) ahead of the summary.")}
+            {compactDisabled && <>{" "}{t("Available once the current run finishes.")}</>}
           </>
         }
       >
@@ -90,7 +97,7 @@ export function ContextUsageIndicator({
           type="button"
           onClick={onCompact}
           disabled={compactDisabled}
-          aria-label="Compact context now"
+          aria-label={t("Compact context now")}
           className="inline-flex h-7 items-center rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ScissorsIcon className="size-3.5" aria-hidden />
@@ -99,16 +106,16 @@ export function ContextUsageIndicator({
       <InfoTooltip
         content={
           <>
-            <b>Compaction settings</b>
+            <b>{t("Compaction settings")}</b>
             <br />
-            Automatic compaction and how much recent context it keeps, for every chat in this project.
+            {t("Automatic compaction and how much recent context it keeps, for every chat in this project.")}
           </>
         }
       >
         <button
           type="button"
           onClick={() => openSettings({ tab: "project", section: "context" })}
-          aria-label="Compaction settings"
+          aria-label={t("Compaction settings")}
           className="inline-flex h-7 items-center rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <SlidersHorizontalIcon className="size-3.5" aria-hidden />

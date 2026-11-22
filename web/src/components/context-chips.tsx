@@ -118,18 +118,17 @@ function ComposerContextChips({
         <Chip
           className={DELEGATE_CHIP}
           onRemove={onDelegationChange && (() => onDelegationChange({ ...delegation, auto: false }))}
-          ariaLabel="Stop letting AI Scientist choose specialists"
+          ariaLabel={t("Stop letting AI Scientist choose specialists")}
           tooltip={
             <>
-              <b>Delegate · AI Scientist chooses</b>
+              <b>{t("Delegate · AI Scientist chooses")}</b>
               <br />
-              AI Scientist splits the work and hands parts to specialists picked by
-              their descriptions. {scope}
+              {t("AI Scientist splits the work and hands parts to specialists picked by their descriptions.")} {scope}
             </>
           }
         >
           <SparklesIcon className="size-3 shrink-0 opacity-70" />
-          <span>Specialists: AI Scientist picks</span>
+          <span>{t("Specialists: AI Scientist picks")}</span>
         </Chip>
       )}
       {delegation.specialists.map((name) => (
@@ -144,13 +143,12 @@ function ComposerContextChips({
                 specialists: delegation.specialists.filter((n) => n !== name),
               }))
           }
-          ariaLabel={`Don't delegate to ${name}`}
+          ariaLabel={t("Don't delegate to {name}", { name })}
           tooltip={
             <>
-              <b>Delegate · {name}</b>
+              <b>{t("Delegate · {name}", { name })}</b>
               <br />
-              AI Scientist briefs this specialist and checks its handoff before
-              replying. {scope}
+              {t("AI Scientist briefs this specialist and checks its handoff before replying.")} {scope}
             </>
           }
         >
@@ -162,19 +160,18 @@ function ComposerContextChips({
         <Chip
           className={VERIFY_CHIP}
           onRemove={onDelegationChange && (() => onDelegationChange({ ...delegation, verify: false, verifiers: [] }))}
-          ariaLabel="Remove verification gate"
+          ariaLabel={t("Remove verification gate")}
           tooltip={
             <>
-              <b>Verification gate</b>
+              <b>{t("Verification gate")}</b>
               <br />
-              The best-suited verifier specialist reviews the result
-              adversarially; AI Scientist accepts it only if the review passes.{" "}
+              {t("The best-suited verifier specialist reviews the result adversarially; AI Scientist accepts it only if the review passes.")}{" "}
               {scope}
             </>
           }
         >
           <ShieldCheckIcon className="size-3 shrink-0 opacity-70" />
-          <span>Verify before accepting</span>
+          <span>{t("Verify before accepting")}</span>
         </Chip>
       )}
       {research.map((ref) => {
@@ -191,7 +188,7 @@ function ComposerContextChips({
               onResearchChange &&
               (() => onResearchChange(research.filter((r) => researchRefKey(r) !== key)))
             }
-            ariaLabel={`Remove ${ref.title}`}
+            ariaLabel={t("Remove {name}", { name: ref.title })}
             tooltip={
               <>
                 <b>{label}</b>
@@ -242,6 +239,7 @@ export function ContextChipsBar({
   delegation,
   onDelegationChange,
 }: ContextChipsBarProps) {
+  const t = useT();
   const hasAny =
     attachedFiles.length > 0 ||
     selectedDbs.length > 0 ||
@@ -267,7 +265,7 @@ export function ContextChipsBar({
           <Chip
             key={`file:${path}`}
             onRemove={() => onRemoveFile(path)}
-            ariaLabel={`Remove ${name}`}
+            ariaLabel={t("Remove {name}", { name })}
             className="border-border/70 bg-muted/60 text-foreground/80 hover:bg-muted"
             tooltip={
               <>
@@ -275,8 +273,7 @@ export function ContextChipsBar({
                 <br />
                 <span className="opacity-80">{path}</span>
                 <br />
-                Attached to the next message. The agent can read this file
-                directly from the sandbox.
+                {t("Attached to the next message. The agent can read this file directly from the sandbox.")}
               </>
             }
           >
@@ -299,12 +296,12 @@ export function ContextChipsBar({
           <Chip
             key={`db:${db.id}`}
             onRemove={() => removeDb(db.id)}
-            ariaLabel={`Remove ${db.name}`}
+            ariaLabel={t("Remove {name}", { name: db.name })}
             className={cn(c.bg, c.text, c.border)}
             tooltip={
               <>
                 <b>{db.name}</b>{" "}
-                <span className="opacity-70 capitalize">· {db.domain}</span>
+                <span className="opacity-70 capitalize">· {db.domain === "science" ? t("Science") : t("Finance")}</span>
                 <br />
                 {db.description}
                 <br />
@@ -324,19 +321,18 @@ export function ContextChipsBar({
         <Chip
           key={`skill:${skill.id}`}
           onRemove={() => removeSkill(skill.id)}
-          ariaLabel={`Remove ${skill.name}`}
+          ariaLabel={t("Remove {name}", { name: skill.name })}
           className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20"
           tooltip={
             <>
-              <b>Skill · {skill.name}</b>
+              <b>{t("Skill · {name}", { name: skill.name })}</b>
               {skill.author ? (
-                <span className="opacity-70"> by {skill.author}</span>
+                <span className="opacity-70"> {t("by {author}", { author: skill.author })}</span>
               ) : null}
               <br />
               {skill.description}
               <br />
-              AI Scientist follows this skill&apos;s instructions on every message
-              until you remove it.
+              {t("AI Scientist follows this skill's instructions on every message until you remove it.")}
             </>
           }
         >
