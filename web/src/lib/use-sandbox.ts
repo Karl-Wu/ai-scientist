@@ -11,6 +11,7 @@ import {
   useProjectScopeId,
 } from "@/lib/projects";
 import { getViewerDef } from "@/lib/viewers/registry";
+import { tableDelimiter } from "@/lib/table-explorer";
 
 export interface TreeNode {
   name: string;
@@ -178,7 +179,10 @@ export interface Tab {
   path: string;
   content: string | null;
   loading: boolean;
+  tableRevision?: string;
 }
+
+export type TableSaveResult = "saved" | "conflict" | "too-large" | "error";
 
 export interface SandboxPersistenceState {
   openPaths: string[];
@@ -419,14 +423,14 @@ export function useSandbox(
     const generation = fileGenerations.current.get(path) ?? {};
     fileGenerations.current.set(path, generation);
     const isCurrent = () => fileGenerations.current.get(path) === generation;
-    const update = (content: string) => {
+    const update = (content: string, tableRevision?: string) => {
       setTabs((prev) => {
         if (!isCurrent()) return prev;
         let changed = false;
         const next = prev.map((tab) => {
-          if (tab.path !== path || (tab.content === content && !tab.loading)) return tab;
+          if (tab.path !== path || (tab.content === content && tab.tableRevision === tableRevision && !tab.loading)) return tab;
           changed = true;
-          return { ...tab, content, loading: false };
+          return { ...tab, content, loading: false, tableRevision };
         });
         if (!changed) return prev;
         tabsRef.current = next;
@@ -442,14 +446,17 @@ export function useSandbox(
           headers: etag ? { "If-None-Match": etag } : undefined,
         });
         if (!isCurrent() || controller.signal.aborted || res.status === 304) return;
-        const content = res.ok ? await res.text() : res.status === 413
+        const delimited = Boolean(tableDelimiter(path));
+        const content = res.ok ? (delimited
+          ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer())
+          : await res.text()) : res.status === 413
           ? "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
           : `[Error: ${res.status} ${res.statusText}]`;
         if (!isCurrent() || controller.signal.aborted) return;
         const nextEtag = res.ok ? res.headers.get("etag") : null;
         if (nextEtag) fileEtags.current.set(path, nextEtag);
         else fileEtags.current.delete(path);
-        update(content);
+        update(content, res.ok && delimited ? res.headers.get("X-Content-SHA256") ?? undefined : undefined);
       } catch {
         if (!refresh && isCurrent()) {
           fileEtags.current.delete(path);
@@ -620,29 +627,48 @@ export function useSandbox(
     [fetchTree, scopedFetch],
   );
 
-  const saveFile = useCallback(async (path: string, content: string): Promise<boolean> => {
+  const saveText = useCallback(async (path: string, content: string, revision?: string): Promise<TableSaveResult> => {
+    if (savingPaths.current.has(path)) return "error";
     savingPaths.current.add(path);
     invalidateFile(path);
     try {
       const res = await scopedFetch(
         `/sandbox/file?path=${encodeURIComponent(path)}`,
-        { method: "PUT", body: content, headers: { "Content-Type": "text/plain; charset=utf-8" } }
+        { method: "PUT", body: content, headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          ...(revision ? { "If-Match": revision } : {}),
+        } }
       );
       if (res.ok) {
+        const tableRevision = res.headers.get("X-Content-SHA256") ?? undefined;
         setTabs((prev) => {
-          const next = prev.map((t) => (t.path === path ? { ...t, content } : t));
+          const next = prev.map((t) => (t.path === path ? { ...t, content, tableRevision } : t));
           tabsRef.current = next;
           return next;
         });
       }
-      return res.ok;
+      if (res.ok) return "saved";
+      if (res.status === 412) return "conflict";
+      return res.status === 413 ? "too-large" : "error";
     } catch {
-      return false;
+      return "error";
     } finally {
       invalidateFile(path);
       savingPaths.current.delete(path);
     }
   }, [invalidateFile, scopedFetch]);
+
+  const saveFile = useCallback(async (path: string, content: string): Promise<boolean> => {
+    const saved = await saveText(path, content) === "saved";
+    if (saved && tableDelimiter(path)) void fetchFileContent(path, true);
+    return saved;
+  }, [fetchFileContent, saveText]);
+
+  const saveTableFile = useCallback(async (path: string, content: string, revision: string) => {
+    const result = await saveText(path, content, revision);
+    if (result === "conflict") void fetchFileContent(path, true);
+    return result;
+  }, [fetchFileContent, saveText]);
 
   const saveImageBlob = useCallback(async (path: string, blob: Blob): Promise<boolean> => {
     try {
@@ -894,6 +920,7 @@ export function useSandbox(
     retryFile,
     closeTab,
     saveFile,
+    saveTableFile,
     saveImageBlob,
     uploadFiles,
     deleteFile,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +35,38 @@ describe("conditional file previews", () => {
     fs.writeFileSync(target(), content);
     expect((await get()).statusCode).toBe(413);
   });
+  it("saves an edit beyond 5,000 CSV rows and rejects a stale save", async () => {
+    const name = "editable.csv";
+    const file = path.join(resolvePaths("default").sandbox, name);
+    const url = "/sandbox/file?path=" + name;
+    const headers = { "x-project-id": "default" };
+    const read = () => app.inject({ method: "GET", url, headers });
+    const save = (payload: string, revision: string) => app.inject({
+      method: "PUT", url,
+      headers: { ...headers, "content-type": "text/plain; charset=utf-8", "if-match": revision },
+      payload,
+    });
+    const source = "\uFEFFid,value\r\n" + Array.from({ length: 5_025 }, (_, i) => (i + 1) + ",original\r\n").join("");
+    fs.writeFileSync(file, source);
+    const initial = await read();
+    expect(initial.body).toBe(source);
+    const revision = String(initial.headers["x-content-sha256"]);
+    expect(revision).toBe(createHash("sha256").update(source).digest("hex"));
+
+    const edited = source.replace("\r\n5001,original\r\n", '\r\n5001,"reviewed, yes"\r\n');
+    const response = await save(edited, revision);
+    expect(response.statusCode).toBe(200);
+    const updated = await read();
+    expect(updated.headers["x-content-sha256"]).toBe(response.headers["x-content-sha256"]);
+    expect(updated.body).toBe(edited);
+    expect(fs.readFileSync(file, "utf8")).toBe(edited);
+
+    const external = edited.replace("\r\n5002,original", "\r\n5002,external");
+    fs.writeFileSync(file, external);
+    expect((await save(edited, String(updated.headers["x-content-sha256"]))).statusCode).toBe(412);
+    expect(fs.readFileSync(file, "utf8")).toBe(external);
+  });
+
   it("bounds the actual read when an external writer grows a file after stat", async () => {
     fs.writeFileSync(target(), "small");
     const open = fs.promises.open;

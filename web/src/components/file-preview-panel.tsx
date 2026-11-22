@@ -2,7 +2,8 @@
 
 import { useT } from "@/components/i18n-provider";
 
-import { TableFileViewer } from "./table-explorer";
+import { TableFileViewer, type InlineTableEditing } from "./table-explorer";
+import { tableDelimiter } from "@/lib/table-explorer";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { PdfViewer } from "@/components/pdf-viewer/pdf-viewer";
 import { KadyFileIcon } from "@/components/file-icon";
@@ -29,6 +30,7 @@ import {
   anndataSummaryUrl,
   anndataEmbeddingUrl,
   type Tab,
+  type TableSaveResult,
   type LatexCompileResult,
 } from "@/lib/use-sandbox";
 import dynamic from "next/dynamic";
@@ -326,31 +328,32 @@ function MarkdownViewer({
 }
 
 function FileViewer({
-  path, name, content, loading, projectId, onRetry, onSave, revealLine, revealCell, revealToken, pdfAnnotationFocus, onCreateNote,
+  path, name, content, loading, projectId, onRetry, tableEditing, onDirtyChange, onSavingChange, revealLine, revealCell, revealToken, pdfAnnotationFocus, onCreateNote,
 }: {
   path: string; name: string | null; content: string | null; loading: boolean;
   projectId: string;
   onRetry?: () => void;
-  onSave?: (content: string) => Promise<boolean>;
+  tableEditing?: InlineTableEditing;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
   revealLine?: number;
   revealCell?: number;
   revealToken?: number;
   pdfAnnotationFocus?: PdfAnnotationFocus;
   onCreateNote?: (source: NoteCreationSource) => void;
 }) {
-  if (loading) {
-    return (
+  const unavailable = loading ? (
       <div className="flex h-full items-center justify-center">
         <div className="size-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
       </div>
-    );
+    ) : content?.startsWith("[Error:") ? (
+      <FileLoadError message={content.replace(/^\[Error:\s*/, "").replace(/\]$/, "")} onRetry={onRetry} />
+    ) : null;
+  if (tableEditing) {
+    return <TableFileViewer key={path} content={content ?? ""} name={name ?? path} editing={tableEditing}
+      unavailable={unavailable} sourceView={<ReadOnlyCodeView content={content ?? ""} name={name ?? path} className="h-full" />} />;
   }
-  // Surface backend load errors with an explicit retry affordance so the
-  // user doesn't have to close and reopen the tab.
-  if (content !== null && /^\[Error:/.test(content)) {
-    const msg = content.replace(/^\[Error:\s*/, "").replace(/\]$/, "");
-    return <FileLoadError message={msg} onRetry={onRetry} />;
-  }
+  if (unavailable) return unavailable;
   const cat = name ? fileCategory(name) : "text";
   const def = cat ? getViewerDef(cat) : undefined;
   if (def) {
@@ -371,6 +374,8 @@ function FileViewer({
           content={content}
           projectId={projectId}
           onRetry={onRetry}
+          onDirtyChange={onDirtyChange}
+          onSavingChange={onSavingChange}
         />
       </Suspense>
     );
@@ -1669,6 +1674,7 @@ export interface FilePreviewPanelProps {
   onTabClose: (path: string) => void;
   onDownload: (path: string) => void;
   onSaveText: (path: string, content: string) => Promise<boolean>;
+  onSaveTable?: (path: string, content: string, revision: string) => Promise<TableSaveResult>;
   onSaveImageBlob: (path: string, blob: Blob) => Promise<boolean>;
   onRetry?: (path: string) => void;
   onCompileLatex?: (path: string, engine?: string) => Promise<LatexCompileResult>;
@@ -1706,6 +1712,7 @@ export function FilePreviewPanel({
   onTabClose,
   onDownload,
   onSaveText,
+  onSaveTable,
   onSaveImageBlob,
   onRetry,
   onCompileLatex,
@@ -1736,6 +1743,8 @@ export function FilePreviewPanel({
   const [fileNoteCreation, setFileNoteCreation] = useState<NoteCreationSource>();
   const fileNoteButton = useRef<HTMLButtonElement>(null);
   const dirtyPaths = useRef(new Set<string>());
+  const savingTables = useRef(new Set<string>());
+  const visitedWorkbooks = useRef(new Set<string>());
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (dirtyPaths.current.size === 0) return;
@@ -1752,8 +1761,9 @@ export function FilePreviewPanel({
   const confirmDiscard = useCallback((path: string) =>
     !dirtyPaths.current.has(path) || window.confirm(`Discard unsaved changes to ${path.split("/").pop()}?`), []);
   const closeTab = useCallback((path: string) => {
-    if (!confirmDiscard(path)) return;
+    if (savingTables.current.has(path) || !confirmDiscard(path)) return;
     dirtyPaths.current.delete(path);
+    visitedWorkbooks.current.delete(path);
     setTabModes((previous) => {
       const next = { ...previous };
       delete next[path];
@@ -1779,6 +1789,12 @@ export function FilePreviewPanel({
   const mode = tabMode === "view" && sourceInput && sourceInput.nonce !== dismissedSource ? "provenance" : tabMode;
 
   const selectedName = selectedPath?.split("/").pop() ?? null;
+  const selectedWorkbook = selectedPath && /\.xlsx$/i.test(selectedPath) ? selectedPath : null;
+  const inlineTable = Boolean(selectedWorkbook || (selectedPath && onSaveTable && tableDelimiter(selectedPath)));
+  const filePreviewVisible = isActive && mode === "view" && !showNotebook && !showCompute && !showAutomation;
+  useEffect(() => {
+    if (filePreviewVisible && selectedWorkbook) visitedWorkbooks.current.add(selectedWorkbook);
+  }, [filePreviewVisible, selectedWorkbook]);
   const cat = selectedName ? fileCategory(selectedName) : "text";
   // Fusion is a multi-model OpenRouter request with no one-shot editor mode.
   // Let assists use the configured default instead of deterministically 422ing.
@@ -1826,7 +1842,13 @@ export function FilePreviewPanel({
       </button>}
       {canEdit && mode === "view" && (
         <button
-          onClick={() => setMode(selectedPath, "edit")}
+          onClick={() => {
+            if (dirtyPaths.current.has(selectedPath) || savingTables.current.has(selectedPath)) {
+              toast.info(t("Save or discard your table changes before editing the source."));
+              return;
+            }
+            setMode(selectedPath, "edit");
+          }}
           className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title={t("Edit file")}
         >
@@ -1904,6 +1926,38 @@ export function FilePreviewPanel({
         );
       })}
 
+      {/* The preview grid owns its filters, page and inline draft across tab switches. */}
+      {tabs.filter((tab) => (onSaveTable && tableDelimiter(tab.path)) ||
+        (/\.xlsx$/i.test(tab.path) && (visitedWorkbooks.current.has(tab.path) || (filePreviewVisible && tab.path === selectedWorkbook)))).map((tab) => {
+        const visible = filePreviewVisible && tab.path === selectedPath;
+        return <div key={tab.path} className={visible ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+          {visible && header}
+          <div className="min-h-0 flex-1">
+            <FileViewer path={tab.path} name={tab.path.split("/").pop() ?? tab.path} projectId={projectId}
+              content={tab.content} loading={tab.loading} onRetry={onRetry ? () => onRetry(tab.path) : undefined}
+              onDirtyChange={(dirty) => trackDirty(tab.path, dirty)}
+              onSavingChange={(saving) => {
+                if (saving) savingTables.current.add(tab.path);
+                else savingTables.current.delete(tab.path);
+              }}
+              tableEditing={onSaveTable && tableDelimiter(tab.path) ? {
+                revision: tab.tableRevision,
+                onDirtyChange: (dirty) => trackDirty(tab.path, dirty),
+                onSave: async (content, revision) => {
+                  savingTables.current.add(tab.path);
+                  try {
+                    const result = await onSaveTable(tab.path, content, revision);
+                    if (result === "saved") trackDirty(tab.path, false);
+                    return result;
+                  } finally {
+                    savingTables.current.delete(tab.path);
+                  }
+                },
+              } : undefined} />
+          </div>
+        </div>;
+      })}
+
       {isActive && (showNotebook ? (
         <NotePagesView key={projectId} projectId={projectId} currentTask={noteTask} model={oneShotModelRef} onOpenSource={onOpenNoteSource}
           createFrom={noteCreation} onCreationHandled={onNoteCreationHandled} />
@@ -1966,7 +2020,7 @@ export function FilePreviewPanel({
       )}
 
       {/* View mode */}
-      {selectedPath && mode === "view" && (
+      {selectedPath && mode === "view" && !inlineTable && (
         <>
           {header}
           <div className={cn(
@@ -1983,7 +2037,6 @@ export function FilePreviewPanel({
               content={fileContent}
               loading={loadingFile}
               onRetry={onRetry ? () => onRetry(selectedPath) : undefined}
-              onSave={(content) => onSaveText(selectedPath, content)}
               pdfAnnotationFocus={pdfAnnotationFocus?.path === selectedPath ? pdfAnnotationFocus : undefined}
               onCreateNote={setFileNoteCreation}
               revealLine={

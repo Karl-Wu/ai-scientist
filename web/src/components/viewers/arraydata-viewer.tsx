@@ -251,14 +251,14 @@ function VariablesView({ summary }: { summary: VariablesSummary }) {
 // Root viewer
 // ---------------------------------------------------------------------------
 
-type DataViewerProps = ViewerProps & { toolbarActions?: ReactNode };
+type DataViewerProps = ViewerProps & { toolbarActions?: ReactNode; compact?: boolean };
 
 export default function ArrayDataViewer(props: DataViewerProps) {
   // Selection belongs to a file and project, including when an open tab is reused.
   return <DataPreview key={`${props.projectId}:${props.path}`} {...props} />;
 }
 
-function DataPreview({ path, projectId, toolbarActions }: DataViewerProps) {
+function DataPreview({ path, projectId, toolbarActions, compact }: DataViewerProps) {
   const t = useT();
   const [summary, setSummary] = useState<ArraysSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -340,7 +340,7 @@ function DataPreview({ path, projectId, toolbarActions }: DataViewerProps) {
       {summary.plot_note && <p className="px-4 pt-4 text-xs text-muted-foreground">{summary.plot_note}</p>}
       {!!summary.value_preview?.length && <p className="break-all px-4 pt-2 font-mono text-xs">Values: {summary.value_preview.join(", ")}</p>}
       {summary.kind === "tree" && <TreeView summary={summary} />}
-      {summary.kind === "table" && <DataTable key={summary.selected ?? "table"} summary={summary} />}
+      {summary.kind === "table" && <DataTable key={summary.selected ?? "table"} summary={summary} fileActions={compact ? null : undefined} />}
       {summary.kind === "ndarray" && <NdarrayView summary={shownArrays ?? summary} />}
       {summary.kind === "variables" && <VariablesView summary={summary} />}
       {summary.truncated && summary.kind === "ndarray" && <p className="px-4 pb-4 text-xs text-muted-foreground">Dataset list limited to the first 100 entries.</p>}

@@ -9,6 +9,8 @@ export interface ViewerProps {
   content: string | null;
   projectId?: string;
   onRetry?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
 }
 
 export interface ViewerDef {

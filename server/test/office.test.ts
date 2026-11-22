@@ -18,6 +18,11 @@ const root = () => resolvePaths("default").sandbox;
 const file = (name: string) => path.join(root(), name);
 const get = (name: string, binary = false, query = "", project = "default") => app.inject({ method: "GET", url: `/sandbox/office${binary ? "/content" : ""}?path=${encodeURIComponent(name)}${query}`, headers: { "x-project-id": project } });
 const put = (name: string, revision: string, payload: Buffer) => app.inject({ method: "PUT", url: `/sandbox/office/content?path=${encodeURIComponent(name)}`, headers: { "content-type": "application/octet-stream", "if-match": revision }, payload });
+const xlsxTableUrl = "/sandbox/office/xlsx-table?path=workbook.xlsx";
+const patchWorksheet = (revision: string, sheet: string, changes: { ref: string; value: string }[]) => app.inject({
+  method: "PATCH", url: xlsxTableUrl,
+  headers: { "content-type": "application/json", "if-match": revision }, payload: { sheet, changes },
+});
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const modified = (name: string) => {
   const zip = new AdmZip(file(name));
@@ -53,6 +58,54 @@ describe("Office preview and binary editor saves", () => {
     expect(sheet.cells).toContainEqual(expect.objectContaining({ ref: "C2", type: "formula", value: "=B2*2" }));
     expect(sheet.cells).toContainEqual(expect.objectContaining({ ref: "D2", type: "text", value: "=not a formula" }));
     expect((await get("workbook.xlsx", false, "&row=51")).json().cells).toContainEqual(expect.objectContaining({ ref: "A51", value: "Later page" }));
+  });
+  it("patches the addressed sheet, preserving other parts and the 5,000-row sampled preview", async () => {
+    const original = new AdmZip(file("workbook.xlsx"));
+    const part = "xl/worksheets/sheet2.xml";
+    const xml = original.readAsText(part).replace("</sheetData>",
+      '<row r="2"><c r="A2" t="inlineStr"><is><t>Match</t></is></c><c r="B2" s="1" t="n"><v>12</v></c></row>' +
+      '<row r="5001"><c r="B5001" t="n"><v>78</v></c></row>' +
+      '<row r="5002"><c r="B5002" t="n"><v>99</v></c></row></sheetData>');
+    original.updateFile(part, Buffer.from(xml));
+    original.writeZip(file("workbook.xlsx"));
+    const response = await app.inject({ url: xlsxTableUrl + "&sheet=Second%20sheet" });
+    expect(response.statusCode, response.body.slice(0, 300)).toBe(200);
+    const preview = response.json();
+    expect(preview.selected).toBe("Second sheet");
+    expect(preview.head).toHaveLength(5_000);
+    expect(preview.rows_truncated).toBe(true);
+    expect(preview.head.at(-1)).toEqual([null, 78]);
+    const saved = await patchWorksheet(preview.revision, "Second sheet", [{ ref: "B2", value: "14.25" }]);
+    expect(saved.statusCode, saved.body.slice(0, 300)).toBe(200);
+    expect(saved.json().table.head[0]).toEqual(["Match", 14.25]);
+    const after = new AdmZip(file("workbook.xlsx"));
+    for (const entry of original.getEntries()) {
+      if (entry.entryName !== part && entry.entryName !== "xl/workbook.xml") {
+        expect(after.readFile(entry.entryName)).toEqual(original.readFile(entry.entryName));
+      }
+    }
+    expect(after.readAsText(part)).toMatch(/<c r="B2" s="1"><v>14\.25<\/v><\/c>/);
+    expect(after.readAsText(part)).toContain('<v>99</v>');
+    expect(after.readAsText("xl/workbook.xml")).toContain('fullCalcOnLoad="1"');
+    expect((await patchWorksheet(preview.revision, "Second sheet", [{ ref: "B2", value: "17" }])).statusCode).toBe(409);
+    expect((await patchWorksheet(saved.json().revision, "Second sheet", [{ ref: "B5002", value: "17" }])).statusCode).toBe(422);
+  });
+  it("keeps formulas, merged values and protected sheets out of inline writes", async () => {
+    const bytes = fs.readFileSync(file("workbook.xlsx"));
+    const revision = hash(bytes);
+    const preview = (await app.inject({ url: xlsxTableUrl })).json();
+    expect(preview.protectedCells).toContain("C2");
+    expect(preview.protectedRanges).toContainEqual([4, 1, 4, 3]);
+    for (const [sheet, ref] of [["Measurements", "C2"], ["Measurements", "A4"], ["Protected", "A2"]]) {
+      expect((await patchWorksheet(revision, sheet, [{ ref, value: "145" }])).statusCode).toBe(422);
+    }
+    expect((await patchWorksheet(revision, "Measurements", [{ ref: "B2", value: "=1+1" }])).statusCode).toBe(422);
+    expect(fs.readFileSync(file("workbook.xlsx"))).toEqual(bytes);
+    const saved = await patchWorksheet(revision, "Measurements", [{ ref: "D2", value: "=literal" }]);
+    expect(saved.statusCode, saved.body).toBe(200);
+    const [formula, literal] = (await get("workbook.xlsx")).json().cells.filter((cell: { ref: string }) => ["C2", "D2"].includes(cell.ref));
+    expect(formula).toMatchObject({ type: "formula", value: "=B2*2" });
+    expect(literal).toMatchObject({ type: "text", value: "=literal" });
   });
   it("refuses concurrent and stale saves without overwriting the winner", async () => {
     const revision = hash(fs.readFileSync(file("report.docx"))), bytes = modified("report.docx");

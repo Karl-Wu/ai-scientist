@@ -1340,6 +1340,7 @@ function WorkspacePage({
                 onTabClose={sandbox.closeTab}
                 onDownload={sandbox.downloadFile}
                 onSaveText={sandbox.saveFile}
+                onSaveTable={sandbox.saveTableFile}
                 onSaveImageBlob={sandbox.saveImageBlob}
                 onRetry={sandbox.retryFile}
                 onCompileLatex={sandbox.compileLatex}

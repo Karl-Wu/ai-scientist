@@ -47,7 +47,7 @@ async function readBounded(target: string): Promise<Buffer> {
 async function run(args: string[]) {
   const result = await runHelperScript(helper, args);
   if (result.status !== 0) {
-    const missing = /No module named/.test(result.stderr);
+    const missing = result.status === 3 || /No module named/.test(result.stderr);
     throw new SandboxError(missing ? 503 : result.status === 5 ? 422 : 500,
       missing ? "Office preview dependencies are unavailable. Restart Kady to finish helper setup." : result.stderr || "Office document processing failed");
   }
@@ -55,6 +55,64 @@ async function run(args: string[]) {
 }
 
 type Query = { path: string; sheet?: string; row?: string; col?: string };
+type WorksheetEdits = { sheet: string; changes: { ref: string; value: string }[] };
+
+function worksheetEdits(body: unknown): WorksheetEdits {
+  const { sheet, changes } = (body ?? {}) as Partial<WorksheetEdits>;
+  if (typeof sheet !== "string" || !sheet.length || sheet.length > 128 || sheet.includes("\0") ||
+      !Array.isArray(changes) || !changes.length || changes.length > 1_000 ||
+      changes.some((change) => !change || typeof change.ref !== "string" ||
+        !/^[A-Z]{1,3}[1-9]\d{0,6}$/.test(change.ref) ||
+        typeof change.value !== "string" || change.value.length > 32_767 ||
+        /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/u.test(change.value))) {
+    throw new SandboxError(400, "Invalid worksheet changes");
+  }
+  return { sheet, changes };
+}
+
+/** Both Office editors share snapshot validation, write exclusion and provenance. */
+async function saveOffice(
+  filePath: string, revision: unknown,
+  prepare: (dir: string, input: string, output: string, kind: string) => Promise<{ table?: unknown }>,
+  warn: (error: unknown) => void,
+) {
+  if (typeof filePath !== "string" || typeof revision !== "string" || !/^[a-f0-9]{64}$/.test(revision)) {
+    throw new SandboxError(400, "Send Office changes with their original revision in If-Match");
+  }
+  const target = safePath(filePath), kind = kindOf(target);
+  const canonical = await fs.promises.realpath(target);
+  if (saves.has(canonical)) throw new SandboxError(409, "Another save is in progress. Try again.");
+  saves.add(canonical);
+  let dir: string | undefined, staging: string | undefined;
+  try {
+    const bytes = await readBounded(target);
+    if (digest(bytes) !== revision) throw new SandboxError(409, "This file changed outside the editor. The project file has not been overwritten.");
+    dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "kady-office-"));
+    const input = path.join(dir, "input." + kind);
+    const output = path.join(dir, "output." + kind);
+    await fs.promises.writeFile(input, bytes);
+    const original = await run(["validate", input, kind]);
+    if (original.readOnly) throw new SandboxError(403, "Protected or signed documents cannot be overwritten");
+    const result = await prepare(dir, input, output, kind);
+    const edited = await readBounded(output);
+    const root = activePaths().sandbox, projectId = currentProjectId(), before = await priorIdentity(root, target);
+    safePath(filePath);
+    staging = path.join(path.dirname(target), ".office-" + randomUUID() + ".tmp");
+    await fs.promises.writeFile(staging, edited, { flag: "wx", mode: (await fs.promises.stat(target)).mode });
+    if (digest(await readBounded(safePath(filePath))) !== revision) throw new SandboxError(409, "This file changed during saving. The project file has not been overwritten.");
+    safePath(filePath);
+    fs.renameSync(staging, target);
+    staging = undefined;
+    touchProject(projectId);
+    await recordSave(projectId, root, target, before, warn);
+    return { ...result, saved: filePath, revision: digest(edited) };
+  } finally {
+    saves.delete(canonical);
+    if (staging) await fs.promises.rm(staging, { force: true });
+    if (dir) await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+}
+
 function selection(query: Query) {
   const opts: Record<string, string | number> = {};
   if (query.sheet !== undefined) {
@@ -92,42 +150,49 @@ export async function registerOfficeRoutes(app: FastifyInstance) {
   app.put<{ Querystring: Query; Body: Buffer }>("/sandbox/office/content", { bodyLimit: MAX_BYTES }, async (req, reply) => {
     if (operations >= 4) return reply.code(429).send({ detail: "Office processing is busy. Try again shortly." });
     operations++;
-    let dir: string | undefined, locked: string | undefined, staging: string | undefined;
+    try {
+      if (!Buffer.isBuffer(req.body)) throw new SandboxError(400, "Send Office bytes");
+      return await saveOffice(req.query.path, req.headers["if-match"], async (_dir, _input, output, kind) => {
+        await fs.promises.writeFile(output, req.body);
+        await run(["validate", output, kind]);
+        return {};
+      }, err => req.log.warn({ err }, "failed to record Office save"));
+    } catch (err) { return failure(reply, err); }
+    finally { operations--; }
+  });
+
+  app.get<{ Querystring: Query }>("/sandbox/office/xlsx-table", async (req, reply) => {
+    if (operations >= 4) return reply.code(429).send({ detail: "Office processing is busy. Try again shortly." });
+    operations++;
+    let dir: string | undefined;
     try {
       if (typeof req.query.path !== "string") throw new SandboxError(400, "A file path is required");
-      const target = safePath(req.query.path), kind = kindOf(target);
-      const revision = req.headers["if-match"];
-      if (typeof revision !== "string" || !/^[a-f0-9]{64}$/.test(revision) || !Buffer.isBuffer(req.body)) {
-        throw new SandboxError(400, "Send Office bytes with their original revision in If-Match");
-      }
-      const canonical = await fs.promises.realpath(target);
-      if (saves.has(canonical)) throw new SandboxError(409, "Another save is in progress. Try again.");
-      saves.add(canonical); locked = canonical;
+      const target = safePath(req.query.path);
+      if (kindOf(target) !== "xlsx") throw new SandboxError(400, "Select an XLSX file");
+      const { sheet } = selection(req.query);
       const bytes = await readBounded(target);
-      if (digest(bytes) !== revision) throw new SandboxError(409, "This file changed outside the editor. Download your edited copy before reloading; the project file has not been overwritten.");
       dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "kady-office-"));
-      const input = path.join(dir, `input.${kind}`), output = path.join(dir, `output.${kind}`);
+      const input = path.join(dir, "input.xlsx");
       await fs.promises.writeFile(input, bytes);
-      const original = await run(["validate", input, kind]);
-      if (original.readOnly) throw new SandboxError(403, "Protected or signed documents cannot be overwritten");
-      await fs.promises.writeFile(output, req.body);
-      await run(["validate", output, kind]);
-      const root = activePaths().sandbox, projectId = currentProjectId(), before = await priorIdentity(root, target);
-      safePath(req.query.path);
-      staging = path.join(path.dirname(target), `.office-${randomUUID()}.tmp`);
-      await fs.promises.writeFile(staging, req.body, { flag: "wx", mode: (await fs.promises.stat(target)).mode });
-      if (digest(await readBounded(safePath(req.query.path))) !== revision) throw new SandboxError(409, "This file changed during saving. Download your edited copy before reloading.");
-      safePath(req.query.path); fs.renameSync(staging, target); staging = undefined;
-      touchProject(projectId);
-      await recordSave(projectId, root, target, before, err => req.log.warn({ err }, "failed to record Office save"));
-      return { saved: req.query.path, revision: digest(req.body) };
+      const model = await run(["table-preview", input, "xlsx", String(sheet ?? "")]);
+      return reply.header("Cache-Control", "no-store").send({ ...model, revision: digest(bytes) });
     } catch (err) { return failure(reply, err); }
-    finally {
-      operations--;
-      if (locked) saves.delete(locked);
-      if (staging) await fs.promises.rm(staging, { force: true });
-      if (dir) await fs.promises.rm(dir, { recursive: true, force: true });
-    }
+    finally { operations--; if (dir) await fs.promises.rm(dir, { recursive: true, force: true }); }
+  });
+
+  app.patch<{ Querystring: Query; Body: unknown }>("/sandbox/office/xlsx-table", { bodyLimit: 1024 * 1024 }, async (req, reply) => {
+    if (operations >= 4) return reply.code(429).send({ detail: "Office processing is busy. Try again shortly." });
+    operations++;
+    try {
+      const payload = worksheetEdits(req.body);
+      return await saveOffice(req.query.path, req.headers["if-match"], async (dir, input, output, kind) => {
+        if (kind !== "xlsx") throw new SandboxError(400, "Select an XLSX file");
+        const changes = path.join(dir, "changes.json");
+        await fs.promises.writeFile(changes, JSON.stringify(payload), "utf8");
+        return { table: await run(["edit-table", input, kind, output, changes]) };
+      }, err => req.log.warn({ err }, "failed to record Excel save"));
+    } catch (err) { return failure(reply, err); }
+    finally { operations--; }
   });
 
   app.get<{ Querystring: Query }>("/sandbox/office", async (req, reply) => {

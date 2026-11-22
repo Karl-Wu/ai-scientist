@@ -8,7 +8,9 @@ import posixpath
 import re
 import sys
 import zipfile
+from pathlib import Path
 from lxml import etree as E
+from tables_helper import MAX_CELL, MAX_COLS, MAX_ROWS, xlsx as preview_xlsx
 
 NS = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -20,6 +22,7 @@ NS = {
 MAX_ZIP = 32 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 MAX_FIELDS = 10000
+MAX_INLINE_RANGES = 2_000
 
 
 def xml(data):
@@ -292,6 +295,183 @@ def table_model(pkg, opts):
             'readOnly': pkg.signed or root.find('s:sheetProtection', NS) is not None}
 
 
+def worksheet(pkg, name):
+    sheet = next((item for item in sheets(pkg) if item['name'] == name), None)
+    if sheet is None:
+        raise ValueError('Worksheet not found')
+    return sheet['part'], pkg.tree(sheet['part'])
+
+
+def sheet_readonly(pkg, part, root):
+    return (pkg.signed or root.find('s:sheetProtection', NS) is not None
+            or any(target.startswith('xl/pivotTables/') for target in pkg.rels(part).values()))
+
+
+def reserved_grid_ranges(root, last_row, width):
+    refs = protected_ranges(root) + [node.get('ref', '') for node in root.findall('s:mergeCells/s:mergeCell', NS)]
+    ranges = []
+    for ref in refs:
+        first, _, last = ref.replace('$', '').partition(':')
+        top, left = address(first)
+        bottom, right = address(last or first)
+        if top <= last_row and left <= width and bottom >= 2:
+            ranges.append([top, left, bottom, right])
+            if len(ranges) > MAX_INLINE_RANGES:
+                break
+    return ranges
+
+
+def cell_format(cell, styles):
+    style = int(cell.get('s', '0'))
+    return styles[style]['format'] if 0 <= style < len(styles) else 'General'
+
+
+def complex_string(node):
+    return (any(child.tag in (q('s', 'r'), q('s', 'rPh')) for child in node)
+            or sum(len(text.text or '') for text in node.iter(q('s', 't'))) > MAX_CELL)
+
+
+def reserved_strings(pkg):
+    if 'xl/sharedStrings.xml' not in pkg.names:
+        return set()
+    return {str(i) for i, node in enumerate(pkg.tree('xl/sharedStrings.xml').findall('s:si', NS))
+            if complex_string(node)}
+
+
+def reserved_cell(cell, styles, shared):
+    from openpyxl.styles.numbers import is_date_format, is_timedelta_format
+
+    kind = cell.get('t', 'n')
+    if (kind not in ('n', 'b', 's', 'inlineStr', 'str') or cell.find('s:f', NS) is not None
+            or cell.get('cm') or cell.get('vm')):
+        return True
+    if kind == 'n':
+        fmt = cell_format(cell, styles)
+        return is_date_format(fmt) or is_timedelta_format(fmt)
+    if kind == 's':
+        return cell.findtext('s:v', namespaces=NS) in shared
+    if kind == 'inlineStr':
+        inline = cell.find('s:is', NS)
+        return inline is not None and complex_string(inline)
+    if kind == 'str':
+        return len(cell.findtext('s:v', default='', namespaces=NS)) > MAX_CELL
+    return False
+
+
+def editable_table(pkg, filename, selected):
+    result = preview_xlsx(Path(filename), selected)
+    part, root = worksheet(pkg, result['selected'])
+    last_row = len(result['head']) + 1
+    width = len(result['columns'])
+    spans = reserved_grid_ranges(root, last_row, width)
+    read_only = sheet_readonly(pkg, part, root) or len(spans) > MAX_INLINE_RANGES
+    protected = []
+    if not read_only:
+        styles, shared = cell_styles(pkg), reserved_strings(pkg)
+        for cell in root.iterfind('s:sheetData/s:row/s:c', NS):
+            ref = cell.get('r')
+            row, col = address(ref)
+            if 2 <= row <= last_row and col <= width and reserved_cell(cell, styles, shared):
+                protected.append(ref)
+    result.update(format='xlsx', file_size=Path(filename).stat().st_size, readOnly=read_only,
+                  protectedCells=protected, protectedRanges=[] if read_only else spans)
+    return result
+
+
+NUMERIC = re.compile(r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?')
+UNAMBIGUOUS_NUMBER = re.compile(r'-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[Ee][+-]?[0-9]+)?')
+
+
+def replace_value(cell, value, styles):
+    kind = cell.get('t', 'n')
+    stored = cell.find('s:v', NS) is not None or cell.find('s:is', NS) is not None
+    cleaned = value.strip()
+    number = ((stored and kind == 'n') or (not stored and cell_format(cell, styles) != '@'
+                                          and UNAMBIGUOUS_NUMBER.fullmatch(value)))
+    boolean = stored and kind == 'b'
+    if value and number and (not NUMERIC.fullmatch(cleaned) or not math.isfinite(float(cleaned))):
+        raise ValueError('Enter a valid number for ' + cell.get('r'))
+    if value and boolean and cleaned.upper() not in ('TRUE', 'FALSE'):
+        raise ValueError('Enter TRUE or FALSE for ' + cell.get('r'))
+    for child in list(cell):
+        if child.tag in (q('s', 'v'), q('s', 'is')):
+            cell.remove(child)
+    cell.attrib.pop('t', None)
+    if not value:
+        return
+    if number or boolean:
+        if boolean:
+            cell.set('t', 'b')
+        node = E.Element(q('s', 'v'))
+        node.text = ('1' if cleaned.upper() == 'TRUE' else '0') if boolean else cleaned
+    else:
+        cell.set('t', 'inlineStr')
+        node = E.Element(q('s', 'is'))
+        text = E.SubElement(node, q('s', 't'))
+        text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        # OOXML has its own escapes in string values in addition to XML entities.
+        value = re.sub(r'_(?=x[0-9A-Fa-f]{4}_)', '_x005F_', value, flags=re.IGNORECASE)
+        text.text = value.replace('\r', '_x000D_')
+    cell.insert(0, node)
+
+
+def edit_worksheet(pkg, filename, output, payload):
+    selected = payload['sheet']
+    part, root = worksheet(pkg, selected)
+    if sheet_readonly(pkg, part, root):
+        raise ValueError('Open this worksheet in Office to edit it')
+    summary = preview_xlsx(Path(filename), selected)
+    last_row, width = len(summary['head']) + 1, len(summary['columns'])
+    spans = reserved_grid_ranges(root, last_row, width)
+    if len(spans) > MAX_INLINE_RANGES:
+        raise ValueError('Open this worksheet in Office to edit it')
+    styles, shared = cell_styles(pkg), reserved_strings(pkg)
+    data = root.find('s:sheetData', NS)
+    if data is None:
+        raise ValueError('Worksheet does not contain data')
+    rows = {int(row.get('r')): row for row in data.findall('s:row', NS)}
+    seen = set()
+    for change in payload['changes']:
+        ref, value = change['ref'], change['value']
+        row, col = address(ref)
+        if not 2 <= row <= min(last_row, MAX_ROWS + 1) or not 1 <= col <= min(width, MAX_COLS) or ref in seen:
+            raise ValueError('Invalid cell in the preview: ' + ref)
+        seen.add(ref)
+        if any(top <= row <= bottom and left <= col <= right for top, left, bottom, right in spans):
+            raise ValueError('Open Office to edit ' + ref)
+        row_node = rows.get(row)
+        if row_node is None:
+            row_node = E.Element(q('s', 'row'), r=str(row))
+            next_row = next((node for node in data if int(node.get('r')) > row), None)
+            data.append(row_node) if next_row is None else next_row.addprevious(row_node)
+            rows[row] = row_node
+        cell = next((node for node in row_node.findall('s:c', NS) if node.get('r') == ref), None)
+        if cell is None:
+            cell = E.Element(q('s', 'c'), r=ref)
+            next_cell = next((node for node in row_node if node.tag != q('s', 'c') or address(node.get('r'))[1] > col), None)
+            row_node.append(cell) if next_cell is None else next_cell.addprevious(cell)
+            row_node.attrib.pop('spans', None)
+        if reserved_cell(cell, styles, shared):
+            raise ValueError('Open Office to edit ' + ref)
+        replace_value(cell, value, styles)
+
+    # Keep cached results and request recalculation in Excel/Calc on reopen.
+    book = pkg.tree('xl/workbook.xml')
+    calculation = book.find('s:calcPr', NS)
+    if calculation is None:
+        calculation = E.Element(q('s', 'calcPr'))
+        following = {'oleSize', 'customWorkbookViews', 'pivotCaches', 'smartTagPr', 'smartTagTypes',
+                     'webPublishing', 'fileRecoveryPr', 'webPublishObjects', 'extLst'}
+        next_element = next((node for node in book if isinstance(node.tag, str) and E.QName(node).localname in following), None)
+        book.append(calculation) if next_element is None else next_element.addprevious(calculation)
+    calculation.set('fullCalcOnLoad', '1')
+    patched = {part: E.tostring(root, encoding='UTF-8'), 'xl/workbook.xml': E.tostring(book, encoding='UTF-8')}
+    with zipfile.ZipFile(output, 'w') as archive:
+        for entry in pkg.z.infolist():
+            archive.writestr(entry, patched[entry.filename] if entry.filename in patched else pkg.z.read(entry))
+        archive.comment = pkg.z.comment
+
+
 def main():
     command, filename, kind = sys.argv[1:4]
     pkg = Package(filename, kind)
@@ -306,6 +486,14 @@ def main():
         opts = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
         result = table_model(pkg, opts) if kind == 'xlsx' else text_model(pkg)[0]
         print(json.dumps(result))
+    elif command == 'table-preview' and kind == 'xlsx':
+        print(json.dumps(editable_table(pkg, filename, sys.argv[4]), ensure_ascii=False, allow_nan=False))
+    elif command == 'edit-table' and kind == 'xlsx':
+        with open(sys.argv[5], encoding='utf-8') as changes:
+            payload = json.load(changes)
+        edit_worksheet(pkg, filename, sys.argv[4], payload)
+        updated = Package(sys.argv[4], 'xlsx')
+        print(json.dumps(editable_table(updated, sys.argv[4], payload['sheet']), ensure_ascii=False, allow_nan=False))
     else:
         raise ValueError('Unknown operation')
 

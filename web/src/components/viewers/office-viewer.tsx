@@ -6,10 +6,10 @@ import type { OfficeText } from "@/lib/office";
 import type { ViewerProps } from "@/lib/viewers/registry";
 import { useT } from "@/components/i18n-provider";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
-const ArrayDataViewer = lazy(() => import("./arraydata-viewer"));
+const XlsxTableViewer = lazy(() => import("./xlsx-table-viewer"));
 const button = "rounded border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed";
 
-export default function OfficeViewer({ path, name, projectId = getActiveProjectId() }: ViewerProps) {
+export default function OfficeViewer({ path, name, projectId = getActiveProjectId(), onDirtyChange, onSavingChange }: ViewerProps) {
   const t = useT();
   const [model, setModel] = useState<OfficeText | null>(null);
   const [error, setError] = useState("");
@@ -33,17 +33,22 @@ export default function OfficeViewer({ path, name, projectId = getActiveProjectI
     return () => cancel.abort();
   }, [path, projectId, generation, spreadsheet]);
   const url = `/office?${new URLSearchParams({ path, project: projectId })}`;
+  const officeLink = <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium hover:bg-muted">{t("Edit in Office")} <ExternalLinkIcon className="size-3" /></a>;
+  if (spreadsheet) return <Suspense fallback={<p role="status" className="p-4 text-xs">{t("Loading workbook…")}</p>}>
+    <XlsxTableViewer key={projectId + ":" + path} path={path} name={name} projectId={projectId} content={null}
+      generation={generation} officeLink={officeLink} onDirtyChange={onDirtyChange} onSavingChange={onSavingChange} />
+  </Suspense>;
   const actions = <>
     <button className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" onClick={reload} aria-label={t("Refresh Office preview")} title={t("Refresh Office preview")}><RefreshCwIcon className="size-3.5" /></button>
-    <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium hover:bg-muted">{t("Edit in Office")} <ExternalLinkIcon className="size-3" /></a>
+    {officeLink}
   </>;
   return <div className="flex h-full min-h-0 flex-col">
-    {!spreadsheet && <div className="flex items-center gap-2 border-b px-3 py-2">
+    <div className="flex items-center gap-2 border-b px-3 py-2">
       <span className="flex-1 text-xs text-muted-foreground">Document preview</span>
       {actions}
-    </div>}
+    </div>
     {error && <div role="alert" className="p-4 text-sm text-destructive">{error} <button className={button} onClick={reload}>Retry</button></div>}
-    {spreadsheet ? <Suspense fallback={<p className="p-4 text-xs">Loading workbook…</p>}><ArrayDataViewer key={generation} path={path} name={name} projectId={projectId} content={null} toolbarActions={actions} /></Suspense> : model ? <OfficePreview model={model} /> : !error && <p className="p-4 text-xs text-muted-foreground">Loading document…</p>}
+    {model ? <OfficePreview model={model} /> : !error && <p className="p-4 text-xs text-muted-foreground">Loading document…</p>}
   </div>;
 }
 
