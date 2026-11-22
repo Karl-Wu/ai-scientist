@@ -85,6 +85,8 @@ export interface ChatMessage {
    *  finding, scheduled-run completion) or a compaction marker. */
   role: "user" | "assistant" | "system";
   content: string;
+  /** Offsets of synthetic paragraph breaks before tools in the displayed reply. */
+  toolParagraphBreaks?: number[];
   /** Custom message type — system messages only (e.g. `subagent_watchdog_warning`). */
   customType?: string;
   /** Whitelisted scalar details — system messages only. */
@@ -275,6 +277,7 @@ export function applyFrameToMessage(
         ...message,
         ...(message.summary ? { summary: undefined } : {}),
         content,
+        ...(paragraphBreak ? { toolParagraphBreaks: [...(message.toolParagraphBreaks ?? []), message.content.length] } : {}),
         activities: [
           ...activities,
           {

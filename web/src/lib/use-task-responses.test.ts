@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { matchTaskResponses, type TaskResponse } from "./use-task-responses";
-import type { ChatMessage } from "./use-agent";
+import { applyFrameToTranscript, type AgentFrame, type ChatMessage } from "./use-agent";
 it("binds live and restored bubbles to persisted IDs, preserving duplicate answer order", () => {
   const messages: ChatMessage[] = [
     { id: "user", role: "user", content: "Question", timestamp: 1 },
@@ -45,4 +45,38 @@ it("keeps actions on completed answers followed by a compaction notice and a new
     { id: "next", role: "assistant", content: "", timestamp: 4 },
   ];
   expect(matchTaskResponses(messages, [answer], true).get("reply")).toBe(answer);
+});
+
+it.each(["", "\n\n"])("matches a completed reply after compaction with separator %j", (separator) => {
+  let next = 0;
+  const nextId = () => String(++next);
+  let messages: ChatMessage[] = [
+    { id: "original-question", role: "user", content: "Review the dataset.", timestamp: 1 },
+    { id: "before-compaction", role: "assistant", content: "", timestamp: 2 },
+  ];
+  let state = { assistantId: "before-compaction", sawPromptEcho: true };
+  const frames: AgentFrame[] = [
+    { type: "text_delta", delta: "Gathering the inputs." },
+    { type: "message_start", role: "custom", customType: "compaction", content: "Context compacted" },
+    { type: "text_delta", delta: "Checking the delivery." },
+    { type: "tool_start", toolName: "read", toolCallId: "check" },
+    { type: "tool_end", toolName: "read", toolCallId: "check" },
+    { type: "text_delta", delta: "The data was delivered." },
+    { type: "done", outcome: "completed" },
+    { type: "message_start", role: "user", content: "Hello" },
+    { type: "text_delta", delta: "How can I help?" },
+    { type: "done", outcome: "completed" },
+  ];
+  for (const frame of frames) {
+    ({ messages, state } = applyFrameToTranscript(messages, state, frame, nextId));
+  }
+
+  const delivery = messages[3];
+  const greeting = messages[5];
+  expect(delivery.content).toBe("Checking the delivery.\n\nThe data was delivered.");
+  const answers: TaskResponse[] = [
+    { entryId: "delivery", content: `Checking the delivery.${separator}The data was delivered.`, feedback: null, children: [] },
+    { entryId: "greeting", content: greeting.content, feedback: null, children: [] },
+  ];
+  expect([...matchTaskResponses(messages, answers)]).toEqual([[delivery.id, answers[0]], [greeting.id, answers[1]]]);
 });

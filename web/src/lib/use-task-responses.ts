@@ -16,8 +16,8 @@ const CHANGED = "kady:task-responses-changed";
 export function notifyTaskResponsesChanged(projectId: string) {
   window.dispatchEvent(new CustomEvent(CHANGED, { detail: { projectId } }));
 }
-/** Match live bubbles only against an ordered, exact-text persisted answer.
- * Restored bubbles use Pi entry ids directly. Never persist transient React ids. */
+/** Restored bubbles match by Pi entry id. Live bubbles use ordered, exact
+ * text matching, allowing older backends to omit tool paragraph breaks. */
 export function matchTaskResponses(messages: ChatMessage[], responses: TaskResponse[], streaming = false) {
   const remaining = [...responses];
   const matched = new Map<string, TaskResponse>();
@@ -35,9 +35,19 @@ export function matchTaskResponses(messages: ChatMessage[], responses: TaskRespo
         (streaming && continuation === messages.at(-1))
       )) continue;
     }
-    const index = remaining.findIndex((response) => message.entryId
+    let index = remaining.findIndex((response) => message.entryId
       ? response.entryId === message.entryId
       : response.content === message.content);
+    if (index < 0 && !message.entryId && message.toolParagraphBreaks?.length) {
+      let start = 0;
+      const parts = message.toolParagraphBreaks.map((offset) => {
+        const part = message.content.slice(start, offset);
+        start = offset + 2;
+        return part;
+      });
+      const original = parts.join("") + message.content.slice(start);
+      index = remaining.findIndex((response) => response.content === original);
+    }
     if (index < 0) continue;
     const [response] = remaining.splice(index, 1);
     matched.set(message.id, response);
