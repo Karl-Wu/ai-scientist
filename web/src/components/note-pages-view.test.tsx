@@ -1,13 +1,76 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
+import { Toaster } from "sonner";
+import { SentContextChips } from "./context-chips";
 import { NotePagesView } from "./note-pages-view";
+import { ResearchPickerBody } from "./research-picker";
+import { TooltipProvider } from "./ui/tooltip";
 import { apiFetch } from "@/lib/projects";
+import { EMPTY_DELEGATION } from "@/lib/composer-context";
 import type { NotePage, NoteSummary } from "@/lib/note-pages";
 
 vi.mock("@/lib/projects", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/projects")>(), apiFetch: vi.fn(),
 }));
+
+it("deletes and undoes a note while its earlier revision stays readable in the conversation", async () => {
+  const page: NotePage = {
+    id: "study-note", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [],
+    revisions: [
+      { version: 1, title: "First assessment", summary: "Original finding", fields: {}, savedAt: 1, status: "saved" },
+      { version: 2, title: "Updated assessment", summary: "Revised finding", fields: {}, savedAt: 2, status: "saved" },
+    ],
+  };
+  const summary: NoteSummary = {
+    id: page.id, type: "note", version: 2, organizer: page.organizer, title: "Updated assessment", savedAt: 2,
+    status: "saved", excerpt: "Revised finding", tasks: [], sourceCount: 0,
+  };
+  const patches: object[] = [];
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/notes") return Response.json({ pages: page.deletedAt ? [] : [summary], unavailableCount: 0 });
+    if (url !== "/notes/study-note") throw new Error("Unexpected request");
+    if (options?.method === "PATCH") {
+      const request = JSON.parse(String(options.body));
+      patches.push(request);
+      if (request.action === "delete") page.deletedAt = 100;
+      if (request.action === "restore") delete page.deletedAt;
+    }
+    return Response.json(page);
+  });
+  const user = userEvent.setup();
+  render(<TooltipProvider>
+    <Toaster />
+    <NotePagesView projectId="default" onOpenSource={vi.fn()} />
+    <div data-testid="picker"><ResearchPickerBody projectId="default" currentSessionId={null} selected={[]} onChange={vi.fn()} /></div>
+    <SentContextChips projectId="default" context={{ delegation: EMPTY_DELEGATION,
+      research: [{ kind: "note", type: "note", id: page.id, version: 1, title: "First assessment" }] }} />
+  </TooltipProvider>);
+  const picker = within(screen.getByTestId("picker"));
+  expect(await picker.findByText("Updated assessment")).toBeVisible();
+  await user.click(await screen.findByRole("button", { name: "Updated assessment" }));
+  await user.click(await screen.findByRole("button", { name: "Delete note page" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+  expect(patches).toEqual([]);
+  await user.click(screen.getByRole("button", { name: "Delete note page" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+  expect(await within(screen.getByRole("region", { name: "Notes" })).findByText("No note pages yet")).toBeVisible();
+  expect(await picker.findByText("No note pages yet")).toBeVisible();
+
+  const reference = screen.getByRole("button", { name: "Open First assessment, revision 1" });
+  await user.click(reference);
+  const dialog = within(screen.getByRole("dialog"));
+  expect(await dialog.findByText("Original finding")).toBeVisible();
+  expect(dialog.getByText("Deleted")).toBeVisible();
+  expect(dialog.queryByText("Revised finding")).toBeNull();
+  expect(dialog.queryByRole("button", { name: "Edit note page" })).toBeNull();
+  await user.click(dialog.getByRole("button", { name: "Close" }));
+
+  fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+  expect(await screen.findByRole("button", { name: "Updated assessment" })).toBeVisible();
+  expect(await picker.findByText("Updated assessment")).toBeVisible();
+  expect(patches).toEqual([{ action: "delete", expectedVersion: 2 }, { action: "restore", expectedDeletedAt: 100 }]);
+});
 
 it("shows card metadata and source actions while keeping note filters and revision details", async () => {
   const source = { id: "s1", kind: "tool", sessionId: "source-task", toolCallId: "scan", label: "Scan", excerpt: "Sample excluded" } as const;

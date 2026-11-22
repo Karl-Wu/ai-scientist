@@ -6,7 +6,7 @@ import { registerNotesRoutes } from "../src/api/notes.ts";
 import { createNotePage } from "../src/notes/store.ts";
 import { makeNoteReadTool } from "../src/notes/read-tool.ts";
 import { replacePdfAnnotations } from "../src/pdf-annotations-store.ts";
-import { ensureProjectExists } from "../src/projects.ts";
+import { deleteProject, ensureProjectExists } from "../src/projects.ts";
 import { withActiveProject } from "../src/scope.ts";
 import type { NotePage } from "../../web/src/lib/note-pages.ts";
 
@@ -33,6 +33,54 @@ async function notesApp(projectId = "default") {
 }
 
 describe("project note pages", () => {
+  it("hides deleted pages while retaining historical revisions, and restores without changing a revision", async () => {
+    const app = await notesApp();
+    try {
+      const created = (await app.inject({ method: "POST", url: "/notes", payload: {
+        title: "Study note", summary: "Original interpretation",
+      } })).json<NotePage>();
+      const url = "/notes/" + created.id;
+      const patch = (payload: object) => app.inject({ method: "PATCH", url, payload });
+      const update = { action: "edit", expectedVersion: 1, title: "Study note", summary: "Updated interpretation", fields: {} };
+      const revised = (await patch(update)).json<NotePage>();
+      expect((await patch({ action: "delete", expectedVersion: 1 })).statusCode).toBe(409);
+      const response = await patch({ action: "delete", expectedVersion: 2 });
+      expect(response.statusCode).toBe(200);
+      const deleted = response.json<NotePage>();
+      expect(deleted.deletedAt).toBeGreaterThan(0);
+      expect(deleted.revisions).toEqual(revised.revisions);
+      expect((await app.inject("/notes")).json()).toEqual({ pages: [], unavailableCount: 0 });
+      expect((await app.inject("/notes?q=Study")).json().pages).toEqual([]);
+      expect((await app.inject(url)).json()).toEqual(deleted);
+      expect((await patch({ ...update, expectedVersion: 2 })).statusCode).toBe(410);
+      expect((await patch({ action: "delete", expectedVersion: 2 })).json()).toEqual(deleted);
+      const note = await makeNoteReadTool("default").execute("previous-revision", { id: created.id, version: 1 });
+      expect(JSON.parse((note.content[0] as { text: string }).text)).toMatchObject({
+        version: 1, latestVersion: 2, summary: "Original interpretation", deletedAt: deleted.deletedAt,
+      });
+      expect((await patch({ action: "restore", expectedDeletedAt: deleted.deletedAt! - 1 })).statusCode).toBe(409);
+      const undo = { action: "restore", expectedDeletedAt: deleted.deletedAt };
+      expect((await patch(undo)).json()).toEqual(revised);
+      expect((await patch(undo)).json()).toEqual(revised);
+      expect((await app.inject("/notes?q=Study")).json().pages).toMatchObject([{ id: created.id, version: 2 }]);
+    } finally { await app.close(); }
+  });
+
+  it("only removes the persisted soft-deleted note when its project is deleted", async () => {
+    const owner = ensureProjectExists("notes-deletion-project");
+    const app = await notesApp(owner.id);
+    try {
+      const page = (await app.inject({ method: "POST", url: "/notes", payload: { title: "Project note" } })).json<NotePage>();
+      const pathOnDisk = path.join(owner.kadyDir, "note-pages", page.id + ".json");
+      const response = await app.inject({ method: "PATCH", url: "/notes/" + page.id,
+        payload: { action: "delete", expectedVersion: 1 } });
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(fs.readFileSync(pathOnDisk, "utf8"))).toMatchObject({ id: page.id, deletedAt: expect.any(Number) });
+      deleteProject(owner.id);
+      expect(fs.existsSync(pathOnDisk)).toBe(false);
+    } finally { await app.close(); }
+  });
+
   it("exposes the listed revision and lets the agent read that exact version in the current project", async () => {
     writeTask(task);
     const original = createNotePage("default", {

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createManualNotePage, getNotePage, listNotePages, reviseNotePage } from "../notes/store.ts";
+import { createManualNotePage, getNotePage, listNotePages, updateNotePage } from "../notes/store.ts";
 import { generateNoteDraft } from "../notes/draft.ts";
 import { listNoteExperts } from "../notes/experts.ts";
 import { SandboxError } from "../sandbox-fs.ts";
@@ -59,7 +59,7 @@ export async function registerNotesRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch<{ Params: { id: string }; Body: unknown }>("/notes/:id", (req, reply) => {
     reply.header("Cache-Control", "no-store");
-    try { return reviseNotePage(requireRequestedProject(req), req.params.id, req.body); }
+    try { return updateNotePage(requireRequestedProject(req), req.params.id, req.body); }
     catch (error) {
       if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
       throw error;

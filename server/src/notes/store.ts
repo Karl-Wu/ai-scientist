@@ -155,6 +155,9 @@ function readPage(dir: string, id: string): StoredPage {
         typeof saved.organizer !== "string" || !Array.isArray(saved.sources) || !Array.isArray(saved.revisions) || !saved.revisions.length) {
       throw new Error("Invalid saved note page");
     }
+    if (saved.deletedAt !== undefined && (!Number.isSafeInteger(saved.deletedAt) || saved.deletedAt <= 0)) {
+      throw new Error("Invalid note deletion time");
+    }
     if (saved.sources.some((source) => !source || typeof source.label !== "string" || !Object.hasOwn(NOTE_SOURCE_LABELS, source.kind))) {
       throw new Error("Invalid saved note source");
     }
@@ -275,6 +278,7 @@ export function readNoteRevision(projectId: string, id: string, version: number)
   return {
     id, type: page.type, version, latestVersion: page.revisions.at(-1)!.version,
     title, summary, fields, status, sources: page.sources.map(sourceLink),
+    ...(page.deletedAt === undefined ? {} : { deletedAt: page.deletedAt }),
   };
 }
 
@@ -314,6 +318,7 @@ export function listNotePages(projectId: string, search = ""): NoteListResult {
       unavailableCount++;
       continue;
     }
+    if (page.deletedAt !== undefined) continue;
     const revision = page.revisions.at(-1)!;
     if (search && ![revision.title, revision.summary,
       ...page.sources.map((source) => source.label), ...Object.values(revision.fields)]
@@ -331,13 +336,29 @@ export function listNotePages(projectId: string, search = ""): NoteListResult {
   return { pages, unavailableCount };
 }
 
-export function reviseNotePage(projectId: string, id: string, input: unknown): NotePage {
+export function updateNotePage(projectId: string, id: string, input: unknown): NotePage {
   const dir = notesDir(projectId);
   const page = readPage(dir, id);
-  const raw = record(input, "note revision");
+  const raw = record(input, "note update");
+  if (raw.action === "restore") {
+    const expectedDeletedAt = raw.expectedDeletedAt;
+    if (typeof expectedDeletedAt !== "number" || !Number.isSafeInteger(expectedDeletedAt) || expectedDeletedAt <= 0) {
+      throw new SandboxError(400, "Invalid note deletion time");
+    }
+    if (page.deletedAt === undefined) return publicPage(page);
+    if (expectedDeletedAt !== page.deletedAt) throw new SandboxError(409, "This note was deleted again");
+    delete page.deletedAt;
+    return savePage(dir, page);
+  }
+  if (raw.action !== "delete" && raw.action !== "review" && raw.action !== "edit") throw new SandboxError(400, "Invalid note action");
   const last = publicRevision(page.revisions.at(-1)!);
   if (raw.expectedVersion !== last.version) throw new SandboxError(409, "This note page has a newer revision");
-  if (raw.action !== "review" && raw.action !== "edit") throw new SandboxError(400, "Invalid note action");
+  if (raw.action === "delete") {
+    if (page.deletedAt !== undefined) return publicPage(page);
+    page.deletedAt = Date.now();
+    return savePage(dir, page);
+  }
+  if (page.deletedAt !== undefined) throw new SandboxError(410, "This note page was deleted");
   if (raw.action === "review" && last.status !== "pending") return publicPage(page);
   const savedAt = Date.now();
   const content = raw.action === "edit" ? normalizeContent(raw, page.type) : last;

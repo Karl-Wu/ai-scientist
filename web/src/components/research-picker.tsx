@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/projects";
 import { NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn, type NoteSummary, type NoteType } from "@/lib/note-pages";
+import { useNotePagesRevision } from "@/lib/note-events";
 import { relativeTime } from "@/lib/locale-time";
 import { commandPreview } from "@/lib/command-blocks";
 import {
@@ -77,6 +78,7 @@ export function ResearchPickerBody({
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const search = query.trim();
+  const notesRevision = useNotePagesRevision(projectId);
 
   const selectedByKey = useMemo(() => new Map(selected.map((ref) => [researchRefKey(ref), ref])), [selected]);
 
@@ -93,7 +95,7 @@ export function ResearchPickerBody({
       if (!controller.signal.aborted) setProjectNotes({ projectId, pages });
     });
     return () => controller.abort();
-  }, [mode, projectId]);
+  }, [mode, projectId, notesRevision]);
 
   useEffect(() => {
     if (mode !== "notes" || !search) return;
@@ -106,7 +108,7 @@ export function ResearchPickerBody({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [mode, search, projectId]);
+  }, [mode, search, projectId, notesRevision]);
 
   useEffect(() => {
     if (mode !== "chats" || sessions !== null) return;

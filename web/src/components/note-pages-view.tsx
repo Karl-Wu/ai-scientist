@@ -2,9 +2,11 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, FileTextIcon, LinkIcon, ListFilterIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
+import { toast } from "sonner";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,8 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   NOTE_INSTRUCTION_MAX_CHARS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
   type NoteContent, type NoteCreationSource, type NoteDraft, type NoteDraftCredit, type NoteExpertOption,
-  type NoteListResult, type NotePage, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
+  type NoteListResult, type NotePage, type NoteRevision, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
+import { notifyNotePagesChanged, useNotePagesRevision } from "@/lib/note-events";
 import { apiFetch } from "@/lib/projects";
 import { useCapabilitiesRevision } from "@/lib/capability-events";
 import { relativeTime } from "@/lib/locale-time";
@@ -115,6 +118,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   const [creating, setCreating] = useState<{ key: string; source?: NoteCreationSource }>();
   const handledCreation = useRef<NoteCreationSource | undefined>(undefined);
   const search = query.trim();
+  const notesRevision = useNotePagesRevision(projectId);
 
   useEffect(() => {
     if (!createFrom || handledCreation.current === createFrom) return;
@@ -141,7 +145,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
       }
     })();
     return () => controller.abort();
-  }, [projectId, refresh]);
+  }, [projectId, refresh, notesRevision]);
 
   useEffect(() => {
     if (!search) return;
@@ -159,7 +163,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
       })().catch(() => { if (!controller.signal.aborted) setError(true); });
     }, 150);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [projectId, refresh, search]);
+  }, [projectId, refresh, notesRevision, search]);
 
   useEffect(() => {
     if (!pages?.some((page) => page.tasks.length)) return;
@@ -197,6 +201,11 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   if (selected) {
     return <NotePageDetail key={selected.id} id={selected.id} projectId={projectId} onOpenSource={onOpenSource}
       initialPage={selected.initialPage} focusSources={selected.focusSources} onBack={() => setSelected(undefined)}
+      onDeleted={() => {
+        setPages((current) => current?.filter((page) => page.id !== selected.id));
+        setMatches((current) => current?.filter((page) => page.id !== selected.id));
+        setSelected(undefined);
+      }}
       onSaved={() => setRefresh((value) => value + 1)} />;
   }
 
@@ -499,15 +508,106 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
   </Dialog>;
 }
 
-function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialPage, focusSources }: NotesProps & {
+function NoteRevisionSummary({ type, revision, label }: { type: NoteType; revision: NoteRevision; label: string }) {
+  const t = useT();
+  const fields = Object.entries(NOTE_TYPES[type].fields).filter(([key]) => revision.fields[key]);
+  return <section className="space-y-2">
+    <h3 className="text-sm font-medium">{t(label)}</h3>
+    {revision.summary ? <MessageResponse className="break-words text-sm [&_:is(h1,h2)]:mt-4 [&_:is(h1,h2)]:mb-1.5 [&_:is(h1,h2)]:text-base [&_:is(h3,h4,h5,h6)]:mt-3 [&_:is(h3,h4,h5,h6)]:mb-1 [&_:is(h3,h4,h5,h6)]:text-sm [&_:is(ol,ul)]:ps-5">{revision.summary}</MessageResponse>
+      : <p className="text-xs text-muted-foreground">{t("No summary yet")}</p>}
+    {fields.length > 0 && <dl className="space-y-2 text-sm">
+      {fields.map(([key, fieldLabel]) => <div key={key}>
+        <dt className="font-medium">{t(fieldLabel)}</dt>
+        <dd className="whitespace-pre-wrap break-words text-muted-foreground">{revision.fields[key]}</dd>
+      </div>)}
+    </dl>}
+  </section>;
+}
+
+async function restoreNotePage(projectId: string, id: string, expectedDeletedAt: number): Promise<NotePage> {
+  const response = await apiFetch("/notes/" + encodeURIComponent(id), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "restore", expectedDeletedAt }),
+  }, projectId);
+  if (!response.ok) throw new Error("Restore failed");
+  const page = await response.json() as NotePage;
+  notifyNotePagesChanged(projectId);
+  return page;
+}
+
+export function NoteReferenceDialog({ projectId, reference, onClose, returnFocus }: {
+  projectId: string;
+  reference: { id: string; version: number; title: string };
+  onClose: () => void;
+  returnFocus: HTMLButtonElement;
+}) {
+  const t = useT();
+  const { id, version, title } = reference;
+  const [page, setPage] = useState<NotePage>();
+  const [loadError, setLoadError] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const notesRevision = useNotePagesRevision(projectId);
+  const revision = page?.revisions.find((item) => item.version === version);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void apiFetch("/notes/" + encodeURIComponent(id), { signal: controller.signal }, projectId)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Note request failed");
+        const data = await response.json() as NotePage;
+        if (!controller.signal.aborted) {
+          setPage(data);
+          setLoadError(!data.revisions.some((item) => item.version === version));
+        }
+      })
+      .catch(() => { if (!controller.signal.aborted) setLoadError(true); });
+    return () => controller.abort();
+  }, [id, notesRevision, projectId, version]);
+
+  async function restore() {
+    if (page?.deletedAt === undefined || restoring) return;
+    setRestoring(true);
+    try {
+      setPage(await restoreNotePage(projectId, id, page.deletedAt));
+      toast.success(t("Note page restored."));
+    } catch {
+      toast.error(t("Could not restore the note page."));
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent aria-describedby={undefined} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+      onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.focus(); }}>
+      <DialogTitle className="break-words pe-6 leading-snug">{revision?.title ?? title}</DialogTitle>
+      {loadError ? <p role="alert" className="text-sm text-destructive">{t("This note page or revision is unavailable.")}</p>
+        : page && revision ? <>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{t("Revision {number}", { number: version })}</span>
+            <span>{t(NOTE_STATUS_LABELS[revision.status])}</span>
+            {page.deletedAt !== undefined && <span className="rounded bg-muted px-1.5 py-0.5">{t("Deleted")}</span>}
+          </div>
+          <NoteRevisionSummary type={page.type} revision={revision} label="Summary" />
+          {page.deletedAt !== undefined && <Button type="button" size="sm" variant="outline" className="justify-self-start"
+            disabled={restoring} onClick={() => void restore()}>{t("Restore note page")}</Button>}
+        </> : <p role="status" className="text-sm text-muted-foreground">{t("Loading notes…")}</p>}
+    </DialogContent>
+  </Dialog>;
+}
+
+function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, onDeleted, initialPage, focusSources }: NotesProps & {
   id: string;
   initialPage?: NotePage;
   focusSources?: boolean;
   onBack: () => void;
   onSaved: () => void;
+  onDeleted: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
+  const { confirm, dialog } = useConfirm();
   const [page, setPage] = useState(initialPage);
   const [revisionNumber, setRevisionNumber] = useState<number>();
   const [editing, setEditing] = useState<NoteContent>();
@@ -546,8 +646,14 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
   const revision = page?.revisions.find((item) => item.version === revisionNumber) ?? latest;
   const definition = page && NOTE_TYPES[page.type];
 
-  async function save(action: "edit" | "review") {
+  async function save(action: "edit" | "review" | "delete") {
     if (!latest || pending) return;
+    if (action === "delete" && !await confirm({
+      title: "Delete this note page?",
+      description: "The note page will be hidden from the project notes. Historical conversations can still open the revisions they reference.",
+      confirmLabel: "Delete",
+      destructive: true,
+    })) return;
     setPending(true);
     setError("");
     try {
@@ -560,13 +666,39 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
         setError("This note has a newer revision. Copy any edits before reloading.");
         return;
       }
+      if (response.status === 410) {
+        setEditing(undefined);
+        setReload(value => value + 1);
+        return;
+      }
       if (!response.ok) throw new Error("Save failed");
-      setPage(await response.json() as NotePage);
+      const saved = await response.json() as NotePage;
+      if (action === "delete" && saved.deletedAt !== undefined) {
+        const { deletedAt } = saved;
+        const undoToast = toast.success(t("Note page deleted."), {
+          duration: Infinity,
+          closeButton: true,
+          action: {
+            label: t("Undo"),
+            onClick: (event) => {
+              event.preventDefault();
+              void restoreNotePage(projectId, id, deletedAt).then(() => {
+                toast.dismiss(undoToast);
+                toast.success(t("Note page restored."));
+              }).catch(() => toast.error(t("Could not restore the note page.")));
+            },
+          },
+        });
+        notifyNotePagesChanged(projectId);
+        onDeleted();
+        return;
+      }
+      setPage(saved);
       setRevisionNumber(undefined);
       setEditing(undefined);
       onSaved();
     } catch {
-      setError("Could not save the note page.");
+      setError(action === "delete" ? "Could not delete the note page." : "Could not save the note page.");
     } finally {
       setPending(false);
     }
@@ -574,6 +706,7 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {dialog}
       <header className="shrink-0 border-b px-4 py-2.5">
         <div className={noteReadingWidth}>
           <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={onBack}><ArrowLeftIcon aria-hidden="true" />{t("Notes")}</Button>
@@ -589,6 +722,7 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{definition.group && `${t(definition.group)} · `}{t(definition.label)}</span>
               <span>{t(NOTE_STATUS_LABELS[revision.status])}</span>
+              {page.deletedAt !== undefined && <span className="rounded bg-muted px-1.5 py-0.5">{t("Deleted")}</span>}
               <span>{t(page.organizer)}</span>
               {revision.draftCredit && <span title={revision.draftCredit.skill.sha256}>
                 {t("Drafted with {expert}", { expert: t(revision.draftCredit.expert) })} · {revision.draftCredit.skill.name}
@@ -610,17 +744,7 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
               </div>
             </form> : <>
               <h2 className="break-words text-lg font-semibold">{revision.title}</h2>
-              <section className="space-y-2">
-                <h3 className="text-sm font-medium">{t("Current summary")}</h3>
-                {revision.summary ? <MessageResponse className="break-words text-sm [&_:is(h1,h2)]:mt-4 [&_:is(h1,h2)]:mb-1.5 [&_:is(h1,h2)]:text-base [&_:is(h3,h4,h5,h6)]:mt-3 [&_:is(h3,h4,h5,h6)]:mb-1 [&_:is(h3,h4,h5,h6)]:text-sm [&_:is(ol,ul)]:ps-5">{revision.summary}</MessageResponse>
-                  : <p className="text-xs text-muted-foreground">{t("No summary yet")}</p>}
-                {Object.values(revision.fields).some(Boolean) && <dl className="space-y-2 text-sm">
-                  {Object.entries(definition.fields).filter(([key]) => revision.fields[key]).map(([key, label]) => <div key={key}>
-                    <dt className="font-medium">{t(label)}</dt>
-                    <dd className="whitespace-pre-wrap break-words text-muted-foreground">{revision.fields[key]}</dd>
-                  </div>)}
-                </dl>}
-              </section>
+              <NoteRevisionSummary type={page.type} revision={revision} label="Current summary" />
             </>}
             <section ref={sourcesRef} tabIndex={-1} aria-label={t("Sources")} className="space-y-2 border-t pt-3">
               <h3 className="text-sm font-medium">{t("Sources")}</h3>
@@ -647,11 +771,13 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, initialP
                   {t("Revision {number}", { number: item.version })} · {new Date(item.savedAt).toLocaleString(locale)}
                 </option>)}
               </select>}
-              {revision === latest && <>
+              {page.deletedAt === undefined && revision === latest && <>
                 <Button size="sm" type="button" variant="outline" disabled={pending} onClick={() => setEditing({
                   title: revision.title, summary: revision.summary, fields: revision.fields,
                 })}>{t("Edit note page")}</Button>
                 {revision.status === "pending" && <Button size="sm" type="button" disabled={pending} onClick={() => void save("review")}>{t("Mark as reviewed")}</Button>}
+                <Button size="sm" type="button" variant="ghost" className="ms-auto text-destructive"
+                  disabled={pending} onClick={() => void save("delete")}>{t("Delete note page")}</Button>
               </>}
             </div>}
           </article>

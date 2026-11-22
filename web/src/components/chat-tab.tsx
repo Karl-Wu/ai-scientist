@@ -1853,7 +1853,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
               return (
                 <>
                   {block ? <CommandBlockChip block={block} /> : <MessageResponse onOpenFile={onOpenFile}>{text}</MessageResponse>}
-                  {context && <SentContextChips context={context} />}
+                  {context && <SentContextChips context={context} projectId={projectId} />}
                 </>
               );
             })()}

@@ -2,7 +2,7 @@
 
 import { useT } from "@/components/i18n-provider";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   XIcon,
   DatabaseIcon,
@@ -16,6 +16,7 @@ import {
 import { KadyFileIcon } from "@/components/file-icon";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { NoteReferenceDialog } from "@/components/note-pages-view";
 import type { Database } from "@/components/database-selector";
 import type { Skill } from "@/lib/use-skills";
 import { NOTE_TYPES } from "@/lib/note-pages";
@@ -29,6 +30,7 @@ import {
 const RESEARCH_CHIP = "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-400";
 const DELEGATE_CHIP = "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400";
 const VERIFY_CHIP = "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+type OpenNoteReference = (ref: Extract<ResearchRef, { kind: "note" }>, trigger: HTMLButtonElement) => void;
 
 const DOMAIN_COLORS: Record<
   string,
@@ -51,24 +53,25 @@ const DOMAIN_COLORS: Record<
 function Chip({
   children,
   onRemove,
+  onOpen,
   ariaLabel,
   className,
   tooltip,
 }: {
   children: ReactNode;
-  /** Omitted for read-only chips (sent messages). */
+  /** Omitted for sent messages. */
   onRemove?: () => void;
+  onOpen?: (trigger: HTMLButtonElement) => void;
   ariaLabel?: string;
   className?: string;
   tooltip?: ReactNode;
 }) {
-  const body = (
-    <div
-      className={cn(
-        "group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-        className,
-      )}
-    >
+  const styles = cn("group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors", className);
+  const body = onOpen ? (
+    <button type="button" className={cn(styles, "hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring")}
+      aria-label={ariaLabel} onClick={(event) => onOpen(event.currentTarget)}>{children}</button>
+  ) : (
+    <div className={styles}>
       <div className="flex min-w-0 items-center gap-1.5">{children}</div>
       {onRemove && (
         <button
@@ -104,10 +107,12 @@ function ComposerContextChips({
   context,
   onResearchChange,
   onDelegationChange,
+  onOpenNote,
 }: {
   context: ComposerContext;
   onResearchChange?: (refs: ResearchRef[]) => void;
   onDelegationChange?: (next: DelegationChoice) => void;
+  onOpenNote?: OpenNoteReference;
 }) {
   const t = useT();
   const { delegation, research } = context;
@@ -180,6 +185,7 @@ function ComposerContextChips({
           : t(NOTE_TYPES[ref.type].label);
         const guidance = ref.kind === "chat" ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
           : t("AI Scientist reads revision {version} of this note page.", { version: ref.version });
+        const openReference = ref.kind === "note" && onOpenNote ? (trigger: HTMLButtonElement) => onOpenNote(ref, trigger) : undefined;
         return (
           <Chip
             key={key}
@@ -188,7 +194,9 @@ function ComposerContextChips({
               onResearchChange &&
               (() => onResearchChange(research.filter((r) => researchRefKey(r) !== key)))
             }
-            ariaLabel={t("Remove {name}", { name: ref.title })}
+            onOpen={openReference}
+            ariaLabel={ref.kind === "note" && openReference ? t("Open {name}, revision {version}", { name: ref.title, version: ref.version })
+              : t("Remove {name}", { name: ref.title })}
             tooltip={
               <>
                 <b>{label}</b>
@@ -214,10 +222,13 @@ function ComposerContextChips({
 }
 
 /** Read-only chips under a sent user message. */
-export function SentContextChips({ context }: { context: ComposerContext }) {
+export function SentContextChips({ context, projectId }: { context: ComposerContext; projectId: string }) {
+  const [opened, setOpened] = useState<{ ref: Extract<ResearchRef, { kind: "note" }>; trigger: HTMLButtonElement }>();
   return (
     <div className="flex flex-wrap gap-1.5">
-      <ComposerContextChips context={context} />
+      <ComposerContextChips context={context} onOpenNote={(ref, trigger) => setOpened({ ref, trigger })} />
+      {opened && <NoteReferenceDialog key={`${projectId}:${opened.ref.id}:${opened.ref.version}`}
+        projectId={projectId} reference={opened.ref} returnFocus={opened.trigger} onClose={() => setOpened(undefined)} />}
     </div>
   );
 }

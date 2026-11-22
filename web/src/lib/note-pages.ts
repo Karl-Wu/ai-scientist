@@ -96,6 +96,7 @@ export interface NotePage {
   type: NoteType;
   typeVersion: 1;
   organizer: string;
+  deletedAt?: number;
   sources: NoteCitation[];
   revisions: NoteRevision[];
 }
