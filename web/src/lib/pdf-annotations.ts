@@ -172,42 +172,45 @@ export async function saveAnnotations(
   };
 }
 
-// Poll the sidecar for external writes (e.g. from the expert-side MCP).
-// Returns a cleanup function. The callback is invoked with the freshest
-// doc whenever Last-Modified changes.
+type AnnotationValidators = Pick<FetchResult, "etag" | "lastModified">;
+
+function sameAnnotationVersion(a: AnnotationValidators, b: AnnotationValidators): boolean {
+  return a.etag !== null || b.etag !== null ? a.etag === b.etag : a.lastModified === b.lastModified;
+}
+
+// Poll the sidecar for external writes. ETags distinguish writes within the
+// same clock second. A poll started before a newer local save is discarded.
 export function subscribeAnnotations(
   path: string,
-  initialLastModified: string | null,
+  getVersion: () => AnnotationValidators,
   onChange: (result: FetchResult) => void,
   intervalMs = 3000,
   projectId?: string,
 ): () => void {
   let cancelled = false;
-  let last = initialLastModified;
+  let checking = false;
 
   const tick = async () => {
-    if (cancelled) return;
+    if (cancelled || checking) return;
+    checking = true;
     try {
+      const previous = getVersion();
       const res = await apiFetch(
         `/sandbox/annotations?path=${encodeURIComponent(path)}`,
         {},
         projectId,
       );
       if (!res.ok) return;
-      const lastModified = res.headers.get("Last-Modified");
-      if (lastModified !== last) {
-        const doc = (await res.json()) as AnnotationsDoc;
-        last = lastModified;
-        if (!cancelled) {
-          onChange({
-            doc: { version: 1, annotations: doc.annotations ?? [] },
-            lastModified,
-            etag: res.headers.get("ETag"),
-          });
-        }
+      const version = { etag: res.headers.get("ETag"), lastModified: res.headers.get("Last-Modified") };
+      if (sameAnnotationVersion(previous, version)) return;
+      const doc = (await res.json()) as AnnotationsDoc;
+      if (!cancelled && sameAnnotationVersion(previous, getVersion())) {
+        onChange({ doc: { version: 1, annotations: doc.annotations ?? [] }, ...version });
       }
     } catch {
       // swallow transient errors
+    } finally {
+      checking = false;
     }
   };
 

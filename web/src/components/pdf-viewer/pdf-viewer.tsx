@@ -210,7 +210,8 @@ export function PdfViewer({
   }, [lastModified]);
 
   const [mode, setMode] = useState<"none" | "highlight" | "note">("none");
-  const [expertVisibility, setExpertVisibility] = useState<{ show: boolean; focusToken?: number }>({ show: true });
+  const [showAnnotationSidebar, setShowAnnotationSidebar] = useState(true);
+  const focusToken = annotationFocus?.token;
   const [activeAnnotationId, setActiveAnnotationId] =
     useState<string | null>(null);
   const [pendingNote, setPendingNote] = useState<{
@@ -345,10 +346,10 @@ export function PdfViewer({
   }, [path, hideAnnotationUi, scopedProjectId]);
 
   useEffect(() => {
-    if (hideAnnotationUi) return;
+    if (hideAnnotationUi || !annotationsLoaded) return;
     const unsub = subscribeAnnotations(
       path,
-      lastModifiedRef.current,
+      () => ({ lastModified: lastModifiedRef.current, etag: etagRef.current }),
       ({ doc: newDoc, lastModified: newMtime, etag: newEtag }) => {
         setAnnotations(newDoc);
         setLastModified(newMtime);
@@ -358,7 +359,7 @@ export function PdfViewer({
       scopedProjectId,
     );
     return unsub;
-  }, [path, hideAnnotationUi, scopedProjectId]);
+  }, [path, hideAnnotationUi, scopedProjectId, annotationsLoaded]);
 
   // --------------------------------------------------------------------
   // Persistence (debounced per keystroke is overkill — we save on every
@@ -572,31 +573,21 @@ export function PdfViewer({
   );
 
   // --------------------------------------------------------------------
-  // Filtered view for the layers + sidebar
+  // Annotations shared by the page layers and sidebar
   // --------------------------------------------------------------------
 
   const linkedAnnotation = annotationFocus && annotations.annotations.find((annotation) =>
     annotation.id === annotationFocus.annotationId);
   const linkedPage = linkedAnnotation?.page ?? annotationFocus?.page;
   const linkedId = linkedAnnotation?.id;
-  const focusToken = annotationFocus?.token;
-  // Opening a new citation reveals its expert annotation. An explicit toggle
-  // still controls every expert annotation, including the linked one.
-  const showExpert = expertVisibility.show || Boolean(linkedAnnotation?.author.kind === "expert" && focusToken !== expertVisibility.focusToken);
-  const expertCount = annotations.annotations.filter((annotation) => annotation.author.kind === "expert").length;
-  const visibleAnnotations = useMemo(
-    () => showExpert ? annotations.annotations : annotations.annotations.filter((a) => a.author.kind !== "expert"),
-    [annotations, showExpert],
-  );
-
   const annotationsByPage = useMemo(() => {
     const map = new Map<number, Annotation[]>();
-    for (const a of visibleAnnotations) {
+    for (const a of annotations.annotations) {
       if (!map.has(a.page)) map.set(a.page, []);
       map.get(a.page)!.push(a);
     }
     return map;
-  }, [visibleAnnotations]);
+  }, [annotations.annotations]);
 
   const jumpToAnnotation = useCallback((ann: Annotation) => {
     const el = containerRef.current?.querySelector<HTMLElement>(
@@ -756,9 +747,8 @@ export function PdfViewer({
         mode={mode}
         setMode={setMode}
         onCommitHighlight={handleHighlightSelection}
-        showExpert={showExpert}
-        setShowExpert={(show) => setExpertVisibility({ show, focusToken })}
-        expertCount={annotationsLoaded ? expertCount : undefined}
+        showAnnotationSidebar={showAnnotationSidebar}
+        setShowAnnotationSidebar={setShowAnnotationSidebar}
         hideAnnotationUi={hideAnnotationUi}
         openHref={rawFileUrl(path, scopedProjectId)}
         onJumpPage={(p) => {
@@ -779,7 +769,7 @@ export function PdfViewer({
           ref={containerRef}
           data-pdf-scroll
           className={cn(
-            "flex-1 overflow-auto bg-muted/30",
+            "min-w-0 flex-1 overflow-auto bg-muted/30",
             mode === "note" && "cursor-crosshair",
           )}
         >
@@ -815,11 +805,10 @@ export function PdfViewer({
           </div>
         </div>
 
-        {!hideAnnotationUi && (
+        {!hideAnnotationUi && showAnnotationSidebar && (
           <AnnotationSidebar
-            annotations={visibleAnnotations}
+            annotations={annotations.annotations}
             loading={!annotationsLoaded}
-            expertAnnotationsHidden={!showExpert && expertCount > 0}
             onJump={jumpToAnnotation}
           />
         )}
@@ -855,9 +844,8 @@ function Toolbar({
   mode,
   setMode,
   onCommitHighlight,
-  showExpert,
-  setShowExpert,
-  expertCount,
+  showAnnotationSidebar,
+  setShowAnnotationSidebar,
   hideAnnotationUi,
   openHref,
   onJumpPage,
@@ -871,17 +859,13 @@ function Toolbar({
   mode: "none" | "highlight" | "note";
   setMode: (m: "none" | "highlight" | "note") => void;
   onCommitHighlight: () => void;
-  showExpert: boolean;
-  setShowExpert: (v: boolean) => void;
-  expertCount?: number;
+  showAnnotationSidebar: boolean;
+  setShowAnnotationSidebar: (show: boolean) => void;
   hideAnnotationUi: boolean;
   openHref: string;
   onJumpPage: (p: number) => void;
 }) {
   const t = useT();
-  const expertFilterEnabled = Boolean(expertCount);
-  const expertFilterHint = expertCount === undefined ? t("Loading annotations…")
-    : expertCount === 0 ? t("No expert annotations in this PDF.") : undefined;
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-background/60 px-2 py-1 text-xs">
       <button
@@ -973,16 +957,13 @@ function Toolbar({
 
       <div className="ml-auto flex items-center gap-2">
         {!hideAnnotationUi && (
-          <label className={cn("flex items-center gap-1", expertFilterEnabled ? "cursor-pointer" : "text-muted-foreground")}
-            title={expertFilterHint}>
+          <label className="flex cursor-pointer items-center gap-1" title={t("Show or hide the annotation sidebar")}>
             <input
               type="checkbox"
-              checked={expertFilterEnabled && showExpert}
-              disabled={!expertFilterEnabled}
-              onChange={(e) => setShowExpert(e.target.checked)}
+              checked={showAnnotationSidebar}
+              onChange={(e) => setShowAnnotationSidebar(e.target.checked)}
             />
-            {t("Show expert annotations")}
-            {expertCount !== undefined && <span aria-hidden="true" className="tabular-nums text-muted-foreground">({expertCount})</span>}
+            {t("Show annotations")}
           </label>
         )}
         {/* Browser-native find/print/download live in the browser's own PDF

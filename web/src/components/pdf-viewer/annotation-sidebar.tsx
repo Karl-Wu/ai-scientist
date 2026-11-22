@@ -12,14 +12,12 @@ import { cn } from "@/lib/utils";
 export interface AnnotationSidebarProps {
   annotations: Annotation[];
   loading: boolean;
-  expertAnnotationsHidden: boolean;
   onJump: (a: Annotation) => void;
 }
 
 export function AnnotationSidebar({
   annotations,
   loading,
-  expertAnnotationsHidden,
   onJump,
 }: AnnotationSidebarProps) {
   const t = useT();
@@ -33,16 +31,15 @@ export function AnnotationSidebar({
   }, [annotations]);
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-l bg-background/40 md:flex">
+    <aside className="flex w-64 max-w-[45%] shrink-0 flex-col border-l bg-background/40">
       <div className="shrink-0 border-b px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {t("Annotations")}
-        <span className="ml-1 text-foreground/60">({annotations.length})</span>
+        {!loading && <span className="ml-1 text-foreground/60">({annotations.length})</span>}
       </div>
       <div className="flex-1 overflow-auto">
         {groups.length === 0 && (
           <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
-            {t(loading ? "Loading annotations…" : expertAnnotationsHidden ? "Expert annotations are hidden."
-              : "No annotations yet. Select text to highlight it or add a note.")}
+            {t(loading ? "Loading annotations…" : "No annotations yet. Select text to highlight it or add a note.")}
           </p>
         )}
         {groups.map(([page, anns]) => (

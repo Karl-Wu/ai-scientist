@@ -5,6 +5,7 @@ import {
   fetchAnnotations,
   newAnnotationId,
   saveAnnotations,
+  subscribeAnnotations,
   USER_AUTHOR,
   USER_COLOR,
   type Author,
@@ -21,6 +22,36 @@ describe("colorForAuthor", () => {
     const c2 = colorForAuthor(expert);
     expect(c1).toBe(c2);
     expect(c1).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe("subscribeAnnotations", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("detects expert-side writes when the ETag changes in the same second", async () => {
+    vi.useFakeTimers();
+    const lastModified = "Wed, 21 Oct 2026 07:28:00 GMT";
+    let version = { lastModified, etag: '"before"' };
+    let diskTag = version.etag;
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(EMPTY_DOC, {
+      headers: { "Last-Modified": lastModified, ETag: diskTag },
+    })));
+    const onChange = vi.fn((result) => { version = result; });
+    const unsubscribe = subscribeAnnotations("foo.pdf", () => version, onChange);
+    try {
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(onChange).not.toHaveBeenCalled();
+      diskTag = '"after"';
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(onChange).toHaveBeenCalledWith({ doc: EMPTY_DOC, lastModified, etag: '"after"' });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(onChange).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
   });
 });
 
