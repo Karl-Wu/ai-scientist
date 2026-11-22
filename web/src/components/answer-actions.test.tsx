@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,7 +30,11 @@ it("saves icon-only feedback, toggles off, and switches mutually exclusively", a
 });
 it("creates and opens a task directly when there are no children", async () => {
   show();
-  fireEvent.click(screen.getByRole("button", { name: "New task from here" }));
+  const fork = screen.getByRole("button", { name: "New task from here" });
+  expect(within(fork).getByText("New task from here")).toHaveClass("sr-only");
+  await userEvent.hover(fork);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("New task from here");
+  fireEvent.click(fork);
   await waitFor(() => expect(onOpenTask).toHaveBeenCalledWith("child", "Research (1)"));
   expect(api.apiFetch).toHaveBeenCalledWith("/sessions/s1/responses/answer/fork", { method: "POST" }, "p1");
 });
