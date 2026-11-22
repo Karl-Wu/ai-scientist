@@ -6,7 +6,7 @@ import { I18nProvider } from "./i18n-provider";
 import { AppearancePanel } from "./settings/appearance-panel";
 import { useShowReasoningDetails } from "@/lib/reasoning-display";
 import * as localeSettings from "@/lib/ui-locale-settings";
-import type { ChatMessage } from "@/lib/use-agent";
+import type { ActivityItem, ChatMessage } from "@/lib/use-agent";
 
 describe("AssistantMessageBody", () => {
   it("skips unchanged history rows without disabling their copy action", () => {
@@ -354,22 +354,27 @@ describe("AssistantMessageBody", () => {
     ).toBeTruthy();
   });
 
-  it("folds the process and presents each result after the summary only when confirmed", () => {
+  it("folds the process under elapsed time as soon as a streaming summary is confirmed", () => {
     const message: ChatMessage = {
       id: "answer",
       role: "assistant",
-      content: "Checked the inputs.\nBoth inputs passed.",
+      content: "I’ll check the inputs and compare them.\nBoth inputs passed.",
       timestamp: 1,
       summary: { blockId: "summary", confirmed: false, executionMs: 216_000 },
-      activities: ["A", "B"].map((id) => ({
-        id, label: "scientific_result", status: "complete", timestamp: 2, toolName: "scientific_result",
-        scientificResult: {
-          schemaVersion: 1, kind: "table", title: `Result ${id}`,
-          columns: [{ key: "metric", label: "Metric" }], rows: [[id]],
-        },
-      })),
+      activities: [
+        { id: "read", label: "read", toolName: "read", status: "error", timestamp: 2, args: { path: "dataset.tsv" } },
+        ...["A", "B"].map<ActivityItem>((id) => ({
+          id, label: "scientific_result", status: "complete", timestamp: 2, toolName: "scientific_result",
+          scientificResult: {
+            schemaVersion: 1, kind: "table", title: `Result ${id}`,
+            columns: [{ key: "metric", label: "Metric" }], rows: [[id]],
+          },
+        })),
+      ],
       segments: [
-        { type: "text", blockId: "progress", content: "Checked the inputs." },
+        { type: "text", blockId: "progress", content: "I’ll check the inputs and compare them." },
+        { type: "activity", activityId: "read" },
+        { type: "reasoning", content: "**核对检查结果**" },
         { type: "activity", activityId: "A" },
         { type: "activity", activityId: "B" },
         { type: "text", blockId: "summary", content: "Both inputs passed.\n\n**Checks**\n\n- Matches the **reference**." },
@@ -385,7 +390,8 @@ describe("AssistantMessageBody", () => {
       />
     );
     const { rerender } = render(reply(false));
-    expect(screen.getByText("Checked the inputs.")).toBeVisible();
+    expect(screen.getByText("I’ll check the inputs and compare them.")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("核对检查结果");
     expect(screen.queryByRole("button", { name: /^Execution took/ })).not.toBeInTheDocument();
     expect(screen.getByText("Both inputs passed.").closest("[data-task-summary]")).toBeNull();
     const before = screen.getByRole("heading", { name: "Result A" });
@@ -394,7 +400,9 @@ describe("AssistantMessageBody", () => {
     rerender(reply(true));
     const disclosure = screen.getByRole("button", { name: "Execution took 3 minutes 36 seconds" });
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Checked the inputs.")).not.toBeInTheDocument();
+    expect(screen.queryByText("I’ll check the inputs and compare them.")).not.toBeInTheDocument();
+    expect(screen.queryByText("核对检查结果")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     const summary = screen.getByText("Both inputs passed.");
     expect(summary.closest("[data-task-summary]")).not.toBeNull();
     expect(screen.getByText("Checks").closest("p")).toHaveAttribute("data-standalone-strong");
@@ -404,8 +412,14 @@ describe("AssistantMessageBody", () => {
     expect(summary.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(disclosure);
-    expect(screen.getByText("Checked the inputs.")).toBeVisible();
-    expect(screen.getByText("Checked the inputs.").closest("[data-task-summary]")).toBeNull();
+    const opening = screen.getByText("I’ll check the inputs and compare them.");
+    const tool = screen.getByRole("button", { name: /read.*dataset.tsv/ });
+    const reasoning = screen.getByText("核对检查结果");
+    expect(opening).toBeVisible();
+    expect(opening.closest("[data-task-summary]")).toBeNull();
+    expect(opening.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tool.compareDocumentPosition(reasoning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/Ran 1 tool call/)).toHaveTextContent("Ran 1 tool call · 1 failed");
     expect(screen.getAllByRole("heading", { name: /^Result (A|B)$/ })).toHaveLength(2);
   });
 });

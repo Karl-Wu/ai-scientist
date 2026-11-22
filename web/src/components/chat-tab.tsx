@@ -1503,21 +1503,26 @@ function formatExecutionDuration(ms: number, locale: string): string {
   ].filter(Boolean).join(" ");
 }
 
-function ExecutionDisclosure({ activities, children, elapsedLabel, focusNonce }: {
+function ExecutionDisclosure({ activities, children, processLabel, focusNonce }: {
   activities: ActivityItem[];
   children: ReactNode;
-  elapsedLabel?: string;
+  processLabel?: string;
   focusNonce?: number;
 }) {
   const t = useT();
   return <ToolDisclosure className="my-1" focusNonce={focusNonce}>
-    <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60">
-      <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-      {activities.length ? <ToolActivitySummary activities={activities} /> : elapsedLabel ?? t("Execution details")}
+    <CollapsibleTrigger className={cn("group flex items-center gap-2 rounded-md text-left text-muted-foreground transition-colors",
+      processLabel ? "px-1 py-1 text-sm hover:text-foreground"
+        : "w-full border bg-muted/30 px-2.5 py-1.5 text-xs hover:bg-muted/60")}>
+      <ChevronRightIcon aria-hidden="true" className={cn("size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90",
+        processLabel && "order-last size-3.5")} />
+      {processLabel ?? (activities.length ? <ToolActivitySummary activities={activities} /> : t("Execution details"))}
     </CollapsibleTrigger>
     <CollapsibleContent>
       <div className="mt-1 space-y-2 border-l-2 border-muted pl-2">
-        {activities.length > 0 && elapsedLabel && <p className="px-1 text-xs text-muted-foreground">{elapsedLabel}</p>}
+        {processLabel && activities.length > 0 && <p className="flex items-center gap-2 px-1 py-0.5 text-xs text-muted-foreground">
+          <ToolActivitySummary activities={activities} />
+        </p>}
         {children}
       </div>
     </CollapsibleContent>
@@ -1569,7 +1574,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const flushChunk = (current = false) => {
     if (!chunk.length) return;
     const key = `tools-${chunk[0].id}`;
-    if (isStreaming) {
+    if (isExecutionLive) {
       orderedBlocks.push(<ToolActivityList key={key} activities={chunk} current={current} fileSourceFocus={fileSourceFocus} />);
     } else {
       executionActivities.push(...chunk);
@@ -1597,7 +1602,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const appendReasoning = (content: string, key: string) => {
     if (!content.trim()) return;
     const titles = reasoningTitles(content);
-    if (isStreaming) {
+    if (isExecutionLive) {
       latestReasoningTitle = titles.at(-1) ?? latestReasoningTitle;
       return;
     }
@@ -1661,7 +1666,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
     } else if (a.toolName === "generate_image") {
       flushExecution();
       orderedBlocks.push(
-        <ToolActivityList key={a.id} activities={[a]} current={current} includeUnknown={isStreaming} fileSourceFocus={fileSourceFocus} />,
+        <ToolActivityList key={a.id} activities={[a]} current={current} includeUnknown={isExecutionLive} fileSourceFocus={fileSourceFocus} />,
       );
     } else {
       chunk.push(a);
@@ -1689,6 +1694,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   const summaryIndex = summary ? segments.findIndex((segment) =>
     segment.type === "text" && segment.blockId === summary.blockId && Boolean(segment.content.trim())) : -1;
   const hasSummary = summaryIndex >= 0;
+  const isExecutionLive = isStreaming && !hasSummary;
   const focusInProcess = hasSummary && fileSourceFocus && segments.slice(0, summaryIndex).some(
     (segment) => segment.type === "activity" && segment.activityId === fileSourceFocus.step.stepId,
   );
@@ -1723,17 +1729,17 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       activity.toolName === "subagent" && args?.workflow === true && replyWorkflowScript
         ? { ...activity, replyWorkflowScript }
         : activity,
-      isStreaming && segment === lastSegment,
+      isExecutionLive && segment === lastSegment,
     );
   }
-  flushExecution(isStreaming && lastSegment?.type === "activity");
+  flushExecution(isExecutionLive && lastSegment?.type === "activity");
   const elapsedLabel = summary?.executionMs === undefined
     ? undefined : t("Execution took {duration}", { duration: formatExecutionDuration(summary.executionMs, locale) });
 
   return (
     <>
       {hasSummary && processBlocks.length > 0 ? (
-        <ExecutionDisclosure activities={processActivities} elapsedLabel={elapsedLabel}
+        <ExecutionDisclosure activities={processActivities} processLabel={elapsedLabel ?? t("Execution details")}
           focusNonce={focusInProcess ? fileSourceFocus?.nonce : undefined}>
           {processBlocks}
         </ExecutionDisclosure>
@@ -1755,7 +1761,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
           {resultBlocks}
         </div>
       )}
-      {isStreaming ? (
+      {isExecutionLive ? (
         <p role="status" className="flex items-center gap-1.5 px-1 py-0.5 text-xs text-muted-foreground">
           <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
           <span dir="auto" className="min-w-0 break-words">

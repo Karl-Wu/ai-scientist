@@ -29,7 +29,6 @@ import {
   type SessionInfo,
 } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { readAppDefaults } from "../app-settings.ts";
 import { KADY_PI_AGENT_DIR } from "../config.ts";
 import type { ProjectPaths } from "../projects.ts";
 import { migrateDisabledMcpServers } from "./mcp.ts";
@@ -37,6 +36,7 @@ import { defaultModel, pruneStaleOpenRouterCatalog, resolveModel, setupModelRunt
 import { canonicalProviderId } from "./provider-catalog.ts";
 import { seedAgentFiles } from "./agent-files.ts";
 import { makeInterviewTool } from "./interview.ts";
+import { makeChatOpeningExtension } from "./chat-opening.ts";
 import { makeNoteReadTool } from "../notes/read-tool.ts";
 import { makeScientificResultTool } from "./scientific-result.ts";
 import { clearSessionCompute, makeModalTools } from "./modal-tool.ts";
@@ -384,23 +384,7 @@ async function build(
     settingsManager,
     additionalExtensionPaths: [subagentsExtensionPath()],
     extensionFactories: [
-      (pi) => {
-        pi.on("before_agent_start", ({ systemPromptOptions }) => {
-          const locale = readAppDefaults().locale;
-          const language = locale === "zh-CN" ? "Simplified Chinese"
-            : locale === "en" ? "English" : "the user's language in the current task";
-          const guidance = [
-            `Write any user-visible reasoning summary, including its headings, in ${language}, unless the user explicitly asks for a different language for the summary.`,
-            "Preserve technical identifiers, commands and file paths.",
-          ].join(" ");
-          const section = "kady_reasoning_display";
-          if (systemPromptOptions.forceSystemPrompt !== undefined) {
-            systemPromptOptions.forceSystemPrompt += `\n\n<${section}>\n${guidance}\n</${section}>`;
-          } else {
-            systemPromptOptions.sections[section] = guidance;
-          }
-        });
-      },
+      makeChatOpeningExtension(projectId, modelRuntime, () => holder.session),
       makeSubagentLedgerExtension(
         projectId,
         () => holder.session?.sessionId ?? "",

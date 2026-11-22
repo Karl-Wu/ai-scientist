@@ -120,7 +120,7 @@ describe("file source shortcut", () => {
       return Response.json(data);
     });
     render(<WorkspaceFixture />);
-    expect(screen.getByRole("button", { name: "Ran 2 tool calls" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Execution details" })).toHaveAttribute("aria-expanded", "false");
 
     await user.click(screen.getByRole("button", { name: "Provenance" }));
     expect(await screen.findByText("Inferred from sandbox scan")).toBeVisible();

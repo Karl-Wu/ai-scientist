@@ -103,7 +103,9 @@ it("lists the saved prompt during a slow first answer and preserves it after an 
     });
     await vi.waitFor(() => expect(provider).toHaveBeenCalledOnce());
     expect(session.agent.state.systemPrompt).toContain("<kady_reasoning_display>");
-    expect(session.agent.state.systemPrompt).toContain("including its headings, in Simplified Chinese");
+    expect(session.agent.state.systemPrompt).toContain("send one or two user-visible sentences before the first tool call");
+    expect(session.agent.state.systemPrompt).toContain("main language of the latest human-written request");
+    expect(session.agent.state.systemPrompt).toContain("If the request's language is unclear, use Simplified Chinese");
     expect(await list()).toEqual([expect.objectContaining({
       id, firstMessage: "Analyze my data", visibleInHistory: true, isRunning: true,
     })]);
@@ -147,6 +149,74 @@ it("lists the saved prompt during a slow first answer and preserves it after an 
     type: "thinking_delta", delta: summary, reasoningStart: true,
   });
   await disposeSession(project.id, id);
+}, 30_000);
+
+it.each([
+  { name: "a tool-only reply", useTool: true, nativeText: "", fallback: true },
+  { name: "native commentary", useTool: true, nativeText: "我会先核对文件列表。", fallback: false },
+  { name: "a direct answer", useTool: false, nativeText: "这是直接回答。", fallback: false },
+])("provides one opening before tools for $name", async ({ useTool, nativeText, fallback }) => {
+  const project = createProject({ name: "Chat opening" });
+  const session = await createSession(project.id, resolvePaths(project.id));
+  const id = session.sessionId;
+  const headers = { "X-Project-Id": project.id };
+  const request = "请核对输入文件，再汇报核对结果。";
+  const opening = nativeText || "我会先列出输入文件，再核对有哪些文件需要检查。";
+  const emptyCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+  const usage = { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: emptyCost };
+  let releaseOpening: (() => void) | undefined;
+  let providerCalls = 0;
+  session.agent.streamFunction = (model) => {
+    const first = ++providerCalls === 1;
+    const content: AssistantMessage["content"] = [];
+    const text = first ? nativeText : "核对完成。";
+    if (text) content.push({ type: "text", text });
+    if (first && useTool) content.push({ type: "toolCall", id: "call-list", name: "ls", arguments: { path: "." } });
+    const message: AssistantMessage = {
+      role: "assistant", api: model.api, provider: model.provider, model: model.id, content, usage,
+      stopReason: first && useTool ? "toolUse" : "stop", timestamp: Date.now(),
+    };
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "done", reason: message.stopReason, message });
+    return stream;
+  };
+  const completion = vi.spyOn(getModelRuntime(), "completeSimple").mockImplementation(async (model) => {
+    await new Promise<void>((resolve) => { releaseOpening = resolve; });
+    return { role: "assistant", api: model.api, provider: model.provider, model: model.id,
+      content: [{ type: "text", text: opening }], usage, stopReason: "stop", timestamp: Date.now() };
+  });
+  const run = app.inject({ method: "POST", url: `/sessions/${id}/run`, headers,
+    payload: { message: request, model: "ollama/history-test" } }).then((response) => response);
+  try {
+    if (fallback) {
+      await vi.waitFor(() => expect(releaseOpening).toBeDefined());
+      const state = (await app.inject({ method: "GET", url: `/sessions/${id}/run/state`, headers })).json();
+      expect(state.run.frames.some((frame: { type: string }) => frame.type === "tool_start")).toBe(false);
+      expect(completion.mock.calls[0][1].messages[0].content).toContain(request);
+      releaseOpening?.();
+    }
+    const response = await run;
+    expect(response.statusCode).toBe(200);
+    const liveFrames = response.body.split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)));
+    const history = (await app.inject({ method: "GET", url: `/sessions/${id}/history`, headers })).json();
+    for (const frames of [liveFrames, history.messages[1].frames]) {
+      const updates = frames.filter((frame: { type: string; delta?: string }) => frame.type === "text_delta" && frame.delta === opening);
+      expect(updates).toHaveLength(1);
+      if (useTool) {
+        const start = frames.findIndex((frame: { type: string }) => frame.type === "tool_start");
+        expect(start).toBeGreaterThan(frames.indexOf(updates[0]));
+        expect(frames).toContainEqual(expect.objectContaining({ type: "tool_end", toolCallId: "call-list", isError: false }));
+      }
+    }
+    expect(completion).toHaveBeenCalledTimes(fallback ? 1 : 0);
+    expect(session.getSessionStats().tokens.total).toBe(useTool ? 30 + (fallback ? 15 : 0) : 15);
+  } finally {
+    releaseOpening?.();
+    await run;
+    completion.mockRestore();
+    await disposeSession(project.id, id);
+    runBroker.clear();
+  }
 }, 30_000);
 
 it("includes a stored user-only task and keeps a sole synthetic wake prompt hidden", async () => {
