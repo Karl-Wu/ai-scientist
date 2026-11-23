@@ -3,14 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as agentsLib from "@/lib/agents";
 import * as useProjects from "@/lib/use-projects";
-import * as useSkills from "@/lib/use-skills";
 import { SubagentsPanel } from "@/components/subagents-panel";
 
 beforeEach(() => {
   vi.spyOn(agentsLib, "getSpecialistDefaultModel").mockResolvedValue(null);
-  vi.spyOn(useSkills, "useSkills").mockReturnValue({ skills: [], loading: false });
 });
 afterEach(() => vi.restoreAllMocks());
+
+function mockRoster(agents: agentsLib.AgentFile[], noteDefaultExpert: string | null = null) {
+  return vi.spyOn(agentsLib, "getAgentRoster").mockResolvedValue({ agents, noteDefaultExpert });
+}
 
 const watchdog = (overrides: Partial<agentsLib.WatchdogSettings> = {}): agentsLib.WatchdogSettings => ({
   enabled: false,
@@ -32,7 +34,7 @@ describe("SubagentsPanel toggle", () => {
       activeProject: { id: "p1", name: "P1" },
       activeProjectId: "p1",
     } as unknown as ReturnType<typeof useProjects.useProjects>);
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([
+    mockRoster([
       { name: "oracle", description: "deep reasoning", source: "builtin", systemPrompt: "x", enabled: true },
     ]);
     const setSpy = vi.spyOn(agentsLib, "setAgentEnabled").mockResolvedValue();
@@ -50,7 +52,7 @@ describe("WatchdogCard", () => {
       activeProject: { id: "p1", name: "P1" },
       activeProjectId: "p1",
     } as unknown as ReturnType<typeof useProjects.useProjects>);
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([]);
+    mockRoster([]);
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
     const save = vi
       .spyOn(agentsLib, "saveWatchdogSettings")
@@ -75,7 +77,7 @@ describe("SubagentsPanel persistent memory", () => {
       activeProjectId: "p1",
     } as unknown as ReturnType<typeof useProjects.useProjects>);
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([
+    mockRoster([
       { name: "data-validator", description: "checks", source: "project", systemPrompt: "x", enabled: true, memory: { scope: "project", path: "data-validator" } },
       { name: "plain", description: "no memory", source: "project", systemPrompt: "y", enabled: true },
     ]);
@@ -104,7 +106,7 @@ describe("SubagentsPanel persistent memory", () => {
       activeProjectId: "p1",
     } as unknown as ReturnType<typeof useProjects.useProjects>);
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([
+    mockRoster([
       { name: "plain", description: "no memory", source: "project", systemPrompt: "y", enabled: true },
     ]);
     const save = vi.spyOn(agentsLib, "saveAgent").mockImplementation(async (name, patch) => ({ name, source: "project", ...patch }));
@@ -117,17 +119,21 @@ describe("SubagentsPanel persistent memory", () => {
     expect(save.mock.calls[0][1]).toMatchObject({ memory: { scope: "user", path: "plain" } });
   });
 
-  it("binds a project's enabled skill for a specialist's note drafts", async () => {
+  it("sets and clears the project default note expert from the enabled roster", async () => {
     vi.spyOn(useProjects, "useProjects").mockReturnValue({ activeProjectId: "p1" } as ReturnType<typeof useProjects.useProjects>);
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([{ name: "plain", description: "review", source: "project", systemPrompt: "Review", enabled: true }]);
-    vi.mocked(useSkills.useSkills).mockReturnValue({ skills: [{ id: "review-method", name: "review-method", description: "Review approach" }], loading: false });
-    const save = vi.spyOn(agentsLib, "saveAgent").mockImplementation(async (name, patch) => ({ name, source: "project", ...patch }));
+    const plain = { name: "plain", description: "review", source: "project", systemPrompt: "Review", enabled: true, canDraftNotes: true } as const;
+    mockRoster([plain, { ...plain, name: "disabled-expert", enabled: false }]);
+    const save = vi.spyOn(agentsLib, "saveNoteDefaultExpert").mockImplementation(async (_project, expert) => expert);
     render(<SubagentsPanel />);
-    await userEvent.click(await screen.findByRole("button", { name: "Edit plain" }));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Note drafting skill" }), "review-method");
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith("plain", expect.objectContaining({ noteSkill: "review-method" })));
+    const selector = await screen.findByRole("combobox", { name: "Default note expert" });
+    expect(screen.queryByRole("option", { name: "disabled-expert" })).toBeNull();
+    await userEvent.selectOptions(selector, "plain");
+    await waitFor(() => expect(selector).toHaveValue("plain"));
+    expect(save).toHaveBeenCalledWith("p1", "plain");
+    await userEvent.selectOptions(selector, "");
+    await waitFor(() => expect(selector).toHaveValue(""));
+    expect(save).toHaveBeenLastCalledWith("p1", null);
   });
 });
 
@@ -141,7 +147,7 @@ describe("SubagentsPanel confirmations and defaults", () => {
   it("asks before deleting a specialist", async () => {
     mockProject();
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([
+    mockRoster([
       { name: "plain", description: "no memory", source: "project", systemPrompt: "y", enabled: true },
     ]);
     const remove = vi.spyOn(agentsLib, "deleteAgent").mockResolvedValue();
@@ -157,7 +163,7 @@ describe("SubagentsPanel confirmations and defaults", () => {
   it("asks before restoring the default roster", async () => {
     mockProject();
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([]);
+    mockRoster([]);
     const restore = vi.spyOn(agentsLib, "restoreDefaultAgents").mockResolvedValue([]);
     render(<SubagentsPanel />);
     await userEvent.click(await screen.findByRole("button", { name: /restore defaults/i }));
@@ -169,7 +175,7 @@ describe("SubagentsPanel confirmations and defaults", () => {
   it("saves the specialists' default model from a typed id", async () => {
     mockProject();
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([]);
+    mockRoster([]);
     const save = vi.spyOn(agentsLib, "saveSpecialistDefaultModel").mockImplementation(async (model) => model);
     render(<SubagentsPanel />);
     await userEvent.click(
@@ -181,7 +187,7 @@ describe("SubagentsPanel confirmations and defaults", () => {
 
   it("commits the watchdog cadence on blur, not per keystroke", async () => {
     mockProject();
-    vi.spyOn(agentsLib, "getAgents").mockResolvedValue([]);
+    mockRoster([]);
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog({ enabled: true }));
     const save = vi
       .spyOn(agentsLib, "saveWatchdogSettings")

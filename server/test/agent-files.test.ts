@@ -35,7 +35,6 @@ describe("agent markdown", () => {
       systemPromptMode: "replace" as const,
       inheritProjectContext: false,
       inheritSkills: true,
-      noteSkill: "scientific-result-note",
       systemPrompt: "You are a reviewer.\n\nBe thorough.",
     };
     const parsed = parseAgentMarkdown(serializeAgentMarkdown(original), "fallback", "project");

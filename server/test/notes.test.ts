@@ -168,31 +168,18 @@ describe("project note pages", () => {
     } finally { await app.close(); }
   });
 
-  it("reads existing note pages as the new schema and keeps their bodies, citations and revisions", async () => {
+  it("skips unsupported note formats without hiding current notes", async () => {
     const id = "01234567-0123-0123-0123-0123456789ab";
-    const source = { kind: "task", sessionId: task, label: "Original task", excerpt: "" };
-    const legacy = { id, type: "general", typeVersion: 1, organizer: "Created manually", sources: [source], revisions: [
-      { title: "Version one", body: "Previous overview", version: 1, savedAt: 100, fields: {}, status: "saved" },
-      { title: "Version two", body: "Latest overview", version: 2, savedAt: 200, fields: {}, status: "saved" },
-    ] };
     fs.mkdirSync(pageDir, { recursive: true });
-    const file = path.join(pageDir, id + ".json");
-    fs.writeFileSync(file, JSON.stringify(legacy));
+    fs.writeFileSync(path.join(pageDir, id + ".json"), JSON.stringify({
+      id, schemaVersion: 2, type: "note", typeVersion: 1, organizer: "Created manually", sources: [],
+      revisions: [{ version: 1, title: "Old page", summary: "Old overview", fields: {}, status: "saved", savedAt: 1 }],
+    }));
     const app = await notesApp();
     try {
-      const url = "/notes/" + id;
-      const loaded = (await app.inject({ url })).json<NotePage>();
-      expect(loaded).toMatchObject({ schemaVersion: 3, type: "note", sources: [{ ...source, id: "s1" }] });
-      expect(loaded.revisions.map((revision) => revision.summary)).toEqual(["Previous overview", "Latest overview"]);
-      expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual(legacy);
-      expect((await app.inject({ url: "/notes?q=latest%20overview" })).json().pages).toMatchObject([{ id, type: "note" }]);
-      const revised = await app.inject({ method: "PATCH", url, payload: {
-        action: "edit", expectedVersion: 2, title: "Version three", summary: "Updated overview", fields: {},
-      } });
-      expect(revised.statusCode).toBe(200);
-      const persisted = JSON.parse(fs.readFileSync(file, "utf8"));
-      expect(persisted).toEqual(revised.json());
-      expect(persisted.revisions.slice(0, 2)).toEqual(loaded.revisions);
+      const current = (await app.inject({ method: "POST", url: "/notes", payload: { title: "Current page" } })).json<NotePage>();
+      expect((await app.inject({ url: `/notes/${id}` })).statusCode).toBe(422);
+      expect((await app.inject({ url: "/notes" })).json()).toMatchObject({ pages: [{ id: current.id }], unavailableCount: 1 });
     } finally { await app.close(); }
   });
 
@@ -236,44 +223,19 @@ describe("project note pages", () => {
     } finally { await app.close(); }
   });
 
-  it("omits the legacy timeline from note responses and preserves recorded events on disk after editing", async () => {
-    const id = "01234567-0123-0123-0123-0123456789ab";
-    const timeline = [{ id: "0".repeat(32), summary: "Historical event", sourceIds: [], recordedAt: 100 }];
-    const original = { title: "Earlier page", summary: "Previous summary", timeline, version: 1, savedAt: 100, fields: {}, status: "saved" };
-    const legacy = { id, schemaVersion: 2, type: "note", typeVersion: 1, organizer: "Created manually", sources: [], revisions: [original] };
-    fs.mkdirSync(pageDir, { recursive: true });
-    const file = path.join(pageDir, id + ".json");
-    fs.writeFileSync(file, JSON.stringify(legacy));
-    const app = await notesApp();
-    try {
-      const url = "/notes/" + id;
-      const page = (await app.inject({ url })).json<NotePage>();
-      expect(page.schemaVersion).toBe(3);
-      expect(page.revisions[0]).not.toHaveProperty("timeline");
-      const revised = await app.inject({ method: "PATCH", url, payload: {
-        action: "edit", expectedVersion: 1, title: "Earlier page", summary: "Updated summary", fields: {},
-      } });
-      expect(revised.statusCode).toBe(200);
-      const persisted = JSON.parse(fs.readFileSync(file, "utf8"));
-      expect(persisted.revisions[0]).toEqual(original);
-      expect(persisted.revisions[1]).not.toHaveProperty("timeline");
-      expect(revised.json<NotePage>().revisions[0]).not.toHaveProperty("timeline");
-    } finally { await app.close(); }
-  });
-
   it("persists typed pages, searches full content, and keeps prior revisions across a fresh app", async () => {
     writeTask(task);
     writeTask("notes-other-source");
     const research = createNotePage("default", {
       type: "observation", organizer: "Research organizer", title: "Observed scope change",
-      body: "a".repeat(400) + " hidden searchable phrase", fields: { scope: "After exclusions" },
+      summary: "a".repeat(400) + " hidden searchable phrase", fields: { scope: "After exclusions" },
       sources: [
         { kind: "message", sessionId: task, entryId: "evidence", label: "First task", excerpt: "The scope changed." },
         { kind: "result", sessionId: "notes-other-source", toolCallId: "result-card", label: "Second task", excerpt: "Saved card" },
       ],
     });
     const mapping = createNotePage("default", {
-      type: "mappingRule", organizer: "Data organizer", title: "Diagnosis mapping", body: "", fields: { sourceField: "code" },
+      type: "mappingRule", organizer: "Data organizer", title: "Diagnosis mapping", summary: "", fields: { sourceField: "code" },
       sources: [{ kind: "file", path: "mapping.csv", label: "Source table", excerpt: "code,target" }],
     });
 
@@ -288,7 +250,7 @@ describe("project note pages", () => {
       ]));
       const search = await first.inject({ url: "/notes?q=hidden%20searchable" });
       expect(search.json().pages.map((page: { id: string }) => page.id)).toEqual([research.id]);
-      const update = { action: "edit", expectedVersion: 1, title: "Revised finding", body: "", fields: { scope: "Confirmed" } };
+      const update = { action: "edit", expectedVersion: 1, title: "Revised finding", summary: "", fields: { scope: "Confirmed" } };
       const url = "/notes/" + research.id;
       const writes = await Promise.all([
         first.inject({ method: "PATCH", url, payload: update }),
@@ -306,7 +268,7 @@ describe("project note pages", () => {
       expect(page.revisions.map((revision) => revision.title)).toEqual(["Observed scope change", "Revised finding", "Revised finding"]);
       expect(page.sources).toEqual(research.sources);
       const invalid = await reopened.inject({ method: "PATCH", url: "/notes/" + research.id, payload: {
-        action: "edit", expectedVersion: 3, title: "Wrong type", body: "", fields: { sourceField: "code" },
+        action: "edit", expectedVersion: 3, title: "Wrong type", summary: "", fields: { sourceField: "code" },
       } });
       expect(invalid.statusCode).toBe(400);
     } finally { await reopened.close(); }
@@ -342,7 +304,7 @@ describe("project note pages", () => {
 
   it("rejects foreign scope, unknown anchors, and paths that are not visible", async () => {
     writeTask(task);
-    const note = { type: "hypothesis", organizer: "Test", title: "Scope", body: "", fields: {} };
+    const note = { type: "hypothesis", organizer: "Test", title: "Scope", summary: "", fields: {} };
     const badMessage = { kind: "message", sessionId: task, entryId: "missing", label: "Message", excerpt: "" };
     expect(() => createNotePage("default", { ...note, sources: [badMessage] })).toThrow("Source message is unavailable");
     expect(() => createNotePage("default", { ...note, sources: [{ kind: "file", path: ".kady/file", label: "Hidden", excerpt: "" }] }))

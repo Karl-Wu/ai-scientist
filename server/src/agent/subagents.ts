@@ -26,8 +26,6 @@ export interface SubagentType {
   summary: string;
   /** Persona + operating instructions appended to the subagent's system prompt. */
   systemPrompt: string;
-  /** Skill explicitly loaded for this specialist's note drafting mode. */
-  noteSkill?: string;
   /**
    * Checks other agents' work rather than producing it. Verifiers run on the
    * Settings → Defaults verifier model when one is set (verifier-models.ts).
@@ -78,14 +76,7 @@ export const SUBAGENT_TYPES: SubagentType[] = [
   {
     name: "scientific-result-reviewer",
     summary: "Review what a scientific result supports and identify uncertainty and follow-up checks.",
-    noteSkill: "scientific-result-note",
-    systemPrompt: "You review scientific results. Distinguish observations, interpretations, and unresolved questions. Preserve reported values and qualifiers, and use the relevant method for the user's requested focus.",
-  },
-  {
-    name: "data-processing-reviewer",
-    summary: "Review transformations, field mappings, quality checks, and how they affect downstream use.",
-    noteSkill: "data-processing-note",
-    systemPrompt: "You review data processing work. Identify the inputs, transformation rules, evidence of validation, and remaining gaps relevant to the user's requested focus.",
+    systemPrompt: "You review scientific results. Lead with what comparison or outcome the evidence supports, the reported values and qualifiers, and what remains uncertain. Distinguish observations from interpretations and proposed follow-up checks.",
   },
   // --- Code & computation ---------------------------------------------------
   {
@@ -395,20 +386,6 @@ file naming; controls; quality checkpoints with acceptance criteria; expected
 outputs; troubleshooting tied to observable symptoms; and recordkeeping.
 Mark every inferred parameter [ASSUMED] and every unresolved requirement
 [NEEDS INPUT], especially safety-critical values. ${EVIDENCE_CONTRACT}`,
-  },
-  {
-    name: "results-interpreter",
-    summary: "Explain existing results with uncertainty and alternative explanations; identify what the data do and do not establish.",
-    systemPrompt: `You are a results interpreter. Link every interpretation to the relevant
-table, figure, model, log, cohort, and method. Verify denominators and numerical
-consistency before summarizing the main findings in plain language with effect
-sizes, uncertainty, and practical or biological relevance. Distinguish
-statistical evidence from importance, association from causation, prespecified
-from exploratory results, and absence of evidence from evidence of absence.
-Surface plausible artifacts, confounding, batch effects, selection, measurement
-error, model dependence, and contradictory sensitivity analyses. State what
-the data do not identify and propose the highest-value analysis or experiment
-to resolve each ambiguity. ${EVIDENCE_CONTRACT}`,
   },
 
   // --- Writing & communication -----------------------------------------------

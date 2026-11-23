@@ -24,7 +24,7 @@ beforeEach(() => {
   localStorage.setItem(LOCALE_STORAGE_KEY, "zh-CN");
   vi.spyOn(caps, "getAllSkills").mockResolvedValue({ scope: "project", enabled: [], disabled: [], problems: [], shadowed: [] });
   vi.spyOn(caps, "listPromptTemplates").mockResolvedValue([{ name: "qc", description: "Original research instructions", scope: "project" }]);
-  vi.spyOn(agents, "getAgents").mockResolvedValue([]);
+  vi.spyOn(agents, "getAgentRoster").mockResolvedValue({ agents: [], noteDefaultExpert: null });
   vi.spyOn(agents, "getSpecialistDefaultModel").mockResolvedValue(null);
   vi.spyOn(agents, "getWatchdogSettings").mockResolvedValue({ enabled: false, model: "", thinking: "", cadenceEveryNTools: null, severityThreshold: "concern", children: false, watchdogMd: true, stalemateRepeats: 3, metered: true });
   vi.spyOn(mcp, "getMcpListing").mockResolvedValue({ mcpServers: {}, shared: [] });

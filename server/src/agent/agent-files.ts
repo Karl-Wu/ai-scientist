@@ -20,7 +20,6 @@ import { createRequire } from "node:module";
 import type { ProjectPaths } from "../projects.ts";
 import { KADY_PI_AGENT_DIR } from "../config.ts";
 import { seedSubagentResources } from "./subagent-resources.ts";
-import { SKILL_NAME_RE } from "./skills.ts";
 import { SUBAGENT_TYPES } from "./subagents.ts";
 import { piSettingsPath, readPiSettings, writePiSettings, type ToggleResult } from "./capability-state.ts";
 
@@ -44,8 +43,8 @@ export function subagentsPackageDir(): string {
 
 export const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
-/** Names taken by static `/agents/<name>` routes (`GET/PUT /agents/defaults`). */
-export const RESERVED_AGENT_NAMES: ReadonlySet<string> = new Set(["defaults"]);
+/** Names taken by static `/agents/<name>` routes. */
+export const RESERVED_AGENT_NAMES: ReadonlySet<string> = new Set(["defaults", "note-default"]);
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 export interface AgentFile {
@@ -62,7 +61,6 @@ export interface AgentFile {
   systemPromptMode?: "append" | "replace";
   inheritProjectContext?: boolean;
   inheritSkills?: boolean;
-  noteSkill?: string;
   /**
    * pi-subagents per-agent persistent memory: `<project>/.pi/agent-memory/<path>/MEMORY.md`
    * (scope project) or `~/.kady/pi-agent/agent-memory/<path>/MEMORY.md` (scope user),
@@ -243,7 +241,7 @@ const LEGACY_SEEDED_ROSTER: readonly string[] = [
   "reproducibility-auditor", "pipeline-engineer", "data-visualizer", "simulation-reviewer",
   "literature-researcher", "citation-checker", "fact-checker", "methodology-reviewer",
   "peer-reviewer", "hypothesis-generator", "experiment-designer", "protocol-writer",
-  "results-interpreter", "manuscript-editor", "abstract-writer", "ethics-reviewer",
+  "manuscript-editor", "abstract-writer", "ethics-reviewer",
 ];
 
 function readSeededNames(paths: ProjectPaths): Set<string> {
@@ -271,9 +269,13 @@ const KNOWN_KEYS = new Set([
   "systemPromptMode",
   "inheritProjectContext",
   "inheritSkills",
-  "noteSkill",
   "memory",
 ]);
+
+function extraFrontmatter(fields: Record<string, unknown> = {}): Record<string, unknown> | undefined {
+  const entries = Object.entries(fields).filter(([key]) => !KNOWN_KEYS.has(key));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
 
 export function parseAgentMarkdown(
   text: string,
@@ -287,7 +289,6 @@ export function parseAgentMarkdown(
   const body = m ? m[2] : text;
   const scalar = (v: unknown): string | undefined => typeof v === "string" ? v : undefined;
   const bool = (v: unknown) => typeof v === "boolean" ? v : undefined;
-  const extra = Object.fromEntries(Object.entries(fm).filter(([k]) => !KNOWN_KEYS.has(k)));
   const mode = fm.systemPromptMode;
   return {
     name: scalar(fm.name) || fallbackName,
@@ -299,9 +300,8 @@ export function parseAgentMarkdown(
     systemPromptMode: mode === "append" || mode === "replace" ? mode : undefined,
     inheritProjectContext: bool(fm.inheritProjectContext),
     inheritSkills: bool(fm.inheritSkills),
-    noteSkill: scalar(fm.noteSkill),
     memory: parseAgentMemory(fm.memory),
-    extra: Object.keys(extra).length > 0 ? extra : undefined,
+    extra: extraFrontmatter(fm),
     systemPrompt: body.trim(),
   };
 }
@@ -355,6 +355,10 @@ export function isExternalCliAgent(agent: Pick<AgentFile, "extra">): boolean {
 }
 
 /** Agents bundled inside the pi-subagents package (read-only). */
+export function canDraftNotes(agent: AgentFile): boolean {
+  return agent.enabled === true && !isExternalCliAgent(agent);
+}
+
 export function listBuiltinAgents(): AgentFile[] {
   try {
     const dir = path.join(subagentsPackageDir(), "agents");
@@ -406,8 +410,7 @@ export function writeProjectAgent(
   if (patch.thinking && !THINKING_LEVELS.includes(patch.thinking as never)) {
     throw new Error(`thinking must be one of: ${THINKING_LEVELS.join(", ")}`);
   }
-  if (patch.noteSkill && !SKILL_NAME_RE.test(patch.noteSkill)) throw new Error("Invalid note skill name");
-  const agent: AgentFile = { ...patch, name, source: "project" };
+  const agent: AgentFile = { ...patch, name, source: "project", extra: extraFrontmatter(patch.extra) };
   const enabledFile = path.join(agentsDir(paths), `${name}.md`);
   const disabledFile = path.join(agentsDisabledDir(paths), `${name}.md`);
   // Preserve disabled state when editing an agent that currently lives in the
@@ -487,7 +490,6 @@ function rosterMarkdown(type: (typeof SUBAGENT_TYPES)[number]): string {
     systemPromptMode: "append",
     inheritProjectContext: true,
     inheritSkills: true,
-    noteSkill: type.noteSkill,
     systemPrompt: type.systemPrompt,
   });
 }

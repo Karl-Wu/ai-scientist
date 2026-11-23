@@ -135,3 +135,21 @@ describe("GET/PUT /agents/defaults", () => {
     expect(listed.agents.map((a: { name: string }) => a.name)).toContain("my-reviewer");
   });
 });
+
+it("keeps the default note expert project-scoped and accepts only eligible experts", async () => {
+  const expert = "scientific-result-reviewer";
+  const otherId = createProject({ name: "Other note project" }).id;
+  const roster = (projectId = PROJECT) => app.inject({ url: "/agents", headers: { "x-project-id": projectId } });
+  const set = (name: string | null) => app.inject({ method: "PUT", url: "/agents/note-default", headers, payload: { expert: name } });
+  expect((await set(expert)).json()).toEqual({ noteDefaultExpert: expert });
+  expect((await roster()).json()).toMatchObject({
+    noteDefaultExpert: expert,
+    agents: expect.arrayContaining([expect.objectContaining({ name: expert, canDraftNotes: true })]),
+  });
+  expect((await roster(otherId)).json().noteDefaultExpert).toBeNull();
+  expect((await set("missing-expert")).statusCode).toBe(409);
+  await app.inject({ method: "POST", url: "/agents/" + expert + "/disable", headers, payload: {} });
+  expect((await roster()).json().agents.find((agent: { name: string }) => agent.name === expert).canDraftNotes).toBe(false);
+  expect((await set(expert)).statusCode).toBe(409);
+  expect((await set(null)).json()).toEqual({ noteDefaultExpert: null });
+});

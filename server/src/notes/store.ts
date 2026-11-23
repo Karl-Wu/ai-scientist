@@ -7,23 +7,10 @@ import { apiRelative, isUserVisible, safePath, SandboxError } from "../sandbox-f
 import { findSessionFile, readEntries, type SessionEntryRow } from "../agent/session-export.ts";
 import { isValidSessionId } from "../agent/notebook-store.ts";
 import { AGENT_NAME_RE } from "../agent/agent-files.ts";
-import { SKILL_NAME_RE } from "../agent/skills.ts";
 import { matchesNoteAnchor, parseNoteAnchor, resolveNoteAnchor } from "./source.ts";
 import {
-  NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteRevision, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
+  NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
 } from "../../../web/src/lib/note-pages.ts";
-
-// Keep previously recorded events in their original on-disk revisions.
-type StoredRevision = NoteRevision & { timeline?: unknown };
-type StoredPage = Omit<NotePage, "revisions"> & { revisions: StoredRevision[] };
-type TimelinePage = Omit<StoredPage, "schemaVersion"> & { schemaVersion: 2 };
-
-type LegacyPage = Omit<NotePage, "schemaVersion" | "type" | "sources" | "revisions"> & {
-  schemaVersion?: undefined;
-  type: Exclude<NoteType, "note"> | "general";
-  sources: NoteSource[];
-  revisions: (Omit<NoteRevision, "summary"> & { body: string })[];
-};
 
 function notePagesDirectory(paths: ProjectPaths) {
   return safePath(path.join(paths.kadyDir, "note-pages"), paths.sandbox);
@@ -50,14 +37,8 @@ function normalizeDraftCredit(input: unknown): NoteDraftCredit | undefined {
   if (input === undefined) return undefined;
   const raw = record(input, "note draft credit");
   const expert = text(raw.expert, "expert name", 64, true);
-  const skill = record(raw.skill, "draft skill");
-  const name = text(skill.name, "skill name", 64, true);
-  const scope = skill.scope;
-  const sha256 = text(skill.sha256, "skill digest", 64, true);
-  if (!AGENT_NAME_RE.test(expert) || !SKILL_NAME_RE.test(name) || (scope !== "project" && scope !== "global") || !/^[a-f0-9]{64}$/.test(sha256)) {
-    throw new SandboxError(400, "Invalid note draft credit");
-  }
-  return { expert, skill: { name, scope, sha256 } };
+  if (!AGENT_NAME_RE.test(expert)) throw new SandboxError(400, "Invalid note draft credit");
+  return { expert };
 }
 
 function normalizeContent(raw: Record<string, unknown>, type: NoteType): NoteContent {
@@ -68,7 +49,7 @@ function normalizeContent(raw: Record<string, unknown>, type: NoteType): NoteCon
   }
   return {
     title: text(raw.title, "title", 300, true),
-    summary: text(raw.summary === undefined ? raw.body : raw.summary, "current summary", 32_000),
+    summary: text(raw.summary, "current summary", 32_000),
     fields: Object.fromEntries(Object.keys(fields).map((key) => [key, text(fields[key], key, 4_000)])),
   };
 }
@@ -138,7 +119,7 @@ function normalizeSource(
   }
 }
 
-function readPage(dir: string, id: string): StoredPage {
+function readPage(dir: string, id: string): NotePage {
   if (!NOTE_PAGE_ID.test(id)) throw new SandboxError(404, "Note page not found");
   let raw: string;
   try {
@@ -149,28 +130,16 @@ function readPage(dir: string, id: string): StoredPage {
   }
 
   try {
-    const saved = JSON.parse(raw) as StoredPage | TimelinePage | LegacyPage;
-    const type = saved.schemaVersion === undefined && saved.type === "general" ? "note" : saved.type;
-    if (saved.id !== id || !Object.hasOwn(NOTE_TYPES, type) || saved.typeVersion !== 1 ||
-        typeof saved.organizer !== "string" || !Array.isArray(saved.sources) || !Array.isArray(saved.revisions) || !saved.revisions.length) {
+    const page = JSON.parse(raw) as NotePage;
+    if (page.schemaVersion !== 3 || page.id !== id || !Object.hasOwn(NOTE_TYPES, page.type) || page.typeVersion !== 1 ||
+        typeof page.organizer !== "string" || !Array.isArray(page.sources) || !Array.isArray(page.revisions) || !page.revisions.length) {
       throw new Error("Invalid saved note page");
     }
-    if (saved.deletedAt !== undefined && (!Number.isSafeInteger(saved.deletedAt) || saved.deletedAt <= 0)) {
+    if (page.deletedAt !== undefined && (!Number.isSafeInteger(page.deletedAt) || page.deletedAt <= 0)) {
       throw new Error("Invalid note deletion time");
     }
-    if (saved.sources.some((source) => !source || typeof source.label !== "string" || !Object.hasOwn(NOTE_SOURCE_LABELS, source.kind))) {
+    if (page.sources.some((source) => !source || typeof source.label !== "string" || !Object.hasOwn(NOTE_SOURCE_LABELS, source.kind))) {
       throw new Error("Invalid saved note source");
-    }
-    let page: StoredPage;
-    if (saved.schemaVersion === undefined) {
-      page = {
-        ...saved, schemaVersion: 3, type: type as NoteType, sources: saved.sources.map(cite),
-        revisions: saved.revisions.map(({ body, ...revision }) => ({ ...revision, summary: body })),
-      };
-    } else if (saved.schemaVersion === 2 || saved.schemaVersion === 3) {
-      page = { ...saved, schemaVersion: 3 };
-    } else {
-      throw new Error("Unsupported note page schema version");
     }
     if (page.revisions.some((revision) => !revision || typeof revision.title !== "string" || typeof revision.summary !== "string" ||
         !Number.isSafeInteger(revision.version) || !Number.isFinite(revision.savedAt) || !Object.hasOwn(NOTE_STATUS_LABELS, revision.status) ||
@@ -184,21 +153,13 @@ function readPage(dir: string, id: string): StoredPage {
   }
 }
 
-function publicRevision({ timeline: _legacyTimeline, ...revision }: StoredRevision): NoteRevision {
-  return revision;
-}
-
-function publicPage(page: StoredPage): NotePage {
-  return { ...page, revisions: page.revisions.map(publicRevision) };
-}
-
 function sourceLink({ id: _id, excerpt: _excerpt, ...link }: NoteCitation): NoteSourceLink {
   return link;
 }
 
-function savePage(dir: string, page: StoredPage): NotePage {
+function savePage(dir: string, page: NotePage): NotePage {
   atomicJson(path.join(dir, page.id + ".json"), page);
-  return publicPage(page);
+  return page;
 }
 
 // Structured pages from server-side writers require citations and start pending review.
@@ -231,9 +192,8 @@ export function createManualNotePage(projectId: string, input: unknown): NotePag
   const taskId = task && text(task.id, "source task", 200, true);
   const label = task ? text(task.title ?? "", "source title", 300).trim() || "Source task" : undefined;
   const savedAt = Date.now();
-  const summary = raw.summary === undefined ? raw.body : raw.summary;
   const draftCredit = normalizeDraftCredit(raw.draftCredit);
-  const content = normalizeContent({ title: raw.title, summary: summary === undefined ? "" : summary, fields: {} }, "note");
+  const content = normalizeContent({ title: raw.title, summary: raw.summary === undefined ? "" : raw.summary, fields: {} }, "note");
   let id: string = randomUUID();
   if (raw.requestId !== undefined) {
     const key = text(raw.requestId, "note request id", 32);
@@ -241,7 +201,7 @@ export function createManualNotePage(projectId: string, input: unknown): NotePag
     if (!parts) throw new SandboxError(400, "Invalid note request id");
     // Reuse the page ID when the browser retries after a lost response.
     id = parts.slice(1).join("-");
-    let existing: StoredPage | undefined;
+    let existing: NotePage | undefined;
     try {
       existing = readPage(dir, id);
     } catch (error) {
@@ -253,7 +213,7 @@ export function createManualNotePage(projectId: string, input: unknown): NotePag
       const sameSource = anchor ? matchesNoteAnchor(source, anchor) : taskId
         ? source?.kind === "task" && source.sessionId === taskId && source.label === label : !source;
       if (first.status === "saved" && first.title === content.title && first.summary === content.summary &&
-          sameSource && JSON.stringify(first.draftCredit) === JSON.stringify(draftCredit)) return publicPage(existing);
+          sameSource && JSON.stringify(first.draftCredit) === JSON.stringify(draftCredit)) return existing;
       throw new SandboxError(409, "The request already created a different note page");
     }
   }
@@ -267,7 +227,7 @@ export function createManualNotePage(projectId: string, input: unknown): NotePag
 }
 
 export function getNotePage(projectId: string, id: string): NotePage {
-  return publicPage(readPage(notesDir(projectId), id));
+  return readPage(notesDir(projectId), id);
 }
 
 export function readNoteRevision(projectId: string, id: string, version: number) {
@@ -282,7 +242,7 @@ export function readNoteRevision(projectId: string, id: string, version: number)
   };
 }
 
-function* readProjectNotePages(dir: string): Generator<{ id: string; page?: StoredPage }> {
+function* readProjectNotePages(dir: string): Generator<{ id: string; page?: NotePage }> {
   let files: fs.Dirent[];
   try { files = fs.readdirSync(dir, { withFileTypes: true }); }
   catch (error) {
@@ -293,7 +253,7 @@ function* readProjectNotePages(dir: string): Generator<{ id: string; page?: Stor
     if (!file.name.endsWith(".json")) continue;
     const id = file.name.slice(0, -5);
     if (!NOTE_PAGE_ID.test(id)) continue;
-    let page: StoredPage | undefined;
+    let page: NotePage | undefined;
     try { if (file.isFile()) page = readPage(dir, id); }
     catch { /* Keep other pages readable when this one cannot be loaded. */ }
     yield { id, page };
@@ -304,7 +264,7 @@ export function exportNotePages(paths: ProjectPaths) {
   const pages: NotePage[] = [];
   const unavailablePageIds: string[] = [];
   for (const { id, page } of readProjectNotePages(notePagesDirectory(paths))) {
-    if (page) pages.push(publicPage(page));
+    if (page) pages.push(page);
     else unavailablePageIds.push(id);
   }
   return { pages, unavailablePageIds: unavailablePageIds.sort() };
@@ -345,21 +305,21 @@ export function updateNotePage(projectId: string, id: string, input: unknown): N
     if (typeof expectedDeletedAt !== "number" || !Number.isSafeInteger(expectedDeletedAt) || expectedDeletedAt <= 0) {
       throw new SandboxError(400, "Invalid note deletion time");
     }
-    if (page.deletedAt === undefined) return publicPage(page);
+    if (page.deletedAt === undefined) return page;
     if (expectedDeletedAt !== page.deletedAt) throw new SandboxError(409, "This note was deleted again");
     delete page.deletedAt;
     return savePage(dir, page);
   }
   if (raw.action !== "delete" && raw.action !== "review" && raw.action !== "edit") throw new SandboxError(400, "Invalid note action");
-  const last = publicRevision(page.revisions.at(-1)!);
+  const last = page.revisions.at(-1)!;
   if (raw.expectedVersion !== last.version) throw new SandboxError(409, "This note page has a newer revision");
   if (raw.action === "delete") {
-    if (page.deletedAt !== undefined) return publicPage(page);
+    if (page.deletedAt !== undefined) return page;
     page.deletedAt = Date.now();
     return savePage(dir, page);
   }
   if (page.deletedAt !== undefined) throw new SandboxError(410, "This note page was deleted");
-  if (raw.action === "review" && last.status !== "pending") return publicPage(page);
+  if (raw.action === "review" && last.status !== "pending") return page;
   const savedAt = Date.now();
   const content = raw.action === "edit" ? normalizeContent(raw, page.type) : last;
   page.revisions.push({

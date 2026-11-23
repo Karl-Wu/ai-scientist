@@ -24,17 +24,8 @@ export type NoteSourceLink = { label: string } & (
 export type NoteSource = NoteSourceLink & { excerpt: string };
 export type NoteCitation = NoteSource & { id: string };
 
-export const NOTE_INSTRUCTION_MAX_CHARS = 6_000;
-
-export interface NoteExpertOption {
-  name: string;
-  skill: string;
-  available: boolean;
-}
-
 export interface NoteDraftCredit {
   expert: string;
-  skill: { name: string; scope: "project" | "global"; sha256: string };
 }
 
 export type NoteAnchor =
@@ -87,6 +78,7 @@ export interface NoteDraft {
   summary: string;
   taskExcerptShortened: boolean;
   sourceExcerptShortened?: boolean;
+  checks?: { kind: "source" | "table" | "skill"; detail: string }[];
   draftCredit?: NoteDraftCredit;
 }
 

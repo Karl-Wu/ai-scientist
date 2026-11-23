@@ -65,7 +65,7 @@ it.each([
 ] as const)("keeps the $anchor.kind preview in place when cancelling or saving a note", async ({ anchor, title, summary, action }) => {
   const createNote = vi.fn((_request: unknown) => Response.json({ id: "saved-note" }, { status: 201 }));
   vi.mocked(apiFetch).mockImplementation(async (url, options) => {
-    if (url === "/notes/experts") return Response.json({ experts: [] });
+    if (url === "/agents") return Response.json({ agents: [] });
     if (url === "/notes" && options?.method === "POST") return createNote(JSON.parse(String(options.body)));
     throw new Error(`Unexpected request: ${url}`);
   });

@@ -12,11 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  NOTE_INSTRUCTION_MAX_CHARS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
-  type NoteContent, type NoteCreationSource, type NoteDraft, type NoteDraftCredit, type NoteExpertOption,
+  NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
+  type NoteContent, type NoteCreationSource, type NoteDraft, type NoteDraftCredit,
   type NoteListResult, type NotePage, type NoteRevision, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
 import { notifyNotePagesChanged, useNotePagesRevision } from "@/lib/note-events";
+import { getAgentRoster, type AgentFile } from "@/lib/agents";
 import { apiFetch } from "@/lib/projects";
 import { useCapabilitiesRevision } from "@/lib/capability-events";
 import { relativeTime } from "@/lib/locale-time";
@@ -300,68 +301,81 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
   const [error, setError] = useState<string>();
   const attempt = useRef<{ content: string; requestId: string } | undefined>(undefined);
   const [drafting, setDrafting] = useState(false);
+  const draftRequest = useRef<AbortController | null>(null);
   const [suggestion, setSuggestion] = useState<NoteDraft>();
   const [draftError, setDraftError] = useState<string>();
-  const [expert, setExpert] = useState("");
-  const [experts, setExperts] = useState<NoteExpertOption[]>([]);
+  const [expertChoice, setExpertChoice] = useState<string>();
+  const [defaultExpert, setDefaultExpert] = useState<string | null>(null);
+  const [experts, setExperts] = useState<AgentFile[]>([]);
+  const [expertsLoading, setExpertsLoading] = useState(true);
   const [expertListError, setExpertListError] = useState(false);
-  const [instructions, setInstructions] = useState("");
   const [draftCredit, setDraftCredit] = useState<NoteDraftCredit>();
   const capabilitiesRevision = useCapabilitiesRevision();
   const task = !source && includeTask ? sourceTask : undefined;
-  const selectedExpert = experts.find((option) => option.name === expert);
-  const canDraft = (!expert || selectedExpert?.available) && Boolean(title.trim() || summary.trim() || instructions.trim() || task || source || suggestion);
+  const selectedExpert = experts.find((option) => option.name === (expertChoice ?? defaultExpert));
+  const canDraft = !expertsLoading && selectedExpert && Boolean(summary.trim() || task || source);
   const busy = pending || drafting;
 
   useEffect(() => {
     const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await apiFetch("/notes/experts", { signal: controller.signal }, projectId);
-        if (!response.ok) throw new Error("Note expert lookup failed");
-        const { experts } = await response.json() as { experts: NoteExpertOption[] };
-        if (!controller.signal.aborted) {
-          setExperts(experts);
-          setExpertListError(false);
-        }
-      } catch {
-        if (!controller.signal.aborted) setExpertListError(true);
-      }
-    })();
+    setExpertsLoading(true);
+    getAgentRoster(projectId, controller.signal).then(({ agents, noteDefaultExpert }) => {
+      if (controller.signal.aborted) return;
+      setExperts(agents.filter((agent) => agent.enabled && agent.canDraftNotes).sort((a, b) => a.name.localeCompare(b.name)));
+      setDefaultExpert(noteDefaultExpert);
+      setExpertListError(false);
+    }).catch(() => {
+      if (controller.signal.aborted) return;
+      setExperts([]);
+      setExpertListError(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setExpertsLoading(false);
+    });
     return () => controller.abort();
   }, [projectId, capabilitiesRevision]);
 
-  async function draftWithAssistant() {
-    if (busy || !canDraft) return;
+  useEffect(() => () => draftRequest.current?.abort(), [projectId]);
+
+  async function draftWithExpert() {
+    if (busy || !canDraft || draftRequest.current) return;
+    const controller = new AbortController();
+    draftRequest.current = controller;
     setDrafting(true);
     setDraftError(undefined);
     try {
       const response = await apiFetch("/notes/draft", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, summary, instructions: instructions.trim() || undefined, expert: expert || undefined,
-          previousDraft: suggestion ? { title: suggestion.title, summary: suggestion.summary } : undefined,
+        body: JSON.stringify({ title, summary, expert: selectedExpert.name,
           taskId: task?.id, source: source?.anchor, model, locale }),
       }, projectId);
+      if (controller.signal.aborted) return;
       if (response.ok) {
-        setSuggestion(await response.json() as NoteDraft);
+        const draft = await response.json() as NoteDraft;
+        if (!controller.signal.aborted) setSuggestion(draft);
         return;
       }
       const messages: Record<number, string> = {
-        400: "Enter instructions, write some note text, or select a source with saved content.",
+        400: "Write note text or select a source with saved content.",
         401: "Connect a model provider to draft a note.",
         402: "The project spend limit has been reached.",
         403: "The selected note source is unavailable.",
-        404: source ? "The selected note source is unavailable." : "The referenced task or note assistant is unavailable.",
-        409: "The selected note expert or its skill is unavailable.",
+        404: "The selected note source is unavailable.",
+        409: "The selected expert is unavailable for note drafting.",
         415: "Add a description to draft a note from this file.",
-        422: "The selected note assistant model is unavailable.",
+        422: "The selected expert model is unavailable.",
+        503: "The model provider could not process this draft.",
+        504: "Note drafting timed out.",
       };
       setDraftError(messages[response.status] ?? "Could not generate a note draft.");
     } catch {
-      setDraftError("Could not generate a note draft.");
+      if (!controller.signal.aborted) setDraftError("Could not generate a note draft.");
     } finally {
-      setDrafting(false);
+      if (draftRequest.current === controller) {
+        draftRequest.current = null;
+        setDrafting(false);
+      }
     }
   }
 
@@ -410,46 +424,44 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
                   onChange={(event) => setSummary(event.target.value)} />
               </label>
             </fieldset>
-            <section className="space-y-3 rounded-md border p-3" aria-label={t("Note assistant")}>
-              <div className="space-y-2">
-                <label className="block space-y-1 text-xs font-medium">{t("Note expert")}
-                  <span className="relative block">
-                    <select className={cn(selectClass, "block w-full appearance-none truncate pr-8")} disabled={busy} value={expert} onChange={(event) => {
-                      setExpert(event.target.value);
+            <section className="space-y-3 rounded-md border p-3" aria-label={t("Draft with an expert")}>
+              <label className="block space-y-1 text-xs font-medium">{t("Note expert")}
+                <span className="relative block">
+                  <select className={cn(selectClass, "block w-full appearance-none truncate pr-8")}
+                    disabled={busy || expertsLoading} value={selectedExpert?.name ?? ""} onChange={(event) => {
+                      setExpertChoice(event.target.value);
                       setSuggestion(undefined);
                       setDraftError(undefined);
                     }}>
-                      <option value="">{t("General assistant")}</option>
-                      {expert && !selectedExpert && <option value={expert} disabled>{t(expert)} · {t("Unavailable")}</option>}
-                      {experts.map((option) => <option key={option.name} value={option.name} disabled={!option.available}>
-                        {t(option.name)}{!option.available ? ` · ${t("Unavailable")}` : ""}
-                      </option>)}
-                    </select>
-                    <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  </span>
-                </label>
-                {selectedExpert && <p className="text-xs text-muted-foreground">{t("Drafting skill: {skill}", { skill: selectedExpert.skill })}</p>}
-                {expertListError && <p className="text-xs text-muted-foreground">{t("Could not load note experts. You can still use the general assistant.")}</p>}
-                <label className="block space-y-1 text-xs font-medium">{t("Instructions for the expert (optional)")}
-                  <Textarea disabled={busy} rows={2} maxLength={NOTE_INSTRUCTION_MAX_CHARS} value={instructions}
-                    placeholder={t("For example, focus on the limitations and suggest one follow-up check.")}
-                    onChange={(event) => setInstructions(event.target.value)} />
-                </label>
-              </div>
-              <div className="space-y-1">
-                <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithAssistant()}>
-                  <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : suggestion ? "Redraft" : "Draft with assistant")}
+                    <option value="">{t(expertsLoading ? "Loading…" : "Select an expert")}</option>
+                    {experts.map((expert) => <option key={expert.name} value={expert.name}>{t(expert.name)}</option>)}
+                  </select>
+                  <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                </span>
+              </label>
+              {expertListError && <p role="alert" className="text-xs text-muted-foreground">{t("Could not load experts.")}</p>}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithExpert()}>
+                  <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : suggestion ? "Redraft" : "Draft with expert")}
                 </Button>
-                <p className="text-xs text-muted-foreground">{t(source?.anchor.kind === "file"
-                  ? "The assistant sends your input and a text excerpt when available. Add a description for other file formats."
-                  : source ? "The assistant sends your input and an excerpt of the selected source to the model."
-                  : "The assistant sends your input and excerpts from the referenced task to the model.")}</p>
+                {drafting && <Button type="button" size="sm" variant="ghost" onClick={() => draftRequest.current?.abort()}>
+                  {t("Cancel drafting")}
+                </Button>}
               </div>
               {draftError && <p role="alert" className="text-sm text-destructive">{t(draftError)}</p>}
               {suggestion && <div className="space-y-2 border-t pt-3">
                 <h3 className="text-sm font-medium">{t("Suggested draft")}</h3>
                 {suggestion.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
                 {suggestion.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
+                {Boolean(suggestion.checks?.length) && <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">{t("Expert checks")}</summary>
+                  <ul className="mt-1 space-y-1 pl-3">
+                    {suggestion.checks?.map((check) => <li key={check.kind + check.detail}>{check.kind === "source"
+                      ? t("Read source lines {range}", { range: check.detail })
+                      : check.kind === "table" ? t("Checked {count} table rows", { count: check.detail })
+                        : t("Read skill {skill}", { skill: check.detail })}</li>)}
+                  </ul>
+                </details>}
                 <div className="max-h-60 space-y-1 overflow-auto rounded-md bg-muted/50 p-3 text-sm">
                   <p className="break-words font-medium">{suggestion.title}</p>
                   <p className="whitespace-pre-wrap break-words">{suggestion.summary}</p>
@@ -724,8 +736,8 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, onDelete
               <span>{t(NOTE_STATUS_LABELS[revision.status])}</span>
               {page.deletedAt !== undefined && <span className="rounded bg-muted px-1.5 py-0.5">{t("Deleted")}</span>}
               <span>{t(page.organizer)}</span>
-              {revision.draftCredit && <span title={revision.draftCredit.skill.sha256}>
-                {t("Drafted with {expert}", { expert: t(revision.draftCredit.expert) })} · {revision.draftCredit.skill.name}
+              {revision.draftCredit && <span>
+                {t("Drafted with {expert}", { expert: t(revision.draftCredit.expert) })}
               </span>}
             </div>
             {editing ? <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save("edit"); }}>

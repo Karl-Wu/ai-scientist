@@ -41,6 +41,7 @@ export interface ProjectMeta {
   archived: boolean;
   /** Hard USD cap on cumulative cost across the project; null = unlimited. */
   spendLimitUsd: number | null;
+  noteDefaultExpert?: string;
 }
 
 export interface ProjectPaths {
@@ -92,6 +93,7 @@ function metaFromDict(data: Record<string, unknown>): ProjectMeta {
     updatedAt: String(data.updatedAt ?? ""),
     archived: Boolean(data.archived ?? false),
     spendLimitUsd: spendLimit,
+    ...(typeof data.noteDefaultExpert === "string" ? { noteDefaultExpert: data.noteDefaultExpert } : {}),
   };
 }
 
@@ -301,6 +303,7 @@ export interface UpdateProjectInput {
   tags?: string[];
   archived?: boolean;
   spendLimitUsd?: number | null | typeof UNSET;
+  noteDefaultExpert?: string | null;
 }
 
 export function updateProject(projectId: string, patch: UpdateProjectInput): ProjectMeta {
@@ -321,6 +324,8 @@ export function updateProject(projectId: string, patch: UpdateProjectInput): Pro
       meta.spendLimitUsd = v;
     }
   }
+  if (patch.noteDefaultExpert === null) delete meta.noteDefaultExpert;
+  else if (patch.noteDefaultExpert !== undefined) meta.noteDefaultExpert = patch.noteDefaultExpert;
   meta.updatedAt = nowIso();
 
   const paths = resolvePaths(projectId);

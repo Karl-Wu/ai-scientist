@@ -1,151 +1,144 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, type AssistantMessage, type ToolCall } from "@earendil-works/pi-ai";
+import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { expect, it, vi } from "vitest";
 import { createProject, resolvePaths } from "../src/projects.ts";
-import { writeProjectAgent } from "../src/agent/agent-files.ts";
-import { disableSkill } from "../src/agent/skills.ts";
+import { setSpecialistEnabled, writeProjectAgent } from "../src/agent/agent-files.ts";
 import { generateNoteDraft, NOTE_DRAFT_SESSION_ID } from "../src/notes/draft.ts";
-import { listNoteExperts } from "../src/notes/experts.ts";
 import { createManualNotePage, getNotePage, listNotePages } from "../src/notes/store.ts";
 import { sessionCostSummary } from "../src/cost/ledger.ts";
 
-const fakeMessage = (text: string): AssistantMessage => ({
-  role: "assistant", api: "openai-completions", provider: "openrouter", model: "test",
-  content: [{ type: "text", text }], timestamp: 0, stopReason: "stop",
-  usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 120,
-    cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
-});
+const expert = "scientific-result-reviewer";
 
-it("uses the selected expert model, bound skill, instructions and prior draft as separate inputs", async () => {
+function reply(content: AssistantMessage["content"], stopReason: "stop" | "toolUse" | "error" = "stop") {
+  const message: AssistantMessage = {
+    role: "assistant", api: "openai-completions", provider: "openrouter", model: "test",
+    content, timestamp: 0, stopReason,
+    usage: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, totalTokens: 120,
+      cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+  };
+  const stream = createAssistantMessageEventStream();
+  if (stopReason === "error") stream.push({ type: "error", reason: stopReason, error: message });
+  else stream.push({ type: "done", reason: stopReason, message });
+  stream.end(message);
+  return stream;
+}
+
+const draftReply = (summary = "A grounded draft") => reply([{ type: "text", text: JSON.stringify({ title: "Review", summary }) }]);
+const tool = (name: string, args: ToolCall["arguments"] = {}): ToolCall => ({ id: name, type: "toolCall", name, arguments: args });
+
+it("runs the selected specialist with its model and executes source, table and enabled skill tools without a chat", async () => {
   const project = createProject({ name: "Note experts" });
   const paths = resolvePaths(project.id);
-  expect(listNoteExperts(project.id)).toEqual(expect.arrayContaining([
-    { name: "scientific-result-reviewer", skill: "scientific-result-note", available: true },
-    { name: "data-processing-reviewer", skill: "data-processing-note", available: true },
-  ]));
   const skill = path.join(paths.skillsDir, "custom-review");
   fs.mkdirSync(path.join(skill, "references"), { recursive: true });
-  const reviewSkill = "---\nname: custom-review\ndescription: A review checklist\n---\nUse the [checklist](references/check.md).";
-  fs.writeFileSync(path.join(skill, "SKILL.md"), reviewSkill);
-  const reference = path.join(skill, "references", "check.md");
-  fs.writeFileSync(reference, "Check calibration before interpretation.");
+  fs.writeFileSync(path.join(skill, "SKILL.md"), "---\nname: custom-review\ndescription: A review checklist\n---\nRead references/check.md.");
+  fs.writeFileSync(path.join(skill, "references", "check.md"), "Check calibration before interpretation.");
+  fs.writeFileSync(path.join(paths.sandbox, "mapping.csv"), 'source,target\n"alpha,beta",first\ngamma,\n');
+  fs.writeFileSync(path.join(paths.sandbox, "unrelated.txt"), "Private neighboring file");
   writeProjectAgent(paths, "calibration-reviewer", {
-    description: "Calibration", systemPrompt: "Focus on calibration fidelity.", noteSkill: "custom-review", model: "ollama/expert-model",
+    description: "Calibration", systemPrompt: "Focus on calibration fidelity.", inheritSkills: true, model: "ollama/expert-model",
   });
-  const complete = vi.fn(async (_model: unknown, _context: Context) => fakeMessage(JSON.stringify({ title: "Review", summary: "Generated review" })));
-  const initial = await generateNoteDraft(project.id, { instructions: "Write two paragraphs.", expert: "calibration-reviewer", model: "ollama/chat-model" }, complete);
-  expect(complete).toHaveBeenCalledOnce();
-  expect(complete.mock.lastCall![0]).toMatchObject({ id: "expert-model" });
-  const firstContext = complete.mock.lastCall![1];
-  expect(firstContext.systemPrompt).toContain("Focus on calibration fidelity.");
-  expect(firstContext.systemPrompt).toContain("Check calibration before interpretation.");
-  expect(firstContext.tools).toBeUndefined();
-  expect(JSON.parse(firstContext.messages[0].content as string)).toMatchObject({ instructions: "Write two paragraphs.", note: "" });
-  expect(initial.draftCredit).toMatchObject({ expert: "calibration-reviewer", skill: { name: "custom-review", scope: "project", sha256: expect.stringMatching(/^[a-f0-9]{64}$/) } });
+  let calls = 0;
+  const stream = vi.fn<StreamFn>((model, context) => {
+    const transcript = JSON.stringify(context.messages);
+    expect(model.id).toBe("expert-model");
+    expect(transcript).not.toContain("Private neighboring file");
+    expect(transcript).not.toContain('"name":"bash"');
+    if (++calls === 1) {
+      expect(transcript).toContain("Focus on calibration fidelity.");
+      return reply([tool("read_note_source"), tool("inspect_note_table"), tool("read_note_skill", { name: "custom-review", reference: "references/check.md" })], "toolUse");
+    }
+    expect(transcript).toContain("alpha,beta");
+    expect(transcript).toContain("Check calibration before interpretation.");
+    const table = context.messages.find((message) => message.role === "toolResult" && message.toolName === "inspect_note_table");
+    expect(table?.content[0]).toMatchObject({ type: "text" });
+    expect(JSON.parse((table?.content[0] as { text: string }).text)).toMatchObject({ rows: 2, columnCount: 2, columns: [{ name: "source", empty: 0 }, { name: "target", empty: 1 }] });
+    return reply([tool("submit_note_draft", { title: "Review", summary: "A grounded draft" })], "toolUse");
+  });
+  const result = await generateNoteDraft(project.id, {
+    expert: "calibration-reviewer", model: "ollama/chat-model", source: { kind: "file", path: "mapping.csv" },
+  }, { stream });
+  expect(stream).toHaveBeenCalledTimes(2);
+  expect(result.draftCredit).toEqual({ expert: "calibration-reviewer" });
+  expect(result.checks).toMatchObject([{ kind: "source" }, { kind: "table", detail: "2" }, { kind: "skill", detail: "custom-review" }]);
   expect(listNotePages(project.id).pages).toEqual([]);
 
-  fs.writeFileSync(reference, "Compare the reference scale against the measurements.");
-  const refined = await generateNoteDraft(project.id, {
-    expert: "calibration-reviewer", instructions: "Use one paragraph.", previousDraft: initial,
-  }, complete);
-  expect(complete.mock.lastCall![1].systemPrompt).toContain("Compare the reference scale");
-  expect(JSON.parse(complete.mock.lastCall![1].messages[0].content as string)).toMatchObject({
-    instructions: "Use one paragraph.", note: "", previousDraft: { title: initial.title, summary: initial.summary },
-  });
-  expect(refined.draftCredit?.skill.sha256).not.toBe(initial.draftCredit?.skill.sha256);
-  const page = createManualNotePage(project.id, { title: refined.title, summary: refined.summary, draftCredit: refined.draftCredit });
-  expect(getNotePage(project.id, page.id).revisions[0].draftCredit).toEqual(refined.draftCredit);
-  expect(listNotePages(project.id).pages).toMatchObject([{ id: page.id, organizer: "Created manually", draftExpert: "calibration-reviewer", sourceCount: 0 }]);
-
-  expect(disableSkill(paths, "custom-review").ok).toBe(true);
-  expect(listNoteExperts(project.id)).toContainEqual({ name: "calibration-reviewer", skill: "custom-review", available: false });
-  await expect(generateNoteDraft(project.id, { expert: "calibration-reviewer", instructions: "Summarize the review." }, complete))
+  const page = createManualNotePage(project.id, { title: result.title, summary: result.summary, draftCredit: result.draftCredit });
+  expect(getNotePage(project.id, page.id).revisions[0].draftCredit).toEqual(result.draftCredit);
+  expect(listNotePages(project.id).pages).toMatchObject([{ id: page.id, draftExpert: "calibration-reviewer" }]);
+  expect(setSpecialistEnabled(paths, "calibration-reviewer", false).ok).toBe(true);
+  await expect(generateNoteDraft(project.id, { expert: "calibration-reviewer", summary: "Review again." }, { stream }))
     .rejects.toMatchObject({ statusCode: 409 });
-  expect(complete).toHaveBeenCalledTimes(2);
 });
 
-it("drafts from a selected task and user text using only the bounded, redacted material", async () => {
+it("reads only the selected task, redacts secrets and records both model requests", async () => {
   const project = createProject({ name: "Draft source" });
   const paths = resolvePaths(project.id);
   fs.mkdirSync(paths.sessionsDir, { recursive: true });
   const rows = [
     { type: "message", message: { role: "user", content: [{ type: "text", text: "Keep the inclusion criteria." }] } },
     { type: "message", message: { role: "assistant", content: [{ type: "thinking", thinking: "Internal reasoning" },
-      { type: "text", text: "The task reported 12 rows. api_key=synthetic-secret" },
-      { type: "toolCall", name: "bash", arguments: { command: "raw command arguments" } }] } },
-    { type: "message", message: { role: "toolResult", toolName: "bash", isError: true,
-      content: [{ type: "text", text: "raw tool output" }] } },
+      { type: "text", text: "The task reported 12 rows. api_key=synthetic-secret" }] } },
+    { type: "message", message: { role: "toolResult", toolName: "bash", isError: true, content: [{ type: "text", text: "raw tool output" }] } },
   ];
   fs.writeFileSync(path.join(paths.sessionsDir, "task-a.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n"));
-  const complete = vi.fn(async (_model: unknown, context: Context) => {
-    const input = JSON.parse(context.messages[0].content as string);
-    expect(input.note).toBe("Mark the unit as unresolved.");
-    expect(input.taskExcerpt).toContain("Keep the inclusion criteria");
-    expect(input.taskExcerpt).toContain("The task reported 12 rows");
-    expect(input.taskExcerpt).toContain("Tool bash returned an error");
-    expect(input.taskExcerpt).toContain("[redacted]");
-    expect(input.taskExcerpt).not.toMatch(/Internal reasoning|synthetic-secret|raw command|raw tool output/);
-    return fakeMessage(JSON.stringify({ title: "Inclusion criteria", summary: "Unit unresolved." }));
+  let calls = 0;
+  const stream = vi.fn<StreamFn>((_model, context) => {
+    if (++calls === 1) return reply([tool("read_note_source")], "toolUse");
+    const transcript = JSON.stringify(context.messages);
+    expect(transcript).toContain("The task reported 12 rows");
+    expect(transcript).toContain("Tool bash returned an error");
+    expect(transcript).toContain("[redacted]");
+    expect(transcript).not.toMatch(/Internal reasoning|synthetic-secret|raw tool output/);
+    return draftReply("Unit unresolved.");
   });
-  await expect(generateNoteDraft(project.id, { summary: "Mark the unit as unresolved.", taskId: "task-a" }, complete))
-    .resolves.toEqual({ title: "Inclusion criteria", summary: "Unit unresolved.", taskExcerptShortened: false });
-  expect(complete).toHaveBeenCalledOnce();
+  await expect(generateNoteDraft(project.id, { expert, summary: "Mark the unit as unresolved.", taskId: "task-a" }, { stream }))
+    .resolves.toMatchObject({ title: "Review", summary: "Unit unresolved.", taskExcerptShortened: false });
   expect(listNotePages(project.id).pages).toEqual([]);
-  expect(sessionCostSummary(NOTE_DRAFT_SESSION_ID, project.id).entries).toHaveLength(1);
+  expect(sessionCostSummary(NOTE_DRAFT_SESSION_ID, project.id).entries).toHaveLength(2);
 });
 
-it("rejects unavailable sources before calling a model and accounts for an invalid model response", async () => {
+it("rejects unavailable or unread sources and enforces the cap before another model request", async () => {
   const project = createProject({ name: "Invalid draft", spendLimitUsd: 0.002 });
-  const complete = vi.fn(async () => fakeMessage("not a valid draft"));
-  await expect(generateNoteDraft(project.id, { taskId: "foreign-task" }, complete)).rejects.toMatchObject({ statusCode: 404 });
-  expect(complete).not.toHaveBeenCalled();
-  await expect(generateNoteDraft(project.id, { title: "Test draft" }, complete)).rejects.toMatchObject({ statusCode: 502 });
+  const paths = resolvePaths(project.id);
+  fs.writeFileSync(path.join(paths.sandbox, "review.py"), "print(42)");
+  const stream = vi.fn<StreamFn>(() => reply([tool("read_note_source")], "toolUse"));
+  await expect(generateNoteDraft(project.id, { expert, taskId: "foreign-task" }, { stream })).rejects.toMatchObject({ statusCode: 404 });
+  expect(stream).not.toHaveBeenCalled();
+  await expect(generateNoteDraft(project.id, { expert, source: { kind: "file", path: "review.py" } }, { stream }))
+    .rejects.toMatchObject({ statusCode: 402 });
   expect(sessionCostSummary(NOTE_DRAFT_SESSION_ID, project.id).entries).toHaveLength(1);
-  await expect(generateNoteDraft(project.id, { title: "Second draft" }, complete)).rejects.toMatchObject({ statusCode: 402 });
-  expect(complete).toHaveBeenCalledOnce();
+  expect(stream).toHaveBeenCalledOnce();
+
+  const other = createProject({ name: "Source must be read" });
+  fs.writeFileSync(path.join(resolvePaths(other.id).sandbox, "review.py"), "print(42)");
+  await expect(generateNoteDraft(other.id, { expert, source: { kind: "file", path: "review.py" } }, { stream: () => reply([], "error") }))
+    .rejects.toMatchObject({ statusCode: 503, message: expect.stringContaining("model provider") });
+  await expect(generateNoteDraft(other.id, { expert, source: { kind: "file", path: "review.py" } }, { stream: () => draftReply() }))
+    .rejects.toMatchObject({ statusCode: 502, message: expect.stringContaining("did not read") });
 });
 
-it("drafts from the selected answer, result, or file without including neighboring material", async () => {
-  const project = createProject({ name: "Source-specific notes" });
-  const paths = resolvePaths(project.id);
-  fs.mkdirSync(paths.sessionsDir, { recursive: true });
-  const message = (id: string, role: string, text: string) => ({ type: "message", id,
-    message: { role, stopReason: "stop", content: [{ type: "text", text }] } });
-  const result = (id: string, title: string) => ({ type: "message", message: { role: "toolResult", toolName: "scientific_result",
-    toolCallId: id, content: [{ type: "text", text: "Raw tool output" }], details: { scientificResult: {
-      schemaVersion: 1, kind: "table", title, columns: [{ key: "metric", label: "Metric" }], rows: [[42]],
-    } } } });
-  const rows = [message("q1", "user", "Earlier question"), result("card-1", "Unrelated result"),
-    message("a1", "assistant", "Earlier answer"), message("q2", "user", "Second question"),
-    message("a2-start", "assistant", "Opening paragraph "), result("card-2", "Selected result"),
-    message("a2", "assistant", "Selected finding"), message("q3", "user", "Later question"), message("a3", "assistant", "Later answer")];
-  fs.writeFileSync(path.join(paths.sessionsDir, "task-a.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n"));
-  fs.writeFileSync(path.join(paths.sandbox, "current.csv"), "header\nSelected file content\n" + "x".repeat(25_000) + "File tail");
-  fs.writeFileSync(path.join(paths.sandbox, "figure.png"), Buffer.from([0, 1, 0, 2]));
-  const complete = vi.fn(async () => fakeMessage(JSON.stringify({ title: "Source note", summary: "Proposed summary" })));
-  const capture = vi.fn(async (_model: unknown, context: Context) => {
-    const data = JSON.parse(context.messages[0].content as string);
-    expect(data.taskExcerpt).toBe("");
-    expect(JSON.stringify(data)).not.toMatch(/Earlier answer|Later answer|Unrelated result|Raw tool output|File tail/);
-    return complete();
-  });
-  const inputs = [
-    [{ kind: "message", sessionId: "task-a", entryId: "a2" }, "Opening paragraph Selected finding"],
-    [{ kind: "result", sessionId: "task-a", toolCallId: "card-2" }, "Selected result"],
-    [{ kind: "file", path: "current.csv" }, "Selected file content"],
-  ] as const;
-  for (const [source, content] of inputs) {
-    const draft = await generateNoteDraft(project.id, { source }, capture);
-    expect(draft.sourceExcerptShortened).toBe(source.kind === "file");
-    const context = capture.mock.lastCall![1];
-    expect(JSON.parse(context.messages[0].content as string).source.excerpt).toContain(content);
-  }
-  const figure = { kind: "file", path: "figure.png" };
-  await expect(generateNoteDraft(project.id, { title: "Figure", source: figure }, capture)).rejects.toMatchObject({ statusCode: 415 });
-  expect(capture).toHaveBeenCalledTimes(3);
-  await generateNoteDraft(project.id, { title: "Figure", summary: "Description by the author", source: figure }, capture);
-  expect(JSON.parse(capture.mock.lastCall![1].messages[0].content as string)).toMatchObject({
-    note: "Description by the author", source: { kind: "file", excerpt: "" },
-  });
+it("aborts the provider when drafting is cancelled and leaves the note unsaved", async () => {
+  const project = createProject({ name: "Cancelled draft" });
+  const abort = new AbortController();
+  const stream: StreamFn = (_model, _context, options) => {
+    const source = createAssistantMessageEventStream();
+    options?.signal?.addEventListener("abort", () => {
+      const error: AssistantMessage = {
+        role: "assistant", api: "openai-completions", provider: "openrouter", model: "test",
+        content: [], timestamp: 0, stopReason: "aborted",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      };
+      source.push({ type: "error", reason: "aborted", error });
+      source.end(error);
+    }, { once: true });
+    queueMicrotask(() => abort.abort());
+    return source;
+  };
+  await expect(generateNoteDraft(project.id, { expert, summary: "Keep this text." }, { signal: abort.signal, stream }))
+    .rejects.toMatchObject({ statusCode: 499 });
+  expect(listNotePages(project.id).pages).toEqual([]);
 });

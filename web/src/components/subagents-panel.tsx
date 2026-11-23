@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   BotIcon,
+  ChevronDownIcon,
   BrainIcon,
   LockIcon,
   PencilIcon,
@@ -39,17 +40,18 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useProjects } from "@/lib/use-projects";
-import { useSkills } from "@/lib/use-skills";
+import { notifyCapabilitiesChanged } from "@/lib/capability-events";
 import {
   clearAgentMemory,
   deleteAgent,
   getAgentMemory,
-  getAgents,
+  getAgentRoster,
   getSpecialistDefaultModel,
   getWatchdogSettings,
   restoreDefaultAgents,
   saveAgent,
   saveAgentMemory,
+  saveNoteDefaultExpert,
   saveSpecialistDefaultModel,
   saveWatchdogSettings,
   setAgentEnabled,
@@ -70,7 +72,6 @@ interface AgentFormState {
   systemPromptMode: "append" | "replace";
   inheritProjectContext: boolean;
   inheritSkills: boolean;
-  noteSkill: string;
   memoryEnabled: boolean;
   memoryScope: "project" | "user";
   extra?: Record<string, unknown>;
@@ -87,7 +88,6 @@ const EMPTY_FORM: AgentFormState = {
   systemPromptMode: "append",
   inheritProjectContext: true,
   inheritSkills: true,
-  noteSkill: "",
   memoryEnabled: false,
   memoryScope: "project",
   systemPrompt: "",
@@ -104,7 +104,6 @@ function formFromAgent(agent: AgentFile, asCopy: boolean): AgentFormState {
     systemPromptMode: agent.systemPromptMode ?? "append",
     inheritProjectContext: agent.inheritProjectContext ?? true,
     inheritSkills: agent.inheritSkills ?? true,
-    noteSkill: agent.noteSkill ?? "",
     memoryEnabled: Boolean(agent.memory),
     memoryScope: agent.memory?.scope ?? "project",
     extra: agent.extra,
@@ -358,8 +357,10 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
 export function SubagentsPanel() {
   const t = useT();
   const { activeProject, activeProjectId } = useProjects();
-  const { skills: noteSkills, loading: noteSkillsLoading } = useSkills(activeProjectId ?? undefined);
   const [agents, setAgents] = useState<AgentFile[]>([]);
+  const [noteDefaultExpert, setNoteDefaultExpert] = useState<string | null>(null);
+  const [savingNoteDefault, setSavingNoteDefault] = useState(false);
+  const [noteDefaultError, setNoteDefaultError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<AgentFormState | null>(null);
@@ -371,20 +372,26 @@ export function SubagentsPanel() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setAgents(await getAgents());
+      const roster = await getAgentRoster(activeProjectId ?? undefined);
+      setAgents(roster.agents);
+      setNoteDefaultExpert(roster.noteDefaultExpert);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Failed to load specialists");
     }
-  }, []);
+  }, [activeProjectId]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setForm(null);
     setViewing(null);
-    getAgents()
-      .then((a) => {
-        if (!cancelled) setAgents(a);
+    setNoteDefaultError(null);
+    getAgentRoster(activeProjectId ?? undefined)
+      .then((roster) => {
+        if (!cancelled) {
+          setAgents(roster.agents);
+          setNoteDefaultExpert(roster.noteDefaultExpert);
+        }
       })
       .catch((exc) => {
         if (!cancelled) {
@@ -398,6 +405,20 @@ export function SubagentsPanel() {
       cancelled = true;
     };
   }, [activeProjectId]);
+
+  const updateNoteDefault = async (name: string) => {
+    if (!activeProjectId || savingNoteDefault) return;
+    setSavingNoteDefault(true);
+    setNoteDefaultError(null);
+    try {
+      setNoteDefaultExpert(await saveNoteDefaultExpert(activeProjectId, name || null));
+      notifyCapabilitiesChanged();
+    } catch {
+      setNoteDefaultError("Could not save the default note expert.");
+    } finally {
+      setSavingNoteDefault(false);
+    }
+  };
 
   const toggleEnabled = useCallback(
     async (name: string, next: boolean) => {
@@ -434,7 +455,6 @@ export function SubagentsPanel() {
         systemPromptMode: form.systemPromptMode,
         inheritProjectContext: form.inheritProjectContext,
         inheritSkills: form.inheritSkills,
-        noteSkill: form.noteSkill || undefined,
         memory: form.memoryEnabled ? { scope: form.memoryScope, path: name } : undefined,
         extra: form.extra,
         systemPrompt: form.systemPrompt,
@@ -551,6 +571,7 @@ export function SubagentsPanel() {
     () => agents.filter((a) => matchesQuery(query, a.name, a.description, a.model)),
     [agents, query],
   );
+  const noteExperts = agents.filter((agent) => agent.enabled && agent.canDraftNotes);
   const project = visible.filter((a) => a.source === "project");
   const builtins = visible.filter((a) => a.source === "builtin");
 
@@ -570,6 +591,23 @@ export function SubagentsPanel() {
       />
 
       <SpecialistDefaultModelCard projectId={activeProjectId} />
+      <SettingsCard title={t("Default note expert")}
+        description={t("Preselected when creating a note in this project. You can change it before drafting.")}>
+        {loading ? <p className="text-xs text-muted-foreground">{t("Loading…")}</p> : (
+          <div className="relative">
+            <select aria-label={t("Default note expert")} disabled={savingNoteDefault} value={noteDefaultExpert ?? ""}
+              className="h-8 w-full appearance-none rounded-md border bg-background pl-2 pr-8 text-xs"
+              onChange={(event) => void updateNoteDefault(event.target.value)}>
+              <option value="">{t("No default expert")}</option>
+              {noteDefaultExpert && !noteExperts.some((agent) => agent.name === noteDefaultExpert) &&
+                <option value={noteDefaultExpert} disabled>{t(noteDefaultExpert)} · {t("Unavailable")}</option>}
+              {noteExperts.map((agent) => <option key={agent.name} value={agent.name}>{t(agent.name)}</option>)}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          </div>
+        )}
+        <SettingsError className="mt-2">{noteDefaultError}</SettingsError>
+      </SettingsCard>
       <WatchdogCard projectId={activeProjectId} />
 
       <SettingsError>{error}</SettingsError>
@@ -668,17 +706,6 @@ export function SubagentsPanel() {
               />
               {t("Replace base system prompt")}{" "}</label>
           </div>
-
-          <label className="block space-y-1.5 text-xs font-medium">
-            {t("Note drafting skill")}
-            <select className="h-8 w-full rounded-md border bg-background px-2 text-xs" value={form.noteSkill}
-              disabled={noteSkillsLoading} onChange={(event) => setForm({ ...form, noteSkill: event.target.value })}>
-              <option value="">{t("Choose a skill to enable note drafting")}</option>
-              {form.noteSkill && !noteSkills.some((skill) => skill.name === form.noteSkill) &&
-                <option value={form.noteSkill} disabled>{form.noteSkill} · {t("Unavailable")}</option>}
-              {noteSkills.map((skill) => <option key={skill.id} value={skill.name}>{skill.name}</option>)}
-            </select>
-          </label>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border p-2.5">
             <label className="flex items-center gap-2 text-xs">

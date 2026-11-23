@@ -191,7 +191,7 @@ describe("seeding later roster and template additions", () => {
     // A project seeded by an older Kady: legacy marker, no names file.
     fs.writeFileSync(path.join(dir, ".seeded"), "2026-01-01T00:00:00.000Z\n");
     fs.writeFileSync(path.join(dir, "code-reviewer.md"), "---\nname: code-reviewer\ndescription: mine\n---\n\nMine.\n");
-    const additions = ["comparative-reviewer", "investigator", "scientific-result-reviewer", "data-processing-reviewer"];
+    const additions = ["comparative-reviewer", "investigator", "scientific-result-reviewer"];
     expect(seedAgentFiles(paths)).toBe(additions.length);
     const names = listProjectAgents(paths).map((a) => a.name);
     expect(names).toEqual(expect.arrayContaining([...additions, "code-reviewer"]));

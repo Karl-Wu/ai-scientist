@@ -1,26 +1,22 @@
 import type { FastifyInstance } from "fastify";
 import { createManualNotePage, getNotePage, listNotePages, updateNotePage } from "../notes/store.ts";
 import { generateNoteDraft } from "../notes/draft.ts";
-import { listNoteExperts } from "../notes/experts.ts";
 import { SandboxError } from "../sandbox-fs.ts";
 import { requireRequestedProject } from "./project-scope.ts";
 
 export async function registerNotesRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/notes/experts", async (req, reply) => {
-    reply.header("Cache-Control", "no-store");
-    try { return { experts: listNoteExperts(requireRequestedProject(req)) }; }
-    catch (error) {
-      if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
-      throw error;
-    }
-  });
-
   app.post<{ Body: unknown }>("/notes/draft", { bodyLimit: 256 * 1024 }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");
-    try { return await generateNoteDraft(requireRequestedProject(req), req.body); }
+    const controller = new AbortController();
+    const onClose = () => { if (!reply.raw.writableFinished) controller.abort(); };
+    reply.raw.on("close", onClose);
+    if (reply.raw.destroyed) controller.abort();
+    try { return await generateNoteDraft(requireRequestedProject(req), req.body, { signal: controller.signal }); }
     catch (error) {
       if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
       throw error;
+    } finally {
+      reply.raw.removeListener("close", onClose);
     }
   });
 
