@@ -7,9 +7,9 @@ import { noteAuthFailure, withApiTokenHeader } from "@/lib/api-auth";
 /**
  * Project types, storage, and the `apiFetch` wrapper used by every hook.
  *
- * The active project id is kept in localStorage so it survives reloads and
- * is readable synchronously from callbacks/hooks. `apiFetch` transparently
- * injects `X-Project-Id` on every request, so individual hooks don't have
+ * The active project belongs to the browser tab. `sessionStorage` keeps it
+ * across reloads, while `localStorage` supplies an initial choice to a new
+ * tab. `apiFetch` injects `X-Project-Id` on every request, so individual hooks don't have
  * to know about projects at all -- they keep calling relative paths and
  * get the right project's data for free.
  *
@@ -100,6 +100,7 @@ export function isApiUrl(url: string): boolean {
 const STORAGE_KEY = "kady:activeProjectId";
 const CHANGE_EVENT = "kady:project-changed";
 const ProjectScopeContext = createContext<string | null>(null);
+let currentTabProjectId: string | undefined;
 
 /**
  * Pins descendants to one project even while the globally-visible project
@@ -120,35 +121,49 @@ export function useProjectScopeId(): string {
  */
 export function getActiveProjectId(): string {
   if (typeof window === "undefined") return DEFAULT_PROJECT_ID;
+  if (currentTabProjectId !== undefined) return currentTabProjectId;
   try {
-    const v = window.localStorage.getItem(STORAGE_KEY);
-    if (v && v.trim()) return v.trim();
+    const saved = window.sessionStorage.getItem(STORAGE_KEY)?.trim();
+    if (saved) {
+      currentTabProjectId = saved;
+      return saved;
+    }
   } catch {
-    // localStorage can throw in private mode / with quota errors; fall back.
+    // This tab can still keep its selection in memory when storage is blocked.
   }
-  return DEFAULT_PROJECT_ID;
+  let initial = DEFAULT_PROJECT_ID;
+  try {
+    initial = window.localStorage.getItem(STORAGE_KEY)?.trim() || initial;
+  } catch {
+    // A new tab can start at the default project without browser storage.
+  }
+  rememberTabProject(initial);
+  return initial;
+}
+
+function rememberTabProject(id: string): void {
+  currentTabProjectId = id;
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, id);
+  } catch {
+    // The in-memory selection still works for the lifetime of the page.
+  }
 }
 
 /**
- * Set the active project id, persisting it to localStorage and broadcasting
- * a change event so other tabs and hooks can react.
+ * Change this tab's project. Remember the last choice as the starting point
+ * for new tabs and notify this tab's hooks.
  *
  * Fires `kady:project-changed` on `window`. No-op when called from SSR.
  */
 export function setActiveProjectId(id: string): void {
   if (typeof window === "undefined") return;
   const next = id?.trim() || DEFAULT_PROJECT_ID;
+  rememberTabProject(next);
   try {
     window.localStorage.setItem(STORAGE_KEY, next);
   } catch {
-    // best-effort -- we'll still dispatch so at least the current tab updates
-  }
-  // Mirror into a cookie so <img>/<a> URLs to the backend land in the same
-  // project (cookies are sent automatically; custom headers are not).
-  try {
-    document.cookie = `kady-project=${encodeURIComponent(next)}; path=/; max-age=31536000; SameSite=Lax`;
-  } catch {
-    // Safari in private mode can throw; header/localStorage still work.
+    // The current tab's project does not depend on the shared preference.
   }
   window.dispatchEvent(
     new CustomEvent(CHANGE_EVENT, { detail: { id: next } })
@@ -169,15 +184,8 @@ export function onProjectChange(
       (ev as CustomEvent<{ id?: string }>).detail?.id ?? getActiveProjectId();
     handler(id);
   };
-  const storageListener = (ev: StorageEvent) => {
-    if (ev.key === STORAGE_KEY) handler(getActiveProjectId());
-  };
   window.addEventListener(CHANGE_EVENT, listener);
-  window.addEventListener("storage", storageListener);
-  return () => {
-    window.removeEventListener(CHANGE_EVENT, listener);
-    window.removeEventListener("storage", storageListener);
-  };
+  return () => window.removeEventListener(CHANGE_EVENT, listener);
 }
 
 /**

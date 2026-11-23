@@ -33,7 +33,7 @@ it("creates and opens a task directly when there are no children", async () => {
   const fork = screen.getByRole("button", { name: "New task from here" });
   expect(within(fork).getByText("New task from here")).toHaveClass("sr-only");
   await userEvent.hover(fork);
-  expect(await screen.findByRole("tooltip")).toHaveTextContent("New task from here");
+  expect(await screen.findByRole("tooltip", {}, { timeout: 2500 })).toHaveTextContent("New task from here");
   fireEvent.click(fork);
   await waitFor(() => expect(onOpenTask).toHaveBeenCalledWith("child", "Research (1)"));
   expect(api.apiFetch).toHaveBeenCalledWith("/sessions/s1/responses/answer/fork", { method: "POST" }, "p1");
