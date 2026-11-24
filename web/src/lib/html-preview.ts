@@ -13,6 +13,31 @@ const PREVIEW_POLICY = [
   "form-action 'none'",
 ].join("; ");
 
+// Fragment links in srcdoc resolve against the embedding page by default.
+// Update the report's own URL so its hashchange handlers can reveal hidden sections.
+const FRAGMENT_NAVIGATION = `<script>
+window.addEventListener('click', (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.altKey ||
+      event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const link = event.target instanceof Element && event.target.closest('a[href^="#"]');
+  if (!link || link.hasAttribute('download')) return;
+  const target = link.getAttribute('target');
+  if (target && target.toLowerCase() !== '_self') return;
+  event.preventDefault();
+  location.hash = link.getAttribute('href');
+});
+</script>`;
+
+// Install the fixed preview script before the report's own CSP takes effect.
+// Preserve the doctype and explicit head, including any attributes on them.
+const HTML_TRIVIA = String.raw`(?:\s|<!--[\s\S]*?-->)*`;
+const END_OF_TAG = `(?:[^>"']|"[^"]*"|'[^']*')*>`;
+const HTML_PROLOGUE = new RegExp(
+  `^${HTML_TRIVIA}(?:<!doctype\\s${END_OF_TAG}${HTML_TRIVIA})?` +
+  `(?:<html(?=\\s|>)${END_OF_TAG}${HTML_TRIVIA})?(?:<head(?=\\s|>)${END_OF_TAG})?`,
+  "i",
+);
+
 function attribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -20,12 +45,13 @@ function attribute(value: string): string {
 
 /** Keep untrusted HTML in the inner srcdoc attribute, not in the policy document. */
 export function htmlPreviewDocument(html: string, title: string): string {
+  const report = html.replace(HTML_PROLOGUE, (prologue) => prologue + FRAGMENT_NAVIGATION);
   return "<!doctype html><html><head><meta charset=\"utf-8\">" +
     '<meta http-equiv="Content-Security-Policy" content="' + PREVIEW_POLICY + '">' +
     '<meta name="referrer" content="no-referrer">' +
     "<style>html,body{height:100%;margin:0}iframe{display:block;width:100%;height:100%;border:0}</style>" +
     '</head><body><iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="' + attribute(title) +
-    '" srcdoc="' + attribute(html) + '"></iframe></body></html>';
+    '" srcdoc="' + attribute(report) + '"></iframe></body></html>';
 }
 
 export function htmlPreviewPath(path: string, projectId: string): string {
