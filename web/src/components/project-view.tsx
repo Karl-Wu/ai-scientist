@@ -241,7 +241,7 @@ export function ProjectView({
     async (project: Project) => {
       if (project.id === DEFAULT_PROJECT_ID) return;
       const confirmed = await confirm({
-        title: `Delete "${project.name}"?`,
+        title: t('Delete "{name}"?', { name: project.name }),
         description:
           t("Its sandbox files and tasks will be permanently removed. This cannot be undone."),
         confirmLabel: t("Delete project"),
@@ -250,10 +250,10 @@ export function ProjectView({
       if (!confirmed) return;
       try {
         await remove(project.id);
-      } catch (exc) {
-        toast.error(
-          exc instanceof Error ? exc.message : "Could not delete project",
-        );
+      } catch (error) {
+        toast.error(t("Could not delete project"), {
+          description: error instanceof Error ? error.message : undefined,
+        });
       }
     },
     [confirm, remove, t],

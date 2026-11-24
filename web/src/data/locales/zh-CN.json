@@ -606,6 +606,7 @@
   "{title} — double-click to rename": "{title} — 双击重命名",
   "Delete “{name}”?": "删除“{name}”？",
   "Delete \"{name}\"?": "删除“{name}”？",
+  "Could not delete project": "无法删除项目",
   "Remove this task and its conversation history from Recent tasks. Project files, notebook entries and cost records are kept.": "从最近任务中移除此任务及其对话记录。项目文件、日志条目和费用记录将保留。",
   "Its sandbox files and tasks will be permanently removed. This cannot be undone.": "其沙盒文件和任务将永久删除，此操作无法撤销。",
   "Task name": "任务名称",

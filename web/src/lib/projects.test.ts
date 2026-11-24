@@ -217,14 +217,28 @@ describe("projects.ts", () => {
       expect((init as RequestInit).body).toBe(JSON.stringify({ name: "N" }));
     });
 
-    it("deleteProject tolerates 204 responses", async () => {
+    it("deletes the requested project even when the tab has a stale project scope", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response(null, { status: 204 }));
       vi.stubGlobal("fetch", fetchMock);
-      await expect(
-        projectsModule.deleteProject("abc")
-      ).resolves.toBeUndefined();
+      projectsModule.setActiveProjectId("already-deleted");
+
+      await expect(projectsModule.deleteProject("abc")).resolves.toBeUndefined();
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toMatch(/\/projects\/abc$/);
+      expect(init.method).toBe("DELETE");
+      expect(new Headers(init.headers).get("X-Project-Id")).toBe("default");
+    });
+
+    it("reports the reason a project could not be deleted", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        Response.json({ detail: "Project storage is unavailable" }, { status: 503 }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(projectsModule.deleteProject("abc")).rejects.toThrow("Project storage is unavailable");
     });
 
     it("patchProject passes id via URL and body via JSON", async () => {

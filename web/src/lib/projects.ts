@@ -282,12 +282,14 @@ export async function patchProject(
 }
 
 export async function deleteProject(id: string): Promise<void> {
+  // The URL identifies the target. A tab may still be scoped to a project
+  // that another tab has already deleted.
   const res = await apiFetch(`/projects/${encodeURIComponent(id)}`, {
     method: "DELETE",
-  });
-  if (!res.ok && res.status !== 204) {
-    const detail = await res.text();
-    throw new Error(detail || `deleteProject ${res.status}`);
+  }, DEFAULT_PROJECT_ID);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`);
   }
 }
 
