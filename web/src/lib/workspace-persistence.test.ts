@@ -70,6 +70,7 @@ const projectState: ProjectWorkspaceState = {
   sandbox: {
     openPaths: ["notes.md", "figure.png"],
     activePath: "figure.png",
+    previewPath: "figure.png",
   },
 };
 
@@ -97,6 +98,7 @@ describe("workspace persistence schema", () => {
       sandbox: {
         openPaths: ["notes.md", "figure.png"],
         activePath: "figure.png",
+        previewPath: "figure.png",
       },
       tabs: [
         {

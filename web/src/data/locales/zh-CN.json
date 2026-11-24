@@ -1821,6 +1821,7 @@
   "Distribution": "数据分布",
   "Source": "源码",
   "Preview": "预览",
+  "Keep {name} open": "保留打开 {name}",
   "HTML preview": "HTML 预览",
   "Word document preview": "Word 文档预览",
   "Preview zoom": "预览缩放",

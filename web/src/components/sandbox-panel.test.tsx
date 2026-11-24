@@ -7,7 +7,7 @@ import { FileTreePanel } from "./sandbox-panel";
 import { TooltipProvider } from "./ui/tooltip";
 import type { TreeNode } from "@/lib/use-sandbox";
 
-function renderLargeTree(fileCount = 38_000, onUpload = vi.fn()) {
+function renderLargeTree(fileCount = 38_000, onUpload = vi.fn(), onSelect = vi.fn()) {
   const tree: TreeNode = {
     name: "sandbox",
     path: "",
@@ -34,7 +34,7 @@ function renderLargeTree(fileCount = 38_000, onUpload = vi.fn()) {
           tree={tree}
           selectedPath={null}
           uploading={false}
-          onSelect={noop}
+          onSelect={onSelect}
           onDownload={noop}
           onDelete={noop}
           onDownloadDir={noop}
@@ -89,5 +89,18 @@ describe("FileTreePanel", () => {
     expect(screen.getByText("image-0.dcm")).toBeInTheDocument();
     expect(screen.getAllByRole("treeitem").length).toBeLessThanOrEqual(36);
     expect(screen.queryByText("image-1000.dcm")).not.toBeInTheDocument();
+  });
+
+  it("previews on click and keeps the file open on double-click or Enter", () => {
+    const onSelect = vi.fn();
+    renderLargeTree(1, vi.fn(), onSelect);
+    fireEvent.click(screen.getByText("dataset"));
+    const file = screen.getByText("image-0.dcm");
+    fireEvent.click(file);
+    expect(onSelect).toHaveBeenLastCalledWith("dataset/image-0.dcm", "preview");
+    fireEvent.doubleClick(file);
+    expect(onSelect).toHaveBeenLastCalledWith("dataset/image-0.dcm", "open");
+    fireEvent.keyDown(file.closest('[role="treeitem"]')!, { key: "Enter" });
+    expect(onSelect).toHaveBeenNthCalledWith(3, "dataset/image-0.dcm", "open");
   });
 });

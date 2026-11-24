@@ -21,7 +21,7 @@ import { useProjectActivities } from "@/lib/use-project-activities";
 import { useModalJobs } from "@/lib/use-modal-jobs";
 import { useProjects } from "@/lib/use-projects";
 import { useSkills } from "@/lib/use-skills";
-import { flattenFiles, flattenFolders, useSandbox } from "@/lib/use-sandbox";
+import { flattenFiles, flattenFolders, useSandbox, type FileOpenMode } from "@/lib/use-sandbox";
 import { ProjectScopeProvider } from "@/lib/projects";
 import {
   hasProjectActivity,
@@ -397,6 +397,7 @@ function WorkspacePage({
   const handleSandboxWorkspaceChange = useCallback((next: SandboxWorkspaceState) => {
     setSandboxWorkspace((current) =>
       current.activePath === next.activePath &&
+      current.previewPath === next.previewPath &&
       current.openPaths.length === next.openPaths.length &&
       current.openPaths.every((path, index) => path === next.openPaths[index])
         ? current
@@ -1002,10 +1003,10 @@ function WorkspacePage({
     [activeTabId, activeMeta?.isStreaming],
   );
 
-  const handleFileSelect = useCallback((path: string) => {
+  const handleFileSelect = useCallback((path: string, mode: FileOpenMode = "open") => {
     setFileSourceInput(undefined);
     setPdfAnnotationFocus(undefined);
-    sandboxSelectFile(path);
+    void sandboxSelectFile(path, mode);
     setView("chat");
     setShowNotebook(false);
     setShowCompute(false);
@@ -1136,8 +1137,8 @@ function WorkspacePage({
       tree={sandbox.tree}
       selectedPath={sandbox.activeTabPath}
       uploading={sandbox.uploading}
-      onSelect={(path) => {
-        handleFileSelect(path);
+      onSelect={(path, mode) => {
+        handleFileSelect(path, mode);
         if (narrowProjectLayout) setFileDrawerOpen(false);
       }}
       onDownload={sandbox.downloadFile}
@@ -1338,6 +1339,7 @@ function WorkspacePage({
                 activeTabPath={sandbox.activeTabPath}
                 onTabSelect={handleFileSelect}
                 onTabClose={sandbox.closeTab}
+                onKeepOpen={sandbox.keepOpen}
                 onDownload={sandbox.downloadFile}
                 onSaveText={sandbox.saveFile}
                 onSaveTable={sandbox.saveTableFile}

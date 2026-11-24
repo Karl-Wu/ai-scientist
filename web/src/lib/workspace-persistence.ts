@@ -83,6 +83,7 @@ export interface ChatWorkspaceState {
 export interface SandboxWorkspaceState {
   openPaths: string[];
   activePath: string | null;
+  previewPath?: string;
 }
 
 export interface WorkspaceTabState {
@@ -366,6 +367,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
   const sandbox = isRecord(value.sandbox) ? value.sandbox : {};
   const openPaths = stringArray(sandbox.openPaths);
   const requestedActivePath = stringValue(sandbox.activePath);
+  const previewPath = stringValue(sandbox.previewPath);
   const showNotebook = value.showNotebook === true;
   return {
     tabs,
@@ -385,6 +387,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     mobileFilesHeight: boundedNumber(value.mobileFilesHeight, 50, 25, 75),
     sandbox: {
       openPaths,
+      ...(previewPath && openPaths.includes(previewPath) ? { previewPath } : {}),
       activePath: requestedActivePath && openPaths.includes(requestedActivePath)
         ? requestedActivePath
         : openPaths[0] ?? null,

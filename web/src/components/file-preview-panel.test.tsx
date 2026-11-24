@@ -143,6 +143,15 @@ it("requires confirmation to close a dirty file tab or text editor", async () =>
   expect(props.onTabClose).toHaveBeenCalledWith("a.txt");
 });
 
+it("keeps the preview tab open before starting an edit", () => {
+  const props = panelProps();
+  const onKeepOpen = vi.fn();
+  render(<FilePreviewPanel {...props} onKeepOpen={onKeepOpen} tabs={[{ ...props.tabs[0], preview: true }]} />);
+  expect(screen.getByTitle("Keep a.txt open")).toBeInTheDocument();
+  fireEvent.click(screen.getByTitle("Edit file"));
+  expect(onKeepOpen).toHaveBeenCalledWith("a.txt");
+});
+
 it("retains annotations across navigation and treats a new stroke after saving as dirty", async () => {
   const props = panelProps("a.png");
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);

@@ -29,6 +29,7 @@ import {
   rawFileUrl,
   anndataSummaryUrl,
   anndataEmbeddingUrl,
+  type FileOpenMode,
   type Tab,
   type TableSaveResult,
   type LatexCompileResult,
@@ -40,6 +41,7 @@ import {
   GitBranchIcon,
   DownloadIcon,
   PencilIcon,
+  PinIcon,
   BrushIcon,
   Undo2Icon,
   Trash2Icon,
@@ -138,6 +140,7 @@ function TabBar({
   tabModes,
   onSelect,
   onClose,
+  onKeepOpen,
   showNotebook,
   showCompute,
   showAutomation = false,
@@ -147,6 +150,7 @@ function TabBar({
   tabModes: Record<string, PanelMode>;
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
+  onKeepOpen?: (path: string) => void;
   showNotebook: boolean;
   showCompute: boolean;
   showAutomation?: boolean;
@@ -191,6 +195,7 @@ function TabBar({
             key={tab.path}
             data-active={isActive}
             onClick={() => onSelect(tab.path)}
+            onDoubleClick={() => onKeepOpen?.(tab.path)}
             title={tab.path}
             draggable
             onDragStart={(e) => {
@@ -222,16 +227,27 @@ function TabBar({
             </span>
 
             {/* Filename */}
-            <span className="truncate">{name}</span>
+            <span className={cn("truncate", tab.preview && "italic")}>{name}</span>
 
             {/* Unsaved / annotating indicator */}
             {isEditing && (
               <div className="size-1.5 shrink-0 rounded-full bg-amber-500" title={t("In edit mode")} />
             )}
 
-            {/* Close button */}
+            {tab.preview && onKeepOpen && (
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); onKeepOpen(tab.path); }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
+                title={t("Keep {name} open", { name })}
+              >
+                <PinIcon className="size-3" />
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); onClose(tab.path); }}
+              onDoubleClick={(e) => e.stopPropagation()}
               className={cn(
                 "ml-auto shrink-0 rounded p-0.5 text-muted-foreground transition-all",
                 "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-muted-foreground/20",
@@ -1672,8 +1688,9 @@ export interface FilePreviewPanelProps {
   activeModelRef?: string;
   tabs: Tab[];
   activeTabPath: string | null;
-  onTabSelect: (path: string) => void;
+  onTabSelect: (path: string, mode?: FileOpenMode) => void;
   onTabClose: (path: string) => void;
+  onKeepOpen?: (path: string) => void;
   onDownload: (path: string) => void;
   onSaveText: (path: string, content: string) => Promise<boolean>;
   onSaveTable?: (path: string, content: string, revision: string) => Promise<TableSaveResult>;
@@ -1712,6 +1729,7 @@ export function FilePreviewPanel({
   activeTabPath,
   onTabSelect,
   onTabClose,
+  onKeepOpen,
   onDownload,
   onSaveText,
   onSaveTable,
@@ -1757,9 +1775,11 @@ export function FilePreviewPanel({
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
   const trackDirty = useCallback((path: string, dirty: boolean) => {
-    if (dirty) dirtyPaths.current.add(path);
-    else dirtyPaths.current.delete(path);
-  }, []);
+    if (dirty) {
+      dirtyPaths.current.add(path);
+      onKeepOpen?.(path);
+    } else dirtyPaths.current.delete(path);
+  }, [onKeepOpen]);
   const confirmDiscard = useCallback((path: string) =>
     !dirtyPaths.current.has(path) || window.confirm(`Discard unsaved changes to ${path.split("/").pop()}?`), []);
   const closeTab = useCallback((path: string) => {
@@ -1775,8 +1795,19 @@ export function FilePreviewPanel({
   }, [confirmDiscard, onTabClose]);
 
   const setMode = useCallback((path: string, mode: PanelMode) => {
+    if (mode === "edit" || mode === "annotate") onKeepOpen?.(path);
     setTabModes((prev) => ({ ...prev, [path]: mode }));
-  }, []);
+  }, [onKeepOpen]);
+  useEffect(() => {
+    const paths = new Set(tabs.map((tab) => tab.path));
+    for (const path of visitedWorkbooks.current) {
+      if (!paths.has(path)) visitedWorkbooks.current.delete(path);
+    }
+    setTabModes((current) => {
+      if (Object.keys(current).every((path) => paths.has(path))) return current;
+      return Object.fromEntries(Object.entries(current).filter(([path]) => paths.has(path)));
+    });
+  }, [tabs]);
   useEffect(() => {
     if (pdfAnnotationFocus) setMode(pdfAnnotationFocus.path, "view");
   }, [pdfAnnotationFocus, setMode]);
@@ -1882,8 +1913,9 @@ export function FilePreviewPanel({
         tabs={tabs}
         activeTabPath={activeTabPath}
         tabModes={tabModes}
-        onSelect={onTabSelect}
+        onSelect={(path) => onTabSelect(path, "preview")}
         onClose={closeTab}
+        onKeepOpen={onKeepOpen}
         showNotebook={showNotebook}
         showCompute={showCompute}
         showAutomation={showAutomation}
