@@ -5,7 +5,7 @@ import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { expect, it, vi } from "vitest";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { setSpecialistEnabled, writeProjectAgent } from "../src/agent/agent-files.ts";
-import { generateNoteDraft, NOTE_DRAFT_SESSION_ID } from "../src/notes/draft.ts";
+import { generateNoteCandidates, generateNoteDraft, NOTE_DRAFT_SESSION_ID } from "../src/notes/draft.ts";
 import { createManualNotePage, getNotePage, listNotePages } from "../src/notes/store.ts";
 import { sessionCostSummary } from "../src/cost/ledger.ts";
 
@@ -141,4 +141,23 @@ it("aborts the provider when drafting is cancelled and leaves the note unsaved",
   await expect(generateNoteDraft(project.id, { expert, summary: "Keep this text." }, { signal: abort.signal, stream }))
     .rejects.toMatchObject({ statusCode: 499 });
   expect(listNotePages(project.id).pages).toEqual([]);
+});
+
+it("returns a mixed set of editable candidates with stable request IDs and leaves them unsaved", async () => {
+  const project = createProject({ name: "Multiple draft candidates" });
+  const stream: StreamFn = () => reply([tool("submit_note_candidates", { candidates: [
+    { type: "observation", title: "What was observed", summary: "Two samples were excluded.", fields: { finding: "Two exclusions" } },
+    { type: "decision", title: "Chosen threshold", summary: "Record the selected threshold.", fields: { rationale: "Predefined protocol" } },
+  ] })], "toolUse");
+  const batch = await generateNoteCandidates(project.id, { expert, summary: "Two exclusions and a threshold decision." }, { stream });
+  expect(batch.draftCredit).toEqual({ expert });
+  expect(batch.candidates).toMatchObject([
+    { type: "observation", requestId: expect.stringMatching(/^[a-f0-9]{32}$/), fields: { finding: "Two exclusions" } },
+    { type: "decision", requestId: expect.stringMatching(/^[a-f0-9]{32}$/), fields: { rationale: "Predefined protocol" } },
+  ]);
+  expect(new Set(batch.candidates.map((page) => page.requestId)).size).toBe(2);
+  expect(listNotePages(project.id).pages).toEqual([]);
+  await expect(generateNoteCandidates(project.id, { expert, summary: "No useful material." }, {
+    stream: () => reply([tool("submit_note_candidates", { candidates: [] })], "toolUse"),
+  })).resolves.toMatchObject({ candidates: [] });
 });

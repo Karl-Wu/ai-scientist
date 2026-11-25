@@ -97,7 +97,7 @@ it("shows card metadata and source actions while keeping note filters and revisi
 
   const onOpenSource = vi.fn();
   const user = userEvent.setup();
-  render(<NotePagesView projectId="default" onOpenSource={onOpenSource} />);
+  render(<NotePagesView projectId="default" currentTask={{ id: source.sessionId, title: "Source analysis" }} onOpenSource={onOpenSource} />);
   await screen.findByRole("button", { name: /Diagnosis mapping/ });
   expect(screen.getByText("2 pages")).toBeTruthy();
   expect(screen.getByText("Pending review")).toBeTruthy();
@@ -105,24 +105,46 @@ it("shows card metadata and source actions while keeping note filters and revisi
   const list = within(screen.getByRole("list"));
   expect(list.queryByText("Scientific reviewer")).toBeNull();
   expect(list.queryByText("Created manually")).toBeNull();
+  expect(list.getByText("Observation")).toBeVisible();
+  expect(list.getByText("Mapping rule")).toBeVisible();
   expect(screen.getByText("Finding Three exclusions in the study.")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Study observation" }).closest("li")?.querySelector("time")?.dateTime).toBe(new Date(2).toISOString());
   await user.click(screen.getByRole("button", { name: "Tool result · Scan" }));
   expect(onOpenSource).toHaveBeenCalledWith(sourceLink);
   expect(screen.queryByRole("heading", { name: "Study observation" })).toBeNull();
-  expect(screen.queryByRole("combobox", { name: "Note type" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Filters" }));
+  const typeFilters = within(screen.getByRole("group", { name: "Note type" }));
+  const taskScope = within(screen.getByRole("group", { name: "Task scope" }));
+  expect(taskScope.getByRole("button", { name: "All tasks" })).toHaveAttribute("aria-pressed", "true");
+  expect(typeFilters.getByRole("button", { name: "Mapping rule 1" })).toBeVisible();
+  await user.click(taskScope.getByRole("button", { name: "Current task" }));
+  expect(typeFilters.getByRole("button", { name: "Mapping rule 0" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Diagnosis mapping" })).toBeNull();
+  await user.click(typeFilters.getByRole("button", { name: "Observation 1" }));
+  await user.click(taskScope.getByRole("button", { name: "All tasks" }));
+  expect(typeFilters.getByRole("button", { name: "Observation 1" })).toHaveAttribute("aria-pressed", "true");
+  expect(typeFilters.getByRole("button", { name: "Mapping rule 1" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Diagnosis mapping" })).toBeNull();
+  await user.click(typeFilters.getByRole("button", { name: "Mapping rule 1" }));
+  expect(typeFilters.getByRole("button", { name: "Observation 1" })).toHaveAttribute("aria-pressed", "true");
+  expect(typeFilters.getByRole("button", { name: "Mapping rule 1" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Study observation" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Diagnosis mapping" })).toBeVisible();
+  await user.click(typeFilters.getByRole("button", { name: "Observation 1" }));
+  expect(screen.queryByRole("button", { name: "Study observation" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Diagnosis mapping" })).toBeVisible();
+  await user.click(typeFilters.getByRole("button", { name: "Mapping rule 1" }));
+  expect(screen.getByRole("button", { name: "Study observation" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Diagnosis mapping" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "More filters" }));
   const taskFilter = screen.getByRole("combobox", { name: "Source task" });
   await within(taskFilter).findByText("Source analysis");
-  const typeFilter = screen.getByRole("combobox", { name: "Note type" });
-  expect(within(typeFilter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All note types", "Observation", "Mapping rule"]);
-  await user.selectOptions(typeFilter, "observation");
   await user.selectOptions(taskFilter, "source-task");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Organizer" }), "Scientific reviewer");
   expect(screen.queryByRole("button", { name: /Diagnosis mapping/ })).toBeNull();
   expect(screen.getByText("1 page")).toBeTruthy();
   await user.keyboard("{Escape}");
-  await user.click(screen.getByRole("button", { name: "Filters 2" }));
-  expect(screen.getByRole("combobox", { name: "Note type" })).toHaveValue("observation");
+  await user.click(screen.getByRole("button", { name: "More filters 2" }));
+  expect(screen.getByRole("combobox", { name: "Organizer" })).toHaveValue("Scientific reviewer");
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(screen.getByText("2 pages")).toBeTruthy();
   await user.keyboard("{Escape}");
@@ -145,9 +167,12 @@ it("shows the list's type filter with the only available note type", async () =>
   } satisfies NoteSummary] }));
   render(<NotePagesView projectId="default" onOpenSource={vi.fn()} />);
   await screen.findByRole("button", { name: "Project note" });
-  await userEvent.click(screen.getByRole("button", { name: "Filters" }));
-  const typeFilter = screen.getByRole("combobox", { name: "Note type" });
-  expect(within(typeFilter).getAllByRole("option").map((option) => option.textContent)).toEqual(["All note types", "General note"]);
+  expect(screen.getByRole("button", { name: "Current task" })).toBeDisabled();
+  const typeFilters = within(screen.getByRole("group", { name: "Note type" }));
+  expect(typeFilters.getAllByRole("button")).toHaveLength(1);
+  const filter = typeFilters.getByRole("button", { name: "General note 1" });
+  await userEvent.click(filter);
+  expect(filter).toHaveAttribute("aria-pressed", "true");
 });
 
 it("shows readable notes alongside a warning about unavailable pages", async () => {
@@ -249,16 +274,20 @@ it("creates a manual note from the empty state and keeps the draft and request i
 const reviewer = { name: "scientific-result-reviewer", description: "Review results", source: "project",
   systemPrompt: "Review", enabled: true, canDraftNotes: true };
 
-it("shows an assistant draft without changing the user's inputs until they apply it", async () => {
+function candidate(title: string, summary: string, requestId = "a".repeat(32)) {
+  return { type: "note", requestId, title, summary, fields: {} };
+}
+
+it("reviews a single candidate and restores the original inputs when going back", async () => {
   vi.mocked(apiFetch).mockClear();
   vi.mocked(apiFetch).mockImplementation(async (url, options) => {
     if (url === "/agents") return Response.json({ agents: [reviewer], noteDefaultExpert: reviewer.name });
     if (url === "/notes" && !options?.method) return Response.json({ pages: [] });
     if (url === "/notes/draft") {
       expect(JSON.parse(String(options?.body))).toMatchObject({
-        title: "My title", summary: "My rough notes", taskId: "task-a", model: "direct/mock",
+        format: "candidates", title: "My title", summary: "My rough notes", taskId: "task-a", model: "direct/mock",
       });
-      return Response.json({ title: "Suggested title", summary: "Suggested summary", taskExcerptShortened: true });
+      return Response.json({ candidates: [candidate("Suggested title", "Suggested summary")], draftCredit: { expert: reviewer.name }, taskExcerptShortened: true });
     }
     throw new Error("The assistant must not write a note");
   });
@@ -275,14 +304,13 @@ it("shows an assistant draft without changing the user's inputs until they apply
   await user.click(screen.getByRole("checkbox", { name: /Reference current task/ }));
   expect(vi.mocked(apiFetch).mock.calls.some(([url]) => url === "/notes/draft")).toBe(false);
   await user.click(button);
-  expect(await screen.findByText("Suggested summary")).toBeTruthy();
+  expect(await screen.findByDisplayValue("Suggested summary")).toBeVisible();
+  expect(screen.getByRole("checkbox", { name: "Select Suggested title" })).toBeChecked();
   expect(screen.getByText("The draft uses an excerpt of the task.")).toBeTruthy();
-  expect(title.value).toBe("My title");
-  expect(summary.value).toBe("My rough notes");
-  await user.click(screen.getByRole("button", { name: "Apply draft" }));
-  expect(title.value).toBe("Suggested title");
-  expect(summary.value).toBe("Suggested summary");
-  expect(vi.mocked(apiFetch).mock.calls.some(([url, options]) => url === "/notes" && options?.method === "POST")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Back to editor" }));
+  expect(screen.getByRole("textbox", { name: "Note title" })).toHaveValue("My title");
+  expect(screen.getByRole("textbox", { name: "Current summary" })).toHaveValue("My rough notes");
+  expect(vi.mocked(apiFetch).mock.calls.some(([url, options]) => url === "/notes/batch" || (url === "/notes" && options?.method === "POST"))).toBe(false);
 });
 
 it("opens the editor with an exact source and uses that source for both drafting and saving", async () => {
@@ -294,11 +322,17 @@ it("opens the editor with an exact source and uses that source for both drafting
     if (url === "/notes" && !options?.method) return Response.json({ pages: [] });
     const body = JSON.parse(String(options?.body));
     received(url, body);
-    if (url === "/notes/draft") return Response.json({ title: "Draft title", summary: "Draft summary", taskExcerptShortened: false });
-    if (url === "/notes") return Response.json({
-      id: "new-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [source],
-      revisions: [{ version: 1, title: body.title, summary: body.summary, fields: {}, savedAt: 1, status: "saved" }],
-    } satisfies NotePage, { status: 201 });
+    if (url === "/notes/draft") return Response.json({
+      candidates: [candidate("Draft title", "Draft summary")], draftCredit: { expert: reviewer.name }, taskExcerptShortened: false,
+    });
+    if (url === "/notes/batch") {
+      const [draft] = body.pages;
+      const page = {
+        id: "new-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [source],
+        revisions: [{ version: 1, title: draft.title, summary: draft.summary, fields: {}, savedAt: 1, status: "saved" }],
+      } satisfies NotePage;
+      return Response.json({ results: [{ requestId: draft.requestId, status: "saved", page }] });
+    }
     throw new Error("Unexpected request");
   });
   const onOpenSource = vi.fn();
@@ -311,13 +345,12 @@ it("opens the editor with an exact source and uses that source for both drafting
   expect(screen.queryByRole("checkbox", { name: /Reference current task/ })).toBeNull();
   expect(received).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Draft with expert" }));
-  await screen.findByText("Draft summary");
+  await screen.findByDisplayValue("Draft summary");
   expect(received).toHaveBeenCalledWith("/notes/draft", expect.objectContaining({ source: anchor }));
   expect(received.mock.calls[0][1]).not.toHaveProperty("taskId");
-  await user.click(screen.getByRole("button", { name: "Apply draft" }));
   await user.click(screen.getByRole("button", { name: "Save note page" }));
   await screen.findByRole("heading", { name: "Draft title" });
-  expect(received).toHaveBeenLastCalledWith("/notes", expect.objectContaining({ source: anchor, summary: "Draft summary" }));
+  expect(received).toHaveBeenLastCalledWith("/notes/batch", expect.objectContaining({ source: anchor, pages: [candidate("Draft title", "Draft summary")] }));
   expect(received.mock.calls[1][1]).not.toHaveProperty("task");
   await user.click(screen.getByRole("button", { name: "Open source" }));
   expect(onOpenSource).toHaveBeenCalledWith(source);
@@ -335,14 +368,16 @@ it("preselects the project expert, allows another expert, and shows checks befor
     const body = JSON.parse(String(options?.body));
     if (url === "/notes/draft") {
       drafts(body);
-      return Response.json({ title: "Review", summary: "Reviewed mappings", draftCredit, taskExcerptShortened: false,
+      return Response.json({ candidates: [candidate("Review", "Reviewed mappings")], draftCredit, taskExcerptShortened: false,
         checks: [{ kind: "table", detail: "2" }] });
     }
-    if (url === "/notes") {
+    if (url === "/notes/batch") {
       save(body);
-      return Response.json({ id: "expert-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [],
-        revisions: [{ version: 1, title: body.title, summary: body.summary, fields: {}, draftCredit: body.draftCredit, savedAt: 1, status: "saved" }],
-      } satisfies NotePage, { status: 201 });
+      const [draft] = body.pages;
+      const page = { id: "expert-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [],
+        revisions: [{ version: 1, title: draft.title, summary: draft.summary, fields: {}, draftCredit: body.draftCredit, savedAt: 1, status: "saved" }],
+      } satisfies NotePage;
+      return Response.json({ results: [{ requestId: draft.requestId, status: "saved", page }] });
     }
     throw new Error("Unexpected request");
   });
@@ -359,15 +394,14 @@ it("preselects the project expert, allows another expert, and shows checks befor
   await user.click(screen.getByRole("button", { name: "Draft with expert" }));
   expect(drafts).toHaveBeenCalledWith(expect.objectContaining({ expert, summary: "Check the field mappings." }));
   expect(drafts.mock.lastCall![0]).not.toHaveProperty("instructions");
-  await screen.findByText("Reviewed mappings");
+  await screen.findByDisplayValue("Reviewed mappings");
   await user.click(screen.getByText("Expert checks"));
   expect(screen.getByText("Checked 2 table rows")).toBeVisible();
   expect(summary).toHaveValue("Check the field mappings.");
   expect(save).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Apply draft" }));
   await user.click(screen.getByRole("button", { name: "Save note page" }));
   await screen.findByText(/Drafted with mapping-checker/);
-  expect(save).toHaveBeenCalledWith(expect.objectContaining({ draftCredit, summary: "Reviewed mappings" }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ draftCredit, pages: [candidate("Review", "Reviewed mappings")] }));
 });
 
 it("cancels drafting without changing the note editor", async () => {
@@ -392,5 +426,57 @@ it("cancels drafting without changing the note editor", async () => {
   expect(signal?.aborted).toBe(true);
   expect(await screen.findByRole("button", { name: "Draft with expert" })).toBeEnabled();
   expect(summary).toHaveValue("Keep my original note.");
-  expect(screen.queryByText("Suggested draft")).toBeNull();
+  expect(screen.queryByRole("region", { name: "Review note candidates" })).toBeNull();
+});
+
+it("reviews mixed candidates for a task, saves only selected pages and retries one ambiguous result", async () => {
+  const task = { id: "task-a", title: "Review task" };
+  const observation = { ...candidate("Observation A", "First summary"), type: "observation", fields: { finding: "Recorded result" } };
+  const decision = { ...candidate("Decision B", "Second summary", "b".repeat(32)), type: "decision" };
+  const unselected = candidate("Other page", "Third summary", "c".repeat(32));
+  const confirmed = vi.fn();
+  const draft = vi.fn();
+  const savedPage = { id: "saved-id" };
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/agents") return Response.json({ agents: [reviewer], noteDefaultExpert: reviewer.name });
+    if (url === "/notes" && !options?.method) return Response.json({ pages: [] });
+    const body = JSON.parse(String(options?.body));
+    if (url === "/notes/draft") {
+      draft(body);
+      return Response.json({ candidates: [observation, decision, unselected], draftCredit: { expert: reviewer.name }, taskExcerptShortened: false });
+    }
+    if (url === "/notes/batch") {
+      confirmed(body);
+      return Response.json({ results: confirmed.mock.calls.length === 1 ? [
+        { requestId: decision.requestId, status: "failed", code: 500 },
+        { requestId: observation.requestId, status: "saved", page: savedPage },
+      ] : [{ requestId: decision.requestId, status: "saved", page: { id: "second-id" } }] });
+    }
+    throw new Error("Unexpected request");
+  });
+  const user = userEvent.setup();
+  render(<NotePagesView projectId="default" createFrom={{ title: task.title, task }} onOpenSource={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "Draft with expert" }));
+  expect(draft).toHaveBeenCalledWith(expect.objectContaining({ taskId: task.id, format: "candidates" }));
+  const save = await screen.findByRole("button", { name: "Save selected notes" });
+  expect(save).toBeDisabled();
+  expect(screen.getByText("Observation")).toBeVisible();
+  expect(screen.getByText("Decision")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: /Observation A/ }));
+  const summary = screen.getByRole("textbox", { name: "Current summary" });
+  await user.clear(summary);
+  await user.type(summary, "Edited summary");
+  expect(screen.getByRole("textbox", { name: "Finding" })).toHaveValue("Recorded result");
+  await user.click(screen.getByRole("checkbox", { name: "Select Observation A" }));
+  await user.click(screen.getByRole("checkbox", { name: "Select Decision B" }));
+  await user.click(save);
+  expect(confirmed.mock.calls[0][0]).toMatchObject({ task, pages: [{ ...observation, summary: "Edited summary" }, decision] });
+  expect(await screen.findByText("Could not confirm the save. Retry this page.")).toBeVisible();
+  expect(screen.getByText("1 selected · 1 saved")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("0 selected · 2 saved")).toBeVisible();
+  expect(confirmed.mock.calls[1][0]).toMatchObject({ task, pages: [decision] });
+  expect(screen.getByRole("checkbox", { name: "Select Other page" })).not.toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Done" }));
+  expect(await screen.findByRole("heading", { name: "Notes" })).toBeVisible();
 });

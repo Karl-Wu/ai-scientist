@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { createManualNotePage, getNotePage, listNotePages, updateNotePage } from "../notes/store.ts";
-import { generateNoteDraft } from "../notes/draft.ts";
+import { createManualNotePage, getNotePage, listNotePages, saveNoteBatch, updateNotePage } from "../notes/store.ts";
+import { generateNoteCandidates, generateNoteDraft } from "../notes/draft.ts";
 import { SandboxError } from "../sandbox-fs.ts";
 import { requireRequestedProject } from "./project-scope.ts";
 
@@ -11,7 +11,12 @@ export async function registerNotesRoutes(app: FastifyInstance): Promise<void> {
     const onClose = () => { if (!reply.raw.writableFinished) controller.abort(); };
     reply.raw.on("close", onClose);
     if (reply.raw.destroyed) controller.abort();
-    try { return await generateNoteDraft(requireRequestedProject(req), req.body, { signal: controller.signal }); }
+    try {
+      const body = req.body;
+      const generate = body && typeof body === "object" && "format" in body && body.format === "candidates"
+        ? generateNoteCandidates : generateNoteDraft;
+      return await generate(requireRequestedProject(req), body, { signal: controller.signal });
+    }
     catch (error) {
       if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
       throw error;
@@ -26,6 +31,15 @@ export async function registerNotesRoutes(app: FastifyInstance): Promise<void> {
       const page = createManualNotePage(requireRequestedProject(req), req.body);
       return reply.code(201).send(page);
     } catch (error) {
+      if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
+      throw error;
+    }
+  });
+
+  app.post<{ Body: unknown }>("/notes/batch", { bodyLimit: 3 * 1024 * 1024 }, (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try { return saveNoteBatch(requireRequestedProject(req), req.body); }
+    catch (error) {
       if (error instanceof SandboxError) return reply.code(error.statusCode).send({ detail: error.message });
       throw error;
     }

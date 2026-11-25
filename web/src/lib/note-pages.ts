@@ -34,11 +34,10 @@ export type NoteAnchor =
   | { kind: "file"; path: string }
   | PdfAnnotationAnchor;
 
-export interface NoteCreationSource {
+export type NoteCreationSource = {
   title: string;
-  anchor: NoteAnchor;
   initialSummary?: string;
-}
+} & ({ anchor: NoteAnchor; task?: never } | { task: NoteTaskReference; anchor?: never });
 
 export const NOTE_SOURCE_LABELS = {
   task: "Task",
@@ -73,14 +72,33 @@ export interface NoteTaskReference {
   title: string;
 }
 
-export interface NoteDraft {
-  title: string;
-  summary: string;
+export interface NoteDraftDetails {
   taskExcerptShortened: boolean;
   sourceExcerptShortened?: boolean;
   checks?: { kind: "source" | "table" | "skill"; detail: string }[];
   draftCredit?: NoteDraftCredit;
 }
+
+export interface NoteDraft extends NoteDraftDetails {
+  title: string;
+  summary: string;
+}
+
+export const MAX_NOTE_CANDIDATES = 8;
+
+export interface NoteCandidate extends NoteContent {
+  type: NoteType;
+  requestId: string;
+}
+
+export interface NoteCandidateBatch extends NoteDraftDetails {
+  candidates: NoteCandidate[];
+  draftCredit: NoteDraftCredit;
+}
+
+export type NoteBatchResult =
+  | { requestId: string; status: "saved"; page: NotePage }
+  | { requestId: string; status: "failed"; code: number };
 
 export interface NotePage {
   id: string;

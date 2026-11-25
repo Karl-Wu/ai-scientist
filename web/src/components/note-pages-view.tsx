@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon, FileTextIcon, LinkIcon, ListFilterIcon, MessageSquareIcon, PlusIcon, SearchIcon, SparklesIcon, Table2Icon } from "lucide-react";
+import {
+  ArrowLeftIcon, ArrowRightLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChartNoAxesColumnIncreasingIcon, ChevronDownIcon,
+  ChevronRightIcon, ClipboardCheckIcon, FileTextIcon, GitBranchIcon, LightbulbIcon, LinkIcon, ListFilterIcon,
+  MessageSquareIcon, PlusIcon, SearchIcon, SignpostIcon, SparklesIcon, Table2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { NoteCandidateReview } from "@/components/note-candidate-review";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -13,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import {
   NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
-  type NoteContent, type NoteCreationSource, type NoteDraft, type NoteDraftCredit,
+  type NoteCandidateBatch, type NoteContent, type NoteCreationSource,
   type NoteListResult, type NotePage, type NoteRevision, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
 import { notifyNotePagesChanged, useNotePagesRevision } from "@/lib/note-events";
@@ -39,6 +44,21 @@ interface NotesProps {
 
 const sourceIcons = { task: LinkIcon, tool: LinkIcon, message: MessageSquareIcon, result: Table2Icon, file: FileTextIcon, pdfAnnotation: FileTextIcon };
 
+const noteTypeAppearance = {
+  note: { icon: FileTextIcon, text: "text-muted-foreground", fill: "border-border bg-muted" },
+  hypothesis: { icon: LightbulbIcon, text: "text-amber-800 dark:text-amber-300", fill: "border-amber-600/25 bg-amber-500/10" },
+  observation: { icon: ChartNoAxesColumnIncreasingIcon, text: "text-emerald-800 dark:text-emerald-300", fill: "border-emerald-600/25 bg-emerald-500/10" },
+  decision: { icon: SignpostIcon, text: "text-violet-800 dark:text-violet-300", fill: "border-violet-600/25 bg-violet-500/10" },
+  mappingRule: { icon: ArrowRightLeftIcon, text: "text-blue-800 dark:text-blue-300", fill: "border-blue-600/25 bg-blue-500/10" },
+  qualityCheck: { icon: ClipboardCheckIcon, text: "text-teal-800 dark:text-teal-300", fill: "border-teal-600/25 bg-teal-500/10" },
+  processingDecision: { icon: GitBranchIcon, text: "text-fuchsia-800 dark:text-fuchsia-300", fill: "border-fuchsia-600/25 bg-fuchsia-500/10" },
+} as const;
+
+const typePillClass = "inline-flex min-w-0 items-center gap-1.5 rounded-full border text-xs font-medium";
+const typeFilterClass = cn(typePillClass, "h-7 px-2.5 whitespace-nowrap transition-colors",
+  "focus-visible:outline-2 focus-visible:outline-ring");
+const scopeButtonClass = "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-xs disabled:opacity-50";
+
 function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
   page: NoteSummary;
   onOpen: () => void;
@@ -54,6 +74,8 @@ function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
   const SourceIcon = source && sourceIcons[source.kind];
   const sourceType = source && t(NOTE_SOURCE_LABELS[source.kind]);
   const pendingReview = page.status === "pending";
+  const { icon: TypeIcon, text: typeColor, fill: typeFill } = noteTypeAppearance[page.type];
+  const typeLabel = t(NOTE_TYPES[page.type].label);
   const summary = page.excerpt
     .replace(/^[\t ]{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])[\t ]+/gm, "")
     .replace(/!?\[([^\]\n]*)\]\([^\n)]*\)/g, "$1")
@@ -76,7 +98,9 @@ function NoteListCard({ page, onOpen, onOpenSources, onOpenSource }: {
     </button>
     <div className={cn("mx-3 mt-auto grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 pb-2 text-xs text-muted-foreground",
       source && "@min-[20rem]/note-card:grid-cols-[auto_minmax(0,1fr)_auto]")}>
-      <span id={`${cardId}-type`} className="col-start-1 row-start-1 truncate" title={t(NOTE_TYPES[page.type].label)}>{t(NOTE_TYPES[page.type].label)}</span>
+      <span id={`${cardId}-type`} className={cn(typePillClass, typeColor, typeFill, "col-start-1 row-start-1 w-fit max-w-full px-2 py-0.5")} title={typeLabel}>
+        <TypeIcon aria-hidden="true" className="size-3 shrink-0" /><span className="truncate">{typeLabel}</span>
+      </span>
       {time && <time id={`${cardId}-time`} dateTime={new Date(page.savedAt).toISOString()}
         className={cn("col-start-2 row-start-1 justify-self-end whitespace-nowrap tabular-nums", source && "@min-[20rem]/note-card:col-start-3")}
         title={t("Updated {date}", { date: new Date(page.savedAt).toLocaleString(locale) })}>{time}</time>}
@@ -112,7 +136,8 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
-  const [type, setType] = useState<NoteType | "">("");
+  const [selectedTypes, setSelectedTypes] = useState<NoteType[]>([]);
+  const [currentOnly, setCurrentOnly] = useState(false);
   const [task, setTask] = useState("");
   const [organizer, setOrganizer] = useState("");
   const [selected, setSelected] = useState<{ id: string; initialPage?: NotePage; focusSources?: boolean }>();
@@ -181,13 +206,18 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   }, [projectId, pages]);
 
   const taskIds = useMemo(() => [...new Set(pages?.flatMap((page) => page.tasks))], [pages]);
-  const organizers = [...new Set(pages?.map((page) => page.organizer))];
+  const organizers = [...new Set(pages?.map((page) => page.draftExpert ?? page.organizer))];
   const availableTypes = useMemo(() => noteTypesIn(pages), [pages]);
-  const activeType = type && availableTypes.includes(type) ? type : "";
-  const filterCount = [activeType, task, organizer].filter(Boolean).length;
-  const visible = (search ? matches : pages)?.filter((page) => (!activeType || page.type === activeType)
-    && (!task || page.tasks.includes(task))
-    && (!organizer || page.organizer === organizer));
+  const activeTypes = selectedTypes.filter((type) => availableTypes.includes(type));
+  const currentTaskOnly = currentOnly && Boolean(currentTask);
+  const activeTask = currentTaskOnly ? currentTask?.id : task;
+  const filterCount = Number(Boolean(task)) + Number(Boolean(organizer));
+  const scoped = (search ? matches : pages)?.filter((page) => (!activeTask || page.tasks.includes(activeTask))
+    && (!organizer || (page.draftExpert ?? page.organizer) === organizer));
+  const typeCounts = new Map<NoteType, number>();
+  for (const page of scoped ?? []) typeCounts.set(page.type, (typeCounts.get(page.type) ?? 0) + 1);
+  const visible = activeTypes.length ? scoped?.filter((page) => activeTypes.includes(page.type)) : scoped;
+  const unfilteredCurrentTaskIsEmpty = currentTaskOnly && !search && !organizer && activeTypes.length === 0;
 
   if (creating) {
     return <NotePageCreate key={creating.key} projectId={projectId} currentTask={currentTask} model={model}
@@ -222,36 +252,6 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
               </span>}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {Boolean(pages?.length) && <Popover>
-                <PopoverTrigger asChild>
-                  <Button type="button" size="sm" variant="outline">
-                    <ListFilterIcon aria-hidden="true" />{t("Filters")}
-                    {filterCount > 0 && <> <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">{filterCount}</span></>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent aria-label={t("Filters")} align="end" className="grid max-w-[calc(100vw-1.5rem)] gap-3 p-3">
-                  {availableTypes.length > 0 && <label className="block space-y-1 text-xs font-medium">{t("Note type")}
-                    <select className={filterSelectClass} value={activeType} onChange={(event) => setType(event.target.value as NoteType | "")}>
-                      <option value="">{t("All note types")}</option>
-                      {availableTypes.map((id) => <option key={id} value={id}>{t(NOTE_TYPES[id].label)}</option>)}
-                    </select>
-                  </label>}
-                  {taskIds.length > 0 && <label className="block space-y-1 text-xs font-medium">{t("Source task")}
-                    <select className={filterSelectClass} value={task} title={task ? tasks[task] ?? task : undefined} onChange={(event) => setTask(event.target.value)}>
-                      <option value="">{t("All tasks")}</option>
-                      {taskIds.map((id) => <option key={id} value={id}>{tasks[id] ?? id}</option>)}
-                    </select>
-                  </label>}
-                  <label className="block space-y-1 text-xs font-medium">{t("Organizer")}
-                    <select className={filterSelectClass} value={organizer} onChange={(event) => setOrganizer(event.target.value)}>
-                      <option value="">{t("All organizers")}</option>
-                      {organizers.map((id) => <option key={id} value={id}>{t(id)}</option>)}
-                    </select>
-                  </label>
-                  {filterCount > 0 && <Button type="button" variant="ghost" size="sm" className="justify-self-end"
-                    onClick={() => { setType(""); setTask(""); setOrganizer(""); }}>{t("Clear filters")}</Button>}
-                </PopoverContent>
-              </Popover>}
               <Button type="button" size="sm" variant="outline" onClick={() => setCreating({ key: newNoteKey() })}>
                 <PlusIcon aria-hidden="true" />{t("New note page")}
               </Button>
@@ -260,6 +260,52 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
           {Boolean(pages?.length) && <div className="relative min-w-0">
             <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input className="h-8 min-w-0 ps-8" aria-label={t("Search note pages")} placeholder={t("Search note pages")} value={query} maxLength={300} onChange={(event) => { if (event.target.value.trim() !== search) setMatches(undefined); setError(false); setQuery(event.target.value); }} />
+          </div>}
+          {Boolean(pages?.length) && <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label={t("Task scope")} className="inline-flex w-fit shrink-0 items-center rounded-lg border bg-muted/50 p-0.5">
+              <button type="button" aria-pressed={currentTaskOnly} disabled={!currentTask} className={scopeButtonClass}
+                onClick={() => { setCurrentOnly(true); setTask(""); }}>{t("Current task")}</button>
+              <button type="button" aria-pressed={!currentTaskOnly && !task} className={scopeButtonClass}
+                onClick={() => { setCurrentOnly(false); setTask(""); }}>{t("All tasks")}</button>
+            </div>
+            <div role="group" aria-label={t("Note type")} className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {availableTypes.map((id) => {
+                const { icon: Icon, text, fill } = noteTypeAppearance[id];
+                const pressed = activeTypes.includes(id);
+                return <button key={id} type="button" aria-pressed={pressed}
+                  className={cn(typeFilterClass, pressed ? cn(text, fill, "ring-1 ring-inset ring-current/20") : "border-border text-muted-foreground hover:bg-muted hover:text-foreground")}
+                  onClick={() => setSelectedTypes((types) => types.includes(id) ? types.filter((type) => type !== id) : [...types, id])}>
+                  <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", text)} />
+                  {t(NOTE_TYPES[id].label)}{" "}
+                  {scoped && <span className="tabular-nums">{typeCounts.get(id) ?? 0}</span>}
+                </button>;
+              })}
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" size="sm" variant={filterCount ? "secondary" : "ghost"} className="h-7 px-2 text-xs text-muted-foreground">
+                  <ListFilterIcon aria-hidden="true" />{t("More filters")}{" "}
+                  {filterCount > 0 && <span className="rounded-full bg-background px-1.5 text-xs tabular-nums">{filterCount}</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent aria-label={t("More filters")} align="end" className="grid max-w-[calc(100vw-1.5rem)] gap-3 p-3">
+                {taskIds.length > 0 && <label className="block space-y-1 text-xs font-medium">{t("Source task")}
+                  <select className={filterSelectClass} value={task} title={task ? tasks[task] ?? task : undefined}
+                    onChange={(event) => { setCurrentOnly(false); setTask(event.target.value); }}>
+                    <option value="">{t("Any source task")}</option>
+                    {taskIds.map((id) => <option key={id} value={id}>{tasks[id] ?? id}</option>)}
+                  </select>
+                </label>}
+                <label className="block space-y-1 text-xs font-medium">{t("Organizer")}
+                  <select className={filterSelectClass} value={organizer} onChange={(event) => setOrganizer(event.target.value)}>
+                    <option value="">{t("All organizers")}</option>
+                    {organizers.map((id) => <option key={id} value={id}>{t(id)}</option>)}
+                  </select>
+                </label>
+                {(filterCount > 0 || currentTaskOnly || activeTypes.length > 0) && <Button type="button" variant="ghost" size="sm" className="justify-self-end"
+                  onClick={() => { setSelectedTypes([]); setCurrentOnly(false); setTask(""); setOrganizer(""); }}>{t("Clear filters")}</Button>}
+              </PopoverContent>
+            </Popover>
           </div>}
         </div>
       </header>
@@ -272,7 +318,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
         </div> : !pages ? <p role="status" className="text-sm text-muted-foreground">{t("Loading notes…")}</p>
           : !pages.length ? (unavailableCount === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("No note pages yet")}</p>)
           : !visible ? <p role="status" className="text-sm text-muted-foreground">{t("Searching notes…")}</p>
-          : !visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t("No matching note pages")}</p>
+          : !visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t(unfilteredCurrentTaskIsEmpty ? "No notes for the current task" : "No matching note pages")}</p>
           : <ul className={cn(noteListWidth, "grid grid-cols-1 gap-2.5 @min-[54rem]/notes:grid-cols-2")}>
             {visible.map((page) => <NoteListCard key={page.id} page={page} onOpenSource={onOpenSource}
               onOpen={() => setSelected({ id: page.id })} onOpenSources={() => setSelected({ id: page.id, focusSources: true })} />)}
@@ -293,7 +339,7 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
 }) {
   const t = useT();
   const locale = useLocale();
-  const [sourceTask] = useState(currentTask);
+  const [sourceTask] = useState(() => source?.task ?? currentTask);
   const [title, setTitle] = useState(() => source?.title.trim().slice(0, 300) ?? "");
   const [summary, setSummary] = useState(() => source?.initialSummary ?? "");
   const [includeTask, setIncludeTask] = useState(false);
@@ -302,16 +348,17 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
   const attempt = useRef<{ content: string; requestId: string } | undefined>(undefined);
   const [drafting, setDrafting] = useState(false);
   const draftRequest = useRef<AbortController | null>(null);
-  const [suggestion, setSuggestion] = useState<NoteDraft>();
+  const [batch, setBatch] = useState<NoteCandidateBatch>();
   const [draftError, setDraftError] = useState<string>();
   const [expertChoice, setExpertChoice] = useState<string>();
   const [defaultExpert, setDefaultExpert] = useState<string | null>(null);
   const [experts, setExperts] = useState<AgentFile[]>([]);
   const [expertsLoading, setExpertsLoading] = useState(true);
   const [expertListError, setExpertListError] = useState(false);
-  const [draftCredit, setDraftCredit] = useState<NoteDraftCredit>();
   const capabilitiesRevision = useCapabilitiesRevision();
-  const task = !source && includeTask ? sourceTask : undefined;
+  const anchor = source?.anchor;
+  const task = source?.task ?? (!anchor && includeTask ? sourceTask : undefined);
+  const sourceLabel = anchor?.kind === "file" ? anchor.path : source?.title ?? task?.title;
   const selectedExpert = experts.find((option) => option.name === (expertChoice ?? defaultExpert));
   const canDraft = !expertsLoading && selectedExpert && Boolean(summary.trim() || task || source);
   const busy = pending || drafting;
@@ -347,13 +394,14 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, summary, expert: selectedExpert.name,
-          taskId: task?.id, source: source?.anchor, model, locale }),
+        body: JSON.stringify({ format: "candidates", title, summary, expert: selectedExpert.name,
+          taskId: task?.id, source: anchor, model, locale }),
       }, projectId);
       if (controller.signal.aborted) return;
       if (response.ok) {
-        const draft = await response.json() as NoteDraft;
-        if (!controller.signal.aborted) setSuggestion(draft);
+        const next = await response.json() as NoteCandidateBatch;
+        if (!Array.isArray(next?.candidates) || !next.draftCredit?.expert) throw new Error("Invalid note candidates");
+        if (!controller.signal.aborted) setBatch(next);
         return;
       }
       const messages: Record<number, string> = {
@@ -384,7 +432,7 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
     setPending(true);
     setError(undefined);
     try {
-      const draft = { title: title.trim(), summary, task, source: source?.anchor, draftCredit };
+      const draft = { title: title.trim(), summary, task, source: anchor };
       const content = JSON.stringify(draft);
       if (attempt.current?.content !== content) {
         attempt.current = { content, requestId: newNoteKey() };
@@ -412,7 +460,11 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
         {dialog ? <DialogTitle className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</DialogTitle>
           : <h2 className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</h2>}
       </header>
-      <form className="flex min-h-0 min-w-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      {batch ? <NoteCandidateReview batch={batch} projectId={projectId} task={task} source={anchor} sourceLabel={sourceLabel}
+        onBack={() => setBatch(undefined)} onSavingChange={setPending} onDone={(pages) => {
+          if (pages.length === 1) onCreated(pages[0]);
+          else onCancel();
+        }} /> : <form className="flex min-h-0 min-w-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <div className={cn(noteReadingWidth, "space-y-4")}>
             <fieldset className="min-w-0 space-y-3" disabled={busy}>
@@ -430,7 +482,6 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
                   <select className={cn(selectClass, "block w-full appearance-none truncate pr-8")}
                     disabled={busy || expertsLoading} value={selectedExpert?.name ?? ""} onChange={(event) => {
                       setExpertChoice(event.target.value);
-                      setSuggestion(undefined);
                       setDraftError(undefined);
                     }}>
                     <option value="">{t(expertsLoading ? "Loading…" : "Select an expert")}</option>
@@ -442,51 +493,23 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
               {expertListError && <p role="alert" className="text-xs text-muted-foreground">{t("Could not load experts.")}</p>}
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithExpert()}>
-                  <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : suggestion ? "Redraft" : "Draft with expert")}
+                  <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : "Draft with expert")}
                 </Button>
                 {drafting && <Button type="button" size="sm" variant="ghost" onClick={() => draftRequest.current?.abort()}>
                   {t("Cancel drafting")}
                 </Button>}
               </div>
               {draftError && <p role="alert" className="text-sm text-destructive">{t(draftError)}</p>}
-              {suggestion && <div className="space-y-2 border-t pt-3">
-                <h3 className="text-sm font-medium">{t("Suggested draft")}</h3>
-                {suggestion.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
-                {suggestion.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
-                {Boolean(suggestion.checks?.length) && <details className="text-xs text-muted-foreground">
-                  <summary className="cursor-pointer">{t("Expert checks")}</summary>
-                  <ul className="mt-1 space-y-1 pl-3">
-                    {suggestion.checks?.map((check) => <li key={check.kind + check.detail}>{check.kind === "source"
-                      ? t("Read source lines {range}", { range: check.detail })
-                      : check.kind === "table" ? t("Checked {count} table rows", { count: check.detail })
-                        : t("Read skill {skill}", { skill: check.detail })}</li>)}
-                  </ul>
-                </details>}
-                <div className="max-h-60 space-y-1 overflow-auto rounded-md bg-muted/50 p-3 text-sm">
-                  <p className="break-words font-medium">{suggestion.title}</p>
-                  <p className="whitespace-pre-wrap break-words">{suggestion.summary}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
-                    setTitle(suggestion.title);
-                    setSummary(suggestion.summary);
-                    setDraftCredit(suggestion.draftCredit);
-                    setSuggestion(undefined);
-                  }}>{t("Apply draft")}</Button>
-                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setSuggestion(undefined)}>{t("Dismiss")}</Button>
-                </div>
-              </div>}
             </section>
             <fieldset className="min-w-0 space-y-2 border-t pt-3" disabled={busy} aria-label={t("Sources")}>
               <h3 className="text-sm font-medium">{t("Sources")}</h3>
               {source ? <p className="break-words rounded-md border p-2 text-xs">
-                <span className="text-muted-foreground">{t(source.anchor.kind === "message" ? "Answer" : NOTE_SOURCE_LABELS[source.anchor.kind])} · </span>
-                {source.anchor.kind === "file" ? source.anchor.path : source.title}
+                <span className="text-muted-foreground">{t(!anchor ? "Task" : anchor.kind === "message" ? "Answer" : NOTE_SOURCE_LABELS[anchor.kind])} · </span>
+                {sourceLabel}
               </p> : sourceTask ? <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={includeTask}
                   onChange={(event) => {
                     setIncludeTask(event.target.checked);
-                    setSuggestion(undefined);
                   }} />
                 <span className="min-w-0">
                   {t("Reference current task")}
@@ -505,7 +528,7 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
             </div>
           </div>
         </footer>
-      </form>
+      </form>}
     </section>
   );
 

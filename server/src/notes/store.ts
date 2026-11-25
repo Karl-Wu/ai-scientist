@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { atomicJson } from "../atomic-json.ts";
 import { getProject, resolvePaths, type ProjectPaths } from "../projects.ts";
 import { apiRelative, isUserVisible, safePath, SandboxError } from "../sandbox-fs.ts";
@@ -9,7 +10,7 @@ import { isValidSessionId } from "../agent/notebook-store.ts";
 import { AGENT_NAME_RE } from "../agent/agent-files.ts";
 import { matchesNoteAnchor, parseNoteAnchor, resolveNoteAnchor } from "./source.ts";
 import {
-  NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
+  MAX_NOTE_CANDIDATES, NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteBatchResult, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
 } from "../../../web/src/lib/note-pages.ts";
 
 function notePagesDirectory(paths: ProjectPaths) {
@@ -41,7 +42,7 @@ function normalizeDraftCredit(input: unknown): NoteDraftCredit | undefined {
   return { expert };
 }
 
-function normalizeContent(raw: Record<string, unknown>, type: NoteType): NoteContent {
+export function normalizeContent(raw: Record<string, unknown>, type: NoteType): NoteContent {
   const schema = NOTE_TYPES[type].fields;
   const fields = record(raw.fields, "note fields");
   for (const key of Object.keys(fields)) {
@@ -186,43 +187,84 @@ export function createNotePage(projectId: string, input: unknown): NotePage {
 export function createManualNotePage(projectId: string, input: unknown): NotePage {
   const dir = notesDir(projectId);
   const raw = record(input, "note page");
+  const content = normalizeContent({ title: raw.title, summary: raw.summary === undefined ? "" : raw.summary, fields: {} }, "note");
+  return createConfirmedPage(dir, raw.requestId === undefined ? randomUUID() : requestPageId(raw.requestId), "note", content,
+    normalizeDraftCredit(raw.draftCredit), confirmedSource(projectId, raw));
+}
+
+function requestPageId(value: unknown): string {
+  const key = text(value, "note request id", 32);
+  const parts = /^([a-f0-9]{8})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{12})$/.exec(key);
+  if (!parts) throw new SandboxError(400, "Invalid note request id");
+  return parts.slice(1).join("-");
+}
+
+export function saveNoteBatch(projectId: string, input: unknown): { results: NoteBatchResult[] } {
+  const dir = notesDir(projectId);
+  const raw = record(input, "note batch");
+  const credit = normalizeDraftCredit(raw.draftCredit);
+  if (!credit || !Array.isArray(raw.pages) || raw.pages.length < 1 || raw.pages.length > MAX_NOTE_CANDIDATES) {
+    throw new SandboxError(400, "Select one or more candidates and their expert");
+  }
+  const pages = raw.pages.map((value) => {
+    const page = record(value, "note candidate");
+    return { page, id: requestPageId(page.requestId), requestId: page.requestId as string };
+  });
+  if (new Set(pages.map(({ id }) => id)).size !== pages.length) throw new SandboxError(400, "Duplicate note request id");
+  const source = confirmedSource(projectId, raw);
+  return { results: pages.map(({ page, id, requestId }): NoteBatchResult => {
+    try {
+      if (typeof page.type !== "string" || !Object.hasOwn(NOTE_TYPES, page.type)) throw new SandboxError(400, "Unknown note type");
+      const type = page.type as NoteType;
+      const saved = createConfirmedPage(dir, id, type, normalizeContent(page, type), credit, source);
+      return { requestId, status: "saved", page: saved };
+    } catch (error) {
+      return { requestId, status: "failed", code: error instanceof SandboxError ? error.statusCode : 500 };
+    }
+  }) };
+}
+
+function confirmedSource(projectId: string, raw: Record<string, unknown>) {
   if (raw.task !== undefined && raw.source !== undefined) throw new SandboxError(400, "Select one note source");
   const anchor = raw.source === undefined ? undefined : parseNoteAnchor(raw.source);
   const task = raw.task === undefined ? undefined : record(raw.task, "source task");
   const taskId = task && text(task.id, "source task", 200, true);
   const label = task ? text(task.title ?? "", "source title", 300).trim() || "Source task" : undefined;
-  const savedAt = Date.now();
-  const draftCredit = normalizeDraftCredit(raw.draftCredit);
-  const content = normalizeContent({ title: raw.title, summary: raw.summary === undefined ? "" : raw.summary, fields: {} }, "note");
-  let id: string = randomUUID();
-  if (raw.requestId !== undefined) {
-    const key = text(raw.requestId, "note request id", 32);
-    const parts = /^([a-f0-9]{8})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{4})([a-f0-9]{12})$/.exec(key);
-    if (!parts) throw new SandboxError(400, "Invalid note request id");
-    // Reuse the page ID when the browser retries after a lost response.
-    id = parts.slice(1).join("-");
-    let existing: NotePage | undefined;
-    try {
-      existing = readPage(dir, id);
-    } catch (error) {
-      if (!(error instanceof SandboxError) || error.statusCode !== 404) throw error;
-    }
-    if (existing) {
-      const first = existing.revisions[0];
-      const source = existing.sources[0];
-      const sameSource = anchor ? matchesNoteAnchor(source, anchor) : taskId
-        ? source?.kind === "task" && source.sessionId === taskId && source.label === label : !source;
-      if (first.status === "saved" && first.title === content.title && first.summary === content.summary &&
-          sameSource && JSON.stringify(first.draftCredit) === JSON.stringify(draftCredit)) return existing;
-      throw new SandboxError(409, "The request already created a different note page");
-    }
+  let sources: NoteCitation[] | undefined;
+  return {
+    matches(source: NoteSource | undefined) {
+      if (anchor) return matchesNoteAnchor(source, anchor);
+      return taskId ? source?.kind === "task" && source.sessionId === taskId && source.label === label : !source;
+    },
+    resolve() {
+      if (sources) return sources;
+      if (taskId) taskSessionFile(projectId, taskId);
+      sources = anchor ? [cite(resolveNoteAnchor(projectId, anchor).source, 0)]
+        : taskId && label ? [cite({ kind: "task", sessionId: taskId, label, excerpt: "" }, 0)] : [];
+      return sources;
+    },
+  };
+}
+
+function createConfirmedPage(dir: string, id: string, type: NoteType, content: NoteContent,
+  draftCredit: NoteDraftCredit | undefined, source: ReturnType<typeof confirmedSource>): NotePage {
+  // The request ID continues to identify the original write after revisions or a lost response.
+  let existing: NotePage | undefined;
+  try {
+    existing = readPage(dir, id);
+  } catch (error) {
+    if (!(error instanceof SandboxError) || error.statusCode !== 404) throw error;
   }
-  if (taskId) taskSessionFile(projectId, taskId);
-  const sources = anchor ? [cite(resolveNoteAnchor(projectId, anchor).source, 0)]
-    : taskId && label ? [cite({ kind: "task", sessionId: taskId, label, excerpt: "" }, 0)] : [];
+  if (existing) {
+    const first = existing.revisions[0];
+    if (existing.type === type && first.status === "saved" &&
+        isDeepStrictEqual(content, { title: first.title, summary: first.summary, fields: first.fields }) &&
+        source.matches(existing.sources[0]) && isDeepStrictEqual(first.draftCredit, draftCredit)) return existing;
+    throw new SandboxError(409, "The request already created a different note page");
+  }
   return savePage(dir, {
-    id, schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources,
-    revisions: [{ ...content, version: 1, savedAt, status: "saved", ...(draftCredit ? { draftCredit } : {}) }],
+    id, schemaVersion: 3, type, typeVersion: 1, organizer: "Created manually", sources: source.resolve(),
+    revisions: [{ ...content, version: 1, savedAt: Date.now(), status: "saved", ...(draftCredit ? { draftCredit } : {}) }],
   });
 }
 

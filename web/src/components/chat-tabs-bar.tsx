@@ -8,6 +8,7 @@ import {
   FileTextIcon,
   LoaderCircleIcon,
   MoreHorizontalIcon,
+  NotebookPenIcon,
   PencilIcon,
   PlusIcon,
   TerminalIcon,
@@ -64,6 +65,7 @@ export interface ChatTabsBarProps {
   onRename: (id: string, title: string) => void;
   /** Reopen a stored session (from the History menu) into a tab. */
   onOpenSession: (sessionId: string, title: string) => void;
+  onCreateNoteFromTask?: (sessionId: string, title: string) => void;
   /** Session id of the active tab, for reproducibility export. */
   activeSessionId?: string | null;
   /** Whether the active tab has any messages worth exporting. */
@@ -95,6 +97,7 @@ function RecentChatsList({
   onNewTab,
   onRenameTab,
   onOpenSession,
+  onCreateNoteFromTask,
 }: {
   projectId: string;
   tabs: ChatTabDescriptor[];
@@ -104,6 +107,7 @@ function RecentChatsList({
   onNewTab: () => void;
   onRenameTab: (id: string, title: string) => void;
   onOpenSession: (sessionId: string, title: string) => void;
+  onCreateNoteFromTask?: (sessionId: string, title: string) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -329,6 +333,9 @@ function RecentChatsList({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" side="right" className="min-w-36">
+                      {onCreateNoteFromTask && <DropdownMenuItem onSelect={() => onCreateNoteFromTask(session.id, rowTitle)}>
+                        <NotebookPenIcon className="size-3.5" />{t("Create note from this task")}
+                      </DropdownMenuItem>}
                       <DropdownMenuItem disabled={savingName} onSelect={() => startRename(session.id, rowTitle, tab?.id, session.id)}>
                         <PencilIcon className="size-3.5" />
                         {t("Rename")}
@@ -450,6 +457,7 @@ export function ChatTabsBar({
   onNew,
   onRename,
   onOpenSession,
+  onCreateNoteFromTask,
   activeSessionId,
   canExport = false,
 }: ChatTabsBarProps) {
@@ -506,6 +514,7 @@ export function ChatTabsBar({
           onNewTab={onNew}
           onRenameTab={onRename}
           onOpenSession={onOpenSession}
+          onCreateNoteFromTask={onCreateNoteFromTask}
         />
       </div>
 

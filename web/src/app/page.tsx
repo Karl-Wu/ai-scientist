@@ -1462,6 +1462,7 @@ function WorkspacePage({
               onNew={newTab}
               onRename={renameTab}
               onOpenSession={openSession}
+              onCreateNoteFromTask={(id, title) => handleCreateNote({ title, task: { id, title: title.slice(0, 300) } })}
               activeSessionId={activeSessionId}
               canExport={(activeMeta?.userMessageCount ?? 0) > 0}
             />

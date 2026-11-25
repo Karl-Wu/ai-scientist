@@ -356,3 +356,37 @@ describe("project note pages", () => {
     } finally { await app.close(); }
   });
 });
+
+it("saves a confirmed batch with per-page results and idempotent retries", async () => {
+  const app = await notesApp();
+  writeTask(task);
+  try {
+    const observation = { requestId: "1".repeat(32), type: "observation", title: "Edited observation",
+      summary: "This version was reviewed.", fields: { finding: "A candidate finding" } };
+    const decision = { requestId: "2".repeat(32), type: "decision", title: "Next step",
+      summary: "Repeat the check.", fields: { finding: "Field from the wrong type" } };
+    const confirm = (pages: object[]) => app.inject({
+      method: "POST", url: "/notes/batch", payload: { pages, draftCredit: { expert: "abstract-writer" }, task: { id: task, title: "Original task" } },
+    });
+    expect((await confirm([observation, observation])).statusCode).toBe(400);
+    expect((await app.inject("/notes")).json().pages).toEqual([]);
+    const result = await confirm([observation, decision]);
+    expect(result.statusCode).toBe(200);
+    const [saved, failed] = result.json().results;
+    expect(saved).toMatchObject({ requestId: observation.requestId, status: "saved", page: {
+      type: "observation", sources: [{ kind: "task", sessionId: task }],
+      revisions: [{ version: 1, status: "saved", title: observation.title, fields: observation.fields, draftCredit: { expert: "abstract-writer" } }],
+    } });
+    expect(failed).toEqual({ requestId: decision.requestId, status: "failed", code: 400 });
+    expect((await app.inject("/notes")).json().pages).toHaveLength(1);
+    const retry = await confirm([observation, { ...decision, fields: { rationale: "Independent confirmation" } }]);
+    expect(retry.json().results).toMatchObject([
+      { requestId: observation.requestId, status: "saved", page: { id: saved.page.id } },
+      { requestId: decision.requestId, status: "saved", page: { type: "decision" } },
+    ]);
+    expect((await confirm([{ ...observation, title: "Conflicting edit" }])).json().results).toEqual([
+      { requestId: observation.requestId, status: "failed", code: 409 },
+    ]);
+    expect((await app.inject("/notes")).json().pages).toHaveLength(2);
+  } finally { await app.close(); }
+});
