@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowUpRightIcon, ChevronDownIcon } from "lucide-react";
 import { useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyNotePagesChanged } from "@/lib/note-events";
 import {
-  NOTE_TYPES, type NoteAnchor, type NoteBatchResult, type NoteCandidate, type NoteCandidateBatch,
-  type NotePage, type NoteTaskReference,
+  NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_TYPES, type NoteAnchor, type NoteBatchResult, type NoteCandidate, type NoteCandidateBatch,
+  type NotePage, type NoteSourceLink, type NoteTaskReference,
 } from "@/lib/note-pages";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
@@ -23,12 +23,13 @@ interface ReviewRow {
   uncertain?: boolean;
 }
 
-export function NoteCandidateReview({ batch, projectId, task, source, sourceLabel, onBack, onDone, onSavingChange }: {
+export function NoteCandidateReview({ batch, projectId, task, source, sourceLabel, onOpenSource, onBack, onDone, onSavingChange }: {
   batch: NoteCandidateBatch;
   projectId: string;
   task?: NoteTaskReference;
   source?: NoteAnchor;
   sourceLabel?: string;
+  onOpenSource?: (source: NoteSourceLink) => void;
   onBack: () => void;
   onDone: (pages: NotePage[]) => void;
   onSavingChange: (pending: boolean) => void;
@@ -115,6 +116,23 @@ export function NoteCandidateReview({ batch, projectId, task, source, sourceLabe
         </div>
         {batch.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
         {batch.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
+        {batch.taskRecords && <>
+          {batch.taskRecords.coverage !== "recorded" && <p className="text-xs text-muted-foreground">
+            {t(batch.taskRecords.coverage === "legacy" ? "This task has saved messages but no separate execution log."
+              : "Some task records are missing or the task was still running.")}
+          </p>}
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">{t("Read {read} of {total} task records", {
+              read: batch.taskRecords.read.length, total: batch.taskRecords.total,
+            })}</summary>
+            <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto pl-3">
+              {batch.taskRecords.read.map((record) => <li key={record.id} className="break-words">
+                {record.label}{record.partial && " · " + t("Partially read")}
+                {record.flags.map((flag) => " · " + t(NOTE_RECORD_FLAG_LABELS[flag]))}
+              </li>)}
+            </ul>
+          </details>
+        </>}
         {Boolean(batch.checks?.length) && <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer">{t("Expert checks")}</summary>
           <ul className="mt-1 space-y-1 pl-3">
@@ -143,7 +161,7 @@ export function NoteCandidateReview({ batch, projectId, task, source, sourceLabe
                   <ChevronDownIcon aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground", row.expanded && "rotate-180")} />
                 </button>
               </div>
-              {row.expanded ? <fieldset disabled={saving || row.uncertain || Boolean(row.saved)} className="space-y-2">
+              {row.expanded ? <><fieldset disabled={saving || row.uncertain || Boolean(row.saved)} className="space-y-2">
                 <label className="block space-y-1 text-sm">{t("Note title")}
                   <Input value={page.title} maxLength={300} onChange={(event) => patch({ title: event.target.value })} />
                 </label>
@@ -155,7 +173,27 @@ export function NoteCandidateReview({ batch, projectId, task, source, sourceLabe
                   <Textarea value={page.fields[id] ?? ""} maxLength={4_000}
                     onChange={(event) => patch({ fields: { ...page.fields, [id]: event.target.value } })} />
                 </label>)}
-              </fieldset> : <p className="line-clamp-2 whitespace-pre-line break-words text-xs text-muted-foreground">{page.summary}</p>}
+              </fieldset>
+              {Boolean(page.sources?.length) && <div className="space-y-1.5 border-t pt-2">
+                <h4 className="text-xs font-medium">{t("Sources")}</h4>
+                <ul className="space-y-1.5">
+                  {page.sources?.map((citation, index) => <li key={index} className="space-y-1 rounded-md border px-2 py-1.5 text-xs">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <span className="min-w-0 break-words">{t(NOTE_SOURCE_LABELS[citation.kind])} · {citation.label}</span>
+                      {onOpenSource && <Button type="button" variant="ghost" size="xs" className="shrink-0" onClick={() => onOpenSource(citation)}>
+                        <ArrowUpRightIcon aria-hidden="true" />{t(citation.kind === "task" ? "Open source task" : "Open source")}
+                      </Button>}
+                    </div>
+                    {Boolean(citation.recordFlags?.length) && <p className="text-muted-foreground">
+                      {citation.recordFlags?.map((flag) => t(NOTE_RECORD_FLAG_LABELS[flag])).join(" · ")}
+                    </p>}
+                    {citation.excerpt && <details className="text-muted-foreground">
+                      <summary className="cursor-pointer">{t("View cited excerpt")}</summary>
+                      <p className="mt-1 whitespace-pre-wrap break-words">{citation.excerpt}</p>
+                    </details>}
+                  </li>)}
+                </ul>
+              </div>}</> : <p className="line-clamp-2 whitespace-pre-line break-words text-xs text-muted-foreground">{page.summary}</p>}
               {row.saved && <p className="text-xs font-medium text-muted-foreground">{t("Saved")}</p>}
               {row.failure && <div className="flex flex-wrap items-center gap-2 text-xs text-destructive">
                 <span role="alert">{t(row.failure)}</span>

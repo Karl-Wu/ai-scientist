@@ -118,7 +118,7 @@ export type SessionEntryRow = (MessageRow | CustomMessageRow | CompactionRow) & 
  * the custom messages and compactions that `readRows` (used by the sh/md
  * exports) deliberately skips.
  */
-export function readEntries(file: string): SessionEntryRow[] {
+export function readEntries(file: string, onMalformed?: () => void): SessionEntryRow[] {
   const rows: SessionEntryRow[] = [];
   for (const line of fs.readFileSync(file, "utf-8").split("\n")) {
     const trimmed = line.trim();
@@ -132,7 +132,7 @@ export function readEntries(file: string): SessionEntryRow[] {
         rows.push(obj as CompactionRow);
       }
     } catch {
-      /* skip malformed line */
+      onMalformed?.();
     }
   }
   return rows;

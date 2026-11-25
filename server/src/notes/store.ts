@@ -9,6 +9,7 @@ import { findSessionFile, readEntries, type SessionEntryRow } from "../agent/ses
 import { isValidSessionId } from "../agent/notebook-store.ts";
 import { AGENT_NAME_RE } from "../agent/agent-files.ts";
 import { matchesNoteAnchor, parseNoteAnchor, resolveNoteAnchor } from "./source.ts";
+import { verifyNoteEvidence, type EvidenceScope } from "./evidence-proof.ts";
 import {
   MAX_NOTE_CANDIDATES, NOTE_PAGE_ID, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, type NoteBatchResult, type NoteCitation, type NoteContent, type NoteDraftCredit, type NoteListResult, type NotePage, type NoteSource, type NoteSourceLink, type NoteSummary, type NoteType,
 } from "../../../web/src/lib/note-pages.ts";
@@ -216,7 +217,9 @@ export function saveNoteBatch(projectId: string, input: unknown): { results: Not
     try {
       if (typeof page.type !== "string" || !Object.hasOwn(NOTE_TYPES, page.type)) throw new SandboxError(400, "Unknown note type");
       const type = page.type as NoteType;
-      const saved = createConfirmedPage(dir, id, type, normalizeContent(page, type), credit, source);
+      const refs = page.sources !== undefined || page.sourceProof !== undefined
+        ? verifyNoteEvidence(projectId, source.evidenceScope, credit.expert, requestId, page.sources, page.sourceProof) : [];
+      const saved = createConfirmedPage(dir, id, type, normalizeContent(page, type), credit, source, refs);
       return { requestId, status: "saved", page: saved };
     } catch (error) {
       return { requestId, status: "failed", code: error instanceof SandboxError ? error.statusCode : 500 };
@@ -231,7 +234,10 @@ function confirmedSource(projectId: string, raw: Record<string, unknown>) {
   const taskId = task && text(task.id, "source task", 200, true);
   const label = task ? text(task.title ?? "", "source title", 300).trim() || "Source task" : undefined;
   let sources: NoteCitation[] | undefined;
+  const evidenceScope: EvidenceScope | undefined = taskId ? { sessionId: taskId } : anchor?.kind === "message"
+    ? { sessionId: anchor.sessionId, answerId: anchor.entryId } : undefined;
   return {
+    evidenceScope,
     matches(source: NoteSource | undefined) {
       if (anchor) return matchesNoteAnchor(source, anchor);
       return taskId ? source?.kind === "task" && source.sessionId === taskId && source.label === label : !source;
@@ -247,7 +253,7 @@ function confirmedSource(projectId: string, raw: Record<string, unknown>) {
 }
 
 function createConfirmedPage(dir: string, id: string, type: NoteType, content: NoteContent,
-  draftCredit: NoteDraftCredit | undefined, source: ReturnType<typeof confirmedSource>): NotePage {
+  draftCredit: NoteDraftCredit | undefined, source: ReturnType<typeof confirmedSource>, refs: NoteSource[] = []): NotePage {
   // The request ID continues to identify the original write after revisions or a lost response.
   let existing: NotePage | undefined;
   try {
@@ -259,11 +265,13 @@ function createConfirmedPage(dir: string, id: string, type: NoteType, content: N
     const first = existing.revisions[0];
     if (existing.type === type && first.status === "saved" &&
         isDeepStrictEqual(content, { title: first.title, summary: first.summary, fields: first.fields }) &&
-        source.matches(existing.sources[0]) && isDeepStrictEqual(first.draftCredit, draftCredit)) return existing;
+        source.matches(existing.sources[0]) && isDeepStrictEqual(first.draftCredit, draftCredit) &&
+        isDeepStrictEqual(existing.sources.slice(1), refs.map((ref, index) => cite(ref, index + 1)))) return existing;
     throw new SandboxError(409, "The request already created a different note page");
   }
   return savePage(dir, {
-    id, schemaVersion: 3, type, typeVersion: 1, organizer: "Created manually", sources: source.resolve(),
+    id, schemaVersion: 3, type, typeVersion: 1, organizer: "Created manually",
+    sources: [...source.resolve(), ...refs.map((ref, index) => cite(ref, index + 1))],
     revisions: [{ ...content, version: 1, savedAt: Date.now(), status: "saved", ...(draftCredit ? { draftCredit } : {}) }],
   });
 }

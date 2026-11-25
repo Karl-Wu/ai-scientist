@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
+  NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
   type NoteCandidateBatch, type NoteContent, type NoteCreationSource,
   type NoteListResult, type NotePage, type NoteRevision, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
@@ -221,7 +221,7 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
 
   if (creating) {
     return <NotePageCreate key={creating.key} projectId={projectId} currentTask={currentTask} model={model}
-      source={creating.source} onCancel={() => setCreating(undefined)}
+      source={creating.source} onOpenSource={onOpenSource} onCancel={() => setCreating(undefined)}
       onCreated={(page) => {
         setSelected({ id: page.id, initialPage: page });
         setCreating((current) => current?.key === creating.key ? undefined : current);
@@ -328,11 +328,12 @@ export function NotePagesView({ projectId, onOpenSource, currentTask, model, cre
   );
 }
 
-export function NotePageCreate({ projectId, currentTask, model, source, onCancel, onCreated, dialog }: {
+export function NotePageCreate({ projectId, currentTask, model, source, onOpenSource, onCancel, onCreated, dialog }: {
   projectId: string;
   currentTask?: NoteTaskReference;
   model?: string;
   source?: NoteCreationSource;
+  onOpenSource?: NotesProps["onOpenSource"];
   onCancel: () => void;
   onCreated: (page: NotePage) => void;
   dialog?: { returnFocus: () => void };
@@ -461,7 +462,7 @@ export function NotePageCreate({ projectId, currentTask, model, source, onCancel
           : <h2 className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</h2>}
       </header>
       {batch ? <NoteCandidateReview batch={batch} projectId={projectId} task={task} source={anchor} sourceLabel={sourceLabel}
-        onBack={() => setBatch(undefined)} onSavingChange={setPending} onDone={(pages) => {
+        onOpenSource={onOpenSource} onBack={() => setBatch(undefined)} onSavingChange={setPending} onDone={(pages) => {
           if (pages.length === 1) onCreated(pages[0]);
           else onCancel();
         }} /> : <form className="flex min-h-0 min-w-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void save(); }}>
@@ -794,6 +795,9 @@ function NotePageDetail({ id, projectId, onOpenSource, onBack, onSaved, onDelete
                         : source.kind === "file" ? "Open current file" : source.kind === "task" ? "Open source task" : "Open source")}
                     </Button>
                   </div>
+                  {Boolean(source.recordFlags?.length) && <p className="text-xs text-muted-foreground">
+                    {source.recordFlags?.map((flag) => t(NOTE_RECORD_FLAG_LABELS[flag])).join(" · ")}
+                  </p>}
                   {source.excerpt && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{source.excerpt}</p>}
                   {source.kind === "file" && source.sha256 && <p className="break-all font-mono text-xs text-muted-foreground">SHA-256 {source.sha256}</p>}
                 </li>)}

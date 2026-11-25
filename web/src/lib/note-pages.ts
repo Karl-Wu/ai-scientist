@@ -21,7 +21,12 @@ export type NoteSourceLink = { label: string } & (
   | (PdfAnnotationAnchor & { page: number })
 );
 
-export type NoteSource = NoteSourceLink & { excerpt: string };
+export type NoteRecordFlag = "truncated" | "redacted" | "unavailable";
+export const NOTE_RECORD_FLAG_LABELS: Record<NoteRecordFlag, string> = {
+  truncated: "Record truncated", redacted: "Record redacted", unavailable: "Record details unavailable",
+};
+
+export type NoteSource = NoteSourceLink & { excerpt: string; recordFlags?: NoteRecordFlag[] };
 export type NoteCitation = NoteSource & { id: string };
 
 export interface NoteDraftCredit {
@@ -89,11 +94,18 @@ export const MAX_NOTE_CANDIDATES = 8;
 export interface NoteCandidate extends NoteContent {
   type: NoteType;
   requestId: string;
+  sources?: NoteSource[];
+  sourceProof?: string;
 }
 
 export interface NoteCandidateBatch extends NoteDraftDetails {
   candidates: NoteCandidate[];
   draftCredit: NoteDraftCredit;
+  taskRecords?: {
+    total: number;
+    coverage: "recorded" | "legacy" | "incomplete";
+    read: { id: string; label: string; partial: boolean; flags: NoteRecordFlag[] }[];
+  };
 }
 
 export type NoteBatchResult =

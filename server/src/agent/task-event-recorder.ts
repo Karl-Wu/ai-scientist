@@ -36,7 +36,7 @@ function recordText(text: string, max = MAX_TEXT, alreadyTruncated = false): Rec
 
 // Traverse only a bounded part of the JSON tree; keep unstructured strings
 // bounded as well. No arbitrary tool details or attachment bytes are copied.
-function recordArgs(args: unknown, sandbox: string): RecordedContent {
+export function recordArgs(args: unknown, sandbox: string): RecordedContent {
   if (args === undefined) return { kind: "omitted", reason: "unavailable" };
   let remaining = MAX_TEXT;
   let redacted = false;

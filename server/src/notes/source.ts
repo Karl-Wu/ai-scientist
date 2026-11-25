@@ -66,6 +66,13 @@ function existingFile(root: string, file: string, requireVisible = false): strin
   }
 }
 
+export function noteSessionFile(projectId: string, sessionId: string): string {
+  const paths = resolvePaths(projectId);
+  const session = findSessionFile(paths, sessionId);
+  if (!session) throw new SandboxError(404, "Source task is unavailable in this project");
+  return existingFile(paths.sessionsDir, session);
+}
+
 export function resolveNoteAnchor(projectId: string, anchor: NoteAnchor):
   | { source: NoteSource; material: string }
   | { source: NoteSource; file: string } {
@@ -99,9 +106,7 @@ export function resolveNoteAnchor(projectId: string, anchor: NoteAnchor):
     return { source: { ...anchor, page: annotation.page, label, excerpt: excerpts(1_980) }, material };
   }
 
-  const session = findSessionFile(paths, anchor.sessionId);
-  if (!session) throw new SandboxError(404, "Source task is unavailable in this project");
-  const file = existingFile(paths.sessionsDir, session);
+  const file = noteSessionFile(projectId, anchor.sessionId);
   if (anchor.kind === "message") {
     // The saved ID identifies a user-visible answer bubble, which can combine
     // text from multiple model messages separated by tool calls.

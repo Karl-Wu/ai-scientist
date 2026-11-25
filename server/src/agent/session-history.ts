@@ -17,6 +17,7 @@ import {
 import {
   readEntries,
   textOf,
+  type SessionEntryRow,
   type TextPart,
   type ThinkingPart,
   type ToolCallPart,
@@ -174,6 +175,10 @@ function imagesOf(content: { type: string }[]): { data: string; mimeType: string
 }
 
 export function toHistory(file: string, sandboxRoot = ""): HistoryMessage[] {
+  return historyFromEntries(readEntries(file), sandboxRoot);
+}
+
+export function historyFromEntries(rows: SessionEntryRow[], sandboxRoot = ""): HistoryMessage[] {
   const out: HistoryMessage[] = [];
   const toolOwners = new Map<string, HistoryMessage>();
   const summaries = new Map<HistoryMessage, ClientFrame>();
@@ -204,7 +209,7 @@ export function toHistory(file: string, sandboxRoot = ""): HistoryMessage[] {
     assistant = null;
   };
 
-  for (const row of readEntries(file)) {
+  for (const row of rows) {
     if (row.type === "custom_message") {
       pushSystem(customMessageFrame(row, sandboxRoot), row.timestamp);
       continue;

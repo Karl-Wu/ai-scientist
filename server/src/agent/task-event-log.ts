@@ -253,10 +253,11 @@ function recoverCheckpoint(file: string, scope: TaskEventScope, isActive: () => 
 /** Scan one confirmed prefix without retaining message and argument bodies. */
 export async function scanTaskTimeline(
   paths: ProjectPaths, scope: TaskEventScope, isActive: () => boolean, visit: (event: StoredTaskEvent) => void,
-): Promise<void> {
+) {
   const file = taskEventLogPath(paths, scope.sessionId);
-  const { head } = await recoverCheckpoint(file, scope, isActive);
-  await scanEvents(file, scope, head, head.taskSeq, visit).catch(() => {});
+  const { head, incomplete } = await recoverCheckpoint(file, scope, isActive);
+  const corrupt = await scanEvents(file, scope, head, head.taskSeq, visit).catch(() => true);
+  return { through: head.taskSeq, incomplete: incomplete || corrupt };
 }
 
 export async function readTaskTimeline(

@@ -1,4 +1,12 @@
 {
+  "Record truncated": "记录已截断",
+  "Record redacted": "记录已脱敏",
+  "Record details unavailable": "部分记录详情不可用",
+  "This task has saved messages but no separate execution log.": "此任务有已保存的对话，缺少独立的执行日志。",
+  "Some task records are missing or the task was still running.": "部分任务记录缺失，或整理开始时任务仍在运行。",
+  "Read {read} of {total} task records": "已查阅 {read} / {total} 条任务记录",
+  "Partially read": "只读了部分内容",
+  "View cited excerpt": "查看引用片段",
   "Task scope": "任务范围",
   "Current task": "当前任务",
   "More filters": "更多筛选",

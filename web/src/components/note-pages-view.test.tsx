@@ -316,6 +316,9 @@ it("reviews a single candidate and restores the original inputs when going back"
 it("opens the editor with an exact source and uses that source for both drafting and saving", async () => {
   const anchor = { kind: "message", sessionId: "task-one", entryId: "answer-two" } as const;
   const source = { ...anchor, id: "s1", label: "Selected finding", excerpt: "" };
+  const citation = { kind: "tool", sessionId: "task-one", toolCallId: "check-two", label: "Saved check", excerpt: "Tool output",
+    recordFlags: ["truncated"] } as const;
+  const draftCandidate = { ...candidate("Draft title", "Draft summary"), sources: [citation], sourceProof: "test-proof" };
   const received = vi.fn();
   vi.mocked(apiFetch).mockImplementation(async (url, options) => {
     if (url === "/agents") return Response.json({ agents: [reviewer], noteDefaultExpert: reviewer.name });
@@ -323,12 +326,14 @@ it("opens the editor with an exact source and uses that source for both drafting
     const body = JSON.parse(String(options?.body));
     received(url, body);
     if (url === "/notes/draft") return Response.json({
-      candidates: [candidate("Draft title", "Draft summary")], draftCredit: { expert: reviewer.name }, taskExcerptShortened: false,
+      candidates: [draftCandidate], draftCredit: { expert: reviewer.name }, taskExcerptShortened: false,
+      taskRecords: { total: 4, coverage: "incomplete", read: [{ id: "r2", label: citation.label, partial: false, flags: citation.recordFlags }] },
     });
     if (url === "/notes/batch") {
       const [draft] = body.pages;
       const page = {
-        id: "new-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually", sources: [source],
+        id: "new-page", schemaVersion: 3, type: "note", typeVersion: 1, organizer: "Created manually",
+        sources: [source, { ...citation, id: "s2", recordFlags: [...citation.recordFlags] }],
         revisions: [{ version: 1, title: draft.title, summary: draft.summary, fields: {}, savedAt: 1, status: "saved" }],
       } satisfies NotePage;
       return Response.json({ results: [{ requestId: draft.requestId, status: "saved", page }] });
@@ -346,13 +351,17 @@ it("opens the editor with an exact source and uses that source for both drafting
   expect(received).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Draft with expert" }));
   await screen.findByDisplayValue("Draft summary");
+  expect(screen.getByText("Read 1 of 4 task records")).toBeVisible();
+  expect(screen.getByText("Record truncated")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Open source" }));
+  expect(onOpenSource).toHaveBeenCalledWith(citation);
   expect(received).toHaveBeenCalledWith("/notes/draft", expect.objectContaining({ source: anchor }));
   expect(received.mock.calls[0][1]).not.toHaveProperty("taskId");
   await user.click(screen.getByRole("button", { name: "Save note page" }));
   await screen.findByRole("heading", { name: "Draft title" });
-  expect(received).toHaveBeenLastCalledWith("/notes/batch", expect.objectContaining({ source: anchor, pages: [candidate("Draft title", "Draft summary")] }));
+  expect(received).toHaveBeenLastCalledWith("/notes/batch", expect.objectContaining({ source: anchor, pages: [draftCandidate] }));
   expect(received.mock.calls[1][1]).not.toHaveProperty("task");
-  await user.click(screen.getByRole("button", { name: "Open source" }));
+  await user.click(screen.getAllByRole("button", { name: "Open source" })[0]);
   expect(onOpenSource).toHaveBeenCalledWith(source);
 });
 

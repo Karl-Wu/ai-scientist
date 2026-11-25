@@ -6,7 +6,10 @@ import { expect, it, vi } from "vitest";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { setSpecialistEnabled, writeProjectAgent } from "../src/agent/agent-files.ts";
 import { generateNoteCandidates, generateNoteDraft, NOTE_DRAFT_SESSION_ID } from "../src/notes/draft.ts";
-import { createManualNotePage, getNotePage, listNotePages } from "../src/notes/store.ts";
+import { createManualNotePage, getNotePage, listNotePages, saveNoteBatch } from "../src/notes/store.ts";
+import { appendTaskEvents } from "../src/agent/task-event-log.ts";
+import type { TaskEventDraft } from "../src/agent/task-events.ts";
+import { taskRecordTools } from "../src/notes/task-records.ts";
 import { sessionCostSummary } from "../src/cost/ledger.ts";
 
 const expert = "scientific-result-reviewer";
@@ -160,4 +163,137 @@ it("returns a mixed set of editable candidates with stable request IDs and leave
   await expect(generateNoteCandidates(project.id, { expert, summary: "No useful material." }, {
     stream: () => reply([tool("submit_note_candidates", { candidates: [] })], "toolUse"),
   })).resolves.toMatchObject({ candidates: [] });
+});
+
+function recordsFixture() {
+  const project = createProject({ name: "Early checks and later rounds" });
+  const paths = resolvePaths(project.id);
+  fs.mkdirSync(paths.sessionsDir, { recursive: true });
+  const sessionId = "task-record-fixture";
+  const file = path.join(paths.sessionsDir, sessionId + ".jsonl");
+  const text = (value: string) => ({ type: "text", text: value });
+  const message = (id: string, role: string, timestamp: number, content: unknown[], extra = {}) => ({
+    id, type: "message", message: { role, timestamp, content, ...extra },
+  });
+  const rows = [
+    message("first-question", "user", 1, [text("Check original cohort")]),
+    message("before-compaction", "assistant", 2, [
+      { type: "thinking", thinking: "Reasoning for first answer" },
+      { type: "thinking", thinking: "opaque-reasoning-secret", redacted: true },
+      { type: "toolCall", name: "check", id: "early-tool", arguments: { path: "unread.txt", api_key: "fixture-secret" } },
+    ]),
+    message("first-output", "toolResult", 3, [text("record ".repeat(1250) + "Confirmed early checksum Z9")],
+      { toolName: "check", toolCallId: "early-tool" }),
+    { type: "compaction", id: "compact", summary: "Context summary before reply" },
+    message("first-answer", "assistant", 4, [text("A first decision was recorded."), { type: "thinking", thinking: "Review existing results." }]),
+    message("second-question", "user", 5, [text("Later unrelated task input")]),
+    message("second-tool", "assistant", 6, [{ type: "toolCall", name: "later_tool", id: "later-tool", arguments: {} }]),
+    message("second-output", "toolResult", 7, [text("Unrelated later output")], { toolCallId: "later-tool" }),
+    message("second-answer", "assistant", 8, [text("Later unrelated conclusion")]),
+    ...Array.from({ length: 34 }, (_, index) => [
+      message("later-q" + index, "user", 20 + index * 2, [text("Later revision " + index)]),
+      message("later-a" + index, "assistant", 21 + index * 2, [text("Later status " + index)]),
+    ]).flat(),
+  ];
+  fs.writeFileSync(file, rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+  fs.writeFileSync(path.join(paths.sandbox, "unread.txt"), "Secret neighboring file bytes");
+  return { project, paths, file, sessionId };
+}
+
+it("finds an early paged output, attaches different verified sources, and saves only the confirmed candidate", async () => {
+  const { project, sessionId, file } = recordsFixture();
+  let calls = 0;
+  let outputId: string;
+  let answerId: string;
+  const stream: StreamFn = (_model, context) => {
+    const output = (name: string) => JSON.parse((context.messages.filter((message) =>
+      message.role === "toolResult" && message.toolName === name).at(-1)?.content[0] as { text: string }).text);
+    switch (++calls) {
+      case 1:
+        // This entry is appended after the draft's source snapshot has been acquired.
+        fs.appendFileSync(file, JSON.stringify({ type: "message", id: "post-start", message: { role: "user", timestamp: 100,
+          content: [{ type: "text", text: "new after snapshot Z9" }] } }) + "\n");
+        return reply([tool("list_task_records", { query: "Z9" })], "toolUse");
+      case 2: {
+        const index = output("list_task_records");
+        expect(index.total).toBe(1);
+        expect(index.records[0]).toMatchObject({ kind: "tool", round: 1 });
+        outputId = index.records[0].id;
+        return reply([tool("read_task_record", { records: [{ id: outputId }] })], "toolUse");
+      }
+      case 3: {
+        const firstPart = output("read_task_record")[0];
+        expect(firstPart.nextOffset).toBeGreaterThan(0);
+        expect(firstPart.text).toContain("[redacted]");
+        expect(JSON.stringify(context.messages)).not.toContain("fixture-secret");
+        expect(firstPart.text).not.toContain("Confirmed early checksum");
+        return reply([tool("read_task_record", { records: [{ id: outputId, offset: 8000 }] })], "toolUse");
+      }
+      case 4:
+        expect(output("read_task_record")[0].text).toContain("Confirmed early checksum Z9");
+        expect(JSON.stringify(context.messages)).not.toContain("Secret neighboring file bytes");
+        return reply([tool("list_task_records", { kind: "answer", query: "first decision" })], "toolUse");
+      case 5:
+        answerId = output("list_task_records").records[0].id;
+        return reply([tool("read_task_record", { records: [{ id: answerId }] })], "toolUse");
+      default:
+        return reply([tool("submit_note_candidates", { candidates: [
+          { type: "observation", title: "Early checksum", summary: "The tool recorded Z9.", fields: {}, recordIds: [outputId] },
+          { type: "decision", title: "First decision", summary: "The first answer recorded a decision.", fields: {}, recordIds: [answerId] },
+        ] })], "toolUse");
+    }
+  };
+  const batch = await generateNoteCandidates(project.id, { expert, taskId: sessionId }, { stream });
+  expect(batch.taskRecords).toMatchObject({ coverage: "legacy", read: [{ id: outputId!, partial: true }, { id: answerId!, partial: false }] });
+  expect(batch.taskRecords!.total).toBeGreaterThan(32);
+  const [observation, decision] = batch.candidates;
+  expect(observation.sources).toMatchObject([{ kind: "tool", toolCallId: "early-tool", recordFlags: ["redacted"],
+    excerpt: expect.stringContaining("Confirmed early checksum Z9") }]);
+  expect(decision.sources).toMatchObject([{ kind: "message", entryId: "first-answer" }]);
+  expect(listNotePages(project.id).pages).toEqual([]);
+
+  const input = { task: { id: sessionId, title: "Main task" }, draftCredit: batch.draftCredit };
+  const tampered = { ...observation, sources: [{ ...observation.sources![0], toolCallId: "later-tool" }] };
+  expect(saveNoteBatch(project.id, { ...input, pages: [tampered] }).results[0]).toMatchObject({ status: "failed", code: 409 });
+  expect(saveNoteBatch(project.id, { ...input, task: undefined, source: { kind: "message", sessionId, entryId: "second-answer" },
+    pages: [observation] }).results[0]).toMatchObject({ status: "failed", code: 409 });
+  const edited = { ...observation, title: "Reviewed early checksum" };
+  const saved = saveNoteBatch(project.id, { ...input, pages: [edited] });
+  expect(saved.results[0]).toMatchObject({ status: "saved", page: { sources: [{ kind: "task" }, { kind: "tool", toolCallId: "early-tool" }] } });
+  fs.unlinkSync(file); // A lost response can still be confirmed after the original task is gone.
+  expect(saveNoteBatch(project.id, { ...input, pages: [edited] })).toEqual(saved);
+  expect(listNotePages(project.id).pages).toMatchObject([{ title: edited.title }]);
+});
+
+it("scopes an answer to its own records across compaction and marks event-only truncated outputs", async () => {
+  const { project, paths, sessionId } = recordsFixture();
+  const scope = { projectId: project.id, sessionId };
+  const events: TaskEventDraft[] = [
+    { type: "run_started", payload: { origin: "user", kind: "turn" }, eventId: "s", runId: "r", source: "pi", observedAt: 1 },
+    { type: "tool_ended", payload: { toolCallId: "child-tool", parentToolCallId: "early-tool", toolName: "child_check",
+      outcome: "failed", result: { kind: "inline", value: "Child output was shortened", truncated: true } },
+      eventId: "t", runId: "r", source: "pi", observedAt: 3 },
+    { type: "run_ended", payload: { outcome: "completed" }, eventId: "e", runId: "r", source: "pi", observedAt: 4 },
+  ];
+  await appendTaskEvents(paths, scope, events, true);
+  const opened = await taskRecordTools(project.id, sessionId, "first-answer", new AbortController().signal);
+  const [list, read] = opened.tools;
+  const index = JSON.parse((await list.execute("list", {})).content[0].text);
+  expect(index.coverage).toBe("recorded");
+  expect(index.records.map((item: { label: string }) => item.label).join(" ")).not.toMatch(/Later|later_tool|opaque-reasoning-secret/);
+  expect(index.records).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: "question", label: "Check original cohort" }),
+    expect.objectContaining({ kind: "answer", label: "A first decision was recorded." }),
+    expect.objectContaining({ kind: "tool", label: "check · completed" }),
+    expect.objectContaining({ kind: "tool", label: "child_check · failed", flags: ["unavailable", "truncated"] }),
+  ]));
+  const child = index.records.find((item: { label: string }) => item.label.startsWith("child_check"));
+  const reasoning = index.records.find((item: { kind: string }) => item.kind === "reasoning");
+  expect(() => opened.cite([child.id])).toThrow("Cite evidence records you read");
+  const result = JSON.parse((await read.execute("read", { records: [{ id: child.id }, { id: reasoning.id }] })).content[0].text);
+  expect(result[0]).toMatchObject({ id: child.id, text: expect.stringContaining("Child output was shortened"), flags: ["unavailable", "truncated"] });
+  expect(result[1].text).toContain("Reasoning for first answer");
+  expect(result[1].text).not.toContain("opaque-reasoning-secret");
+  expect(opened.cite([child.id])).toMatchObject([{ kind: "task", label: "child_check · failed" }]);
+  expect(() => opened.cite([reasoning.id])).toThrow("Use reasoning only to guide");
 });
