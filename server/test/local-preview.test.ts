@@ -44,6 +44,27 @@ it("binds the private address to the browser origin, project and session before 
   expect(resolvePreview(previewId, origin, "a", "other")).toBeUndefined();
 });
 
+it("shows a public adapter hint on failure and keeps diagnostics private", async () => {
+  fs.mkdirSync(root, { recursive: true });
+  const script = path.join(root, "failure.cjs");
+  const config = path.join(root, "config.json");
+  fs.writeFileSync(config, JSON.stringify([{ project: "a", id: "sample", executable: process.execPath, args: [script], description: "Test" }]));
+  vi.stubEnv("KADY_PREVIEW_ADAPTERS", config);
+  const tool = localPreviewTools("a", () => "s", root)[0];
+  const generic = "The local preview adapter failed.";
+  for (const [stdout, expected] of [
+    [JSON.stringify({ error: { user_message: "Save your draft before restarting." } }), "Save your draft before restarting."],
+    ["unstructured private details", generic],
+    [JSON.stringify({ error: { user_message: "Visit http://localhost:9201/#secret" } }), generic],
+    [JSON.stringify({ error: { user_message: "first\nsecond" } }), generic],
+    [JSON.stringify({ error: { user_message: " " } }), generic],
+  ]) {
+    fs.writeFileSync(script, `console.error("private diagnostics"); console.log(${JSON.stringify(stdout)}); process.exitCode = 1;`);
+    const execute = () => tool.execute("call", {adapter: "sample", resource: "example"}, undefined, undefined, {} as never);
+    await expect(withPreviewOrigin(origin, execute)).rejects.toMatchObject({ message: expected });
+  }
+});
+
 it("declares the configured adapter to the lead model in new and restored chats", async () => {
   const { createSession, getSession, disposeProjectSessions } = await import("../src/agent/session-registry.ts");
   const { ensureProjectExists } = await import("../src/projects.ts");

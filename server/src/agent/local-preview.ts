@@ -46,6 +46,17 @@ export function allowedPreviewUrl(value: unknown, origin: string): value is stri
     !isCorsOriginAllowed(new URL(value).origin);
 }
 
+const adapterFailed = "The local preview adapter failed.";
+
+function adapterError(output: string): string {
+  try {
+    const message = JSON.parse(output)?.error?.user_message;
+    if (typeof message === "string" && message.trim() && message.length <= 240 &&
+        !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|:\/\/|[#<>]/u.test(message)) return message.trim();
+  } catch { /* Raw adapter output is private. */ }
+  return adapterFailed;
+}
+
 const parameters = Type.Object({ adapter: Type.String(), resource: Type.String({ pattern: "^[A-Za-z0-9_.-]{1,128}$" }) });
 export function localPreviewTools(project: string, sessionId: () => string, workspace: string): ToolDefinition<typeof parameters>[] {
   const installed = adapters(project);
@@ -63,7 +74,7 @@ export function localPreviewTools(project: string, sessionId: () => string, work
         const child = execFile(config.executable, config.args, { cwd: path.dirname(config.executable),
           env: { PATH: process.env.PATH, HOME: os.homedir(), SystemRoot: process.env.SystemRoot },
           timeout: 30000, maxBuffer: 32768, windowsHide: true, signal },
-          (err, output) => err ? reject(new Error("The local preview adapter failed.")) : resolve(output));
+          (err, output) => err ? reject(new Error(typeof err.code === "number" && !err.killed ? adapterError(output) : adapterFailed)) : resolve(output));
         child.stdin?.on("error", () => {}).end(JSON.stringify({ platform_origin: origin, project_id: project, workspace, resource }));
       });
       let action;

@@ -230,6 +230,8 @@ The agent calls `open_local_preview` with `adapter` and `resource`. The platform
 {"open_preview":{"kind":"local_url","url":"http://127.0.0.1:45123/editor?view=draft#example","title":"Review editor"}}
 ```
 
+For a known failure, exit with a nonzero status and write one JSON object to stdout, for example `{"error":{"user_message":"Save your draft and reopen the editor."}}`. Use a short, single-line message intended for chat (at most 240 characters). Use fixed wording without private resource values, links or credentials. For unexpected failures the platform uses its generic error. It never copies raw stdout or stderr to the user.
+
 The title and resource identifier are visible in chat. Keep credentials exclusively in the private URL. Adapters should avoid logging that URL themselves. Allowed destinations are HTTP services on an explicit localhost or 127.0.0.1 port distinct from the platform UI and API. The page runs scripts on its own origin. After loading it can call `parent.postMessage({type: "local-preview-ready"}, platform_origin)`. Browsers conceal cross-origin embedding errors, so without confirmation the panel offers troubleshooting and reload. The browser and application service must be on the same machine. Match the platform's hostname when the application uses same-site cookies.
 
 Only an opaque reference and the title enter the tool result. Clicking it resolves the address in the originating project, chat and browser origin. References expire after eight hours, may be evicted at capacity, and expire on backend restart. Ask the tool to reopen the resource to obtain a fresh reference.
