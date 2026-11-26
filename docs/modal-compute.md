@@ -79,10 +79,9 @@ concurrently can also exceed the remaining project cap.
 
 ## Reviewed robustness batches
 
-Notebook **Stress-test finding** uses a separate reviewed snapshot/approval path,
-reserving every specification before any remote work starts. Generic batch
-submission does not provide that contract, and managed jobs cannot be directly
-retried. See [Robustness workflows](notebook-robustness.md).
+Legacy **Stress-test finding** batches can still be inspected, cancelled and
+recovered from their existing approvals. The general Modal compute workflow
+continues to manage regular jobs. See [Robustness workflows](notebook-robustness.md).
 
 ## Boundaries and verification
 

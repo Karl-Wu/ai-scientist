@@ -1,6 +1,8 @@
 import React, { Suspense, useEffect, useState } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { NoteCreationSource } from "@/lib/note-pages";
+import { apiFetch } from "@/lib/projects";
 
 vi.mock("next/dynamic", () => ({ default: (loader: () => Promise<React.ComponentType>) => {
   const Lazy = React.lazy(async () => ({ default: await loader() }));
@@ -21,9 +23,21 @@ vi.mock("@uiw/react-codemirror", async (original) => ({
   },
 }));
 vi.mock("@/components/ai-elements/message", () => ({ MessageResponse: () => null }));
-vi.mock("@/components/pdf-viewer/pdf-viewer", () => ({ PdfViewer: () => null }));
+vi.mock("@/components/pdf-viewer/pdf-viewer", () => ({
+  PdfViewer: ({ path, onCreateNote }: { path: string; onCreateNote: (source: NoteCreationSource) => void }) => (
+    <div data-testid="pdf-preview">
+      <button onClick={() => onCreateNote({ title: "study.pdf · Page 3", anchor: { kind: "pdfAnnotation", path, annotationId: "pin-3" },
+        initialSummary: "Annotation text" })}>Create note from this annotation</button>
+    </div>
+  ),
+}));
 vi.mock("@/components/file-icon", () => ({ KadyFileIcon: () => null }));
-vi.mock("@/components/lab-notebook-view", () => ({ LabNotebookView: () => null }));
+vi.mock("@/components/note-pages-view", async (original) => ({
+  ...await original<typeof import("@/components/note-pages-view")>(), NotePagesView: () => null,
+}));
+vi.mock("@/lib/projects", async (original) => ({
+  ...await original<typeof import("@/lib/projects")>(), apiFetch: vi.fn(),
+}));
 vi.mock("@/components/modal-jobs-panel", () => ({ ModalJobsPanel: () => null }));
 vi.mock("@/components/automation-panel", () => ({ AutomationPanel: () => null }));
 vi.mock("@/components/provenance-panel", () => ({ ProvenancePanel: () => null }));
@@ -38,12 +52,48 @@ function panelProps(path = "a.txt"): React.ComponentProps<typeof FilePreviewPane
     onSaveText: vi.fn(async () => true), onSaveImageBlob: vi.fn(async () => true),
     onCompileLatex: vi.fn(), showNotebook: false, onSelectNotebook: vi.fn(), showCompute: false,
     onSelectCompute: vi.fn(), computeSessionId: null, computeScope: "project", onComputeScopeChange: vi.fn(),
-    onOpenComputeOutput: vi.fn(), notebookSessionId: null, notebookEntries: [], notebookStreaming: false,
-    notebookSubagentCompletions: 0, onOpenNotebookFile: vi.fn(),
+    onOpenComputeOutput: vi.fn(), onOpenNoteSource: vi.fn(),
   };
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+it.each([
+  { anchor: { kind: "file", path: "b.txt" }, title: "b.txt", summary: "", action: "Write a note for this file" },
+  { anchor: { kind: "pdfAnnotation", path: "study.pdf", annotationId: "pin-3" }, title: "study.pdf · Page 3",
+    summary: "Annotation text", action: "Create note from this annotation" },
+] as const)("keeps the $anchor.kind preview in place when cancelling or saving a note", async ({ anchor, title, summary, action }) => {
+  const createNote = vi.fn((_request: unknown) => Response.json({ id: "saved-note" }, { status: 201 }));
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/agents") return Response.json({ agents: [] });
+    if (url === "/notes" && options?.method === "POST") return createNote(JSON.parse(String(options.body)));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const props = panelProps("study.pdf");
+  render(<FilePreviewPanel {...props} activeTabPath={anchor.path} />);
+  const getPreview = () => anchor.kind === "file" ? screen.findByRole("textbox", { name: "Viewer" }) : screen.findByTestId("pdf-preview");
+  const preview = await getPreview();
+  preview.scrollTop = 180;
+  const openNote = () => fireEvent.click(screen.getByRole("button", { name: action }));
+  openNote();
+  let editor = within(await screen.findByRole("dialog", { name: "New note page" }));
+  expect(editor.getByRole("textbox", { name: "Note title" })).toHaveValue(title);
+  expect(editor.getByRole("textbox", { name: "Current summary" })).toHaveValue(summary);
+  fireEvent.click(editor.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(createNote).not.toHaveBeenCalled();
+  expect(await getPreview()).toBe(preview);
+  expect(preview.scrollTop).toBe(180);
+
+  openNote();
+  editor = within(await screen.findByRole("dialog", { name: "New note page" }));
+  fireEvent.click(editor.getByRole("button", { name: "Save note page" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(createNote).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source: anchor, title, summary }));
+  expect(await getPreview()).toBe(preview);
+  expect(preview.scrollTop).toBe(180);
+  expect(props.onSaveText).not.toHaveBeenCalled();
+});
 
 it.each(["showNotebook", "showCompute", "showAutomation"] as const)(
   "hides file tabs while %s is selected and restores them on return",
@@ -93,6 +143,15 @@ it("requires confirmation to close a dirty file tab or text editor", async () =>
   expect(props.onTabClose).toHaveBeenCalledWith("a.txt");
 });
 
+it("keeps the preview tab open before starting an edit", () => {
+  const props = panelProps();
+  const onKeepOpen = vi.fn();
+  render(<FilePreviewPanel {...props} onKeepOpen={onKeepOpen} tabs={[{ ...props.tabs[0], preview: true }]} />);
+  expect(screen.getByTitle("Keep a.txt open")).toBeInTheDocument();
+  fireEvent.click(screen.getByTitle("Edit file"));
+  expect(onKeepOpen).toHaveBeenCalledWith("a.txt");
+});
+
 it("retains annotations across navigation and treats a new stroke after saving as dirty", async () => {
   const props = panelProps("a.png");
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -124,4 +183,18 @@ it("retains annotations across navigation and treats a new stroke after saving a
   fireEvent.click(screen.getAllByTitle("Close tab")[0]);
   expect(confirm).toHaveBeenCalled();
   expect(props.onTabClose).not.toHaveBeenCalled();
+});
+
+it("puts HTML file actions beside the address and uses the navigated file for downloads", async () => {
+  const props = panelProps("report.html");
+  vi.mocked(apiFetch).mockResolvedValue(new Response("<p>Detail</p>"));
+  render(<FilePreviewPanel {...props} />);
+  const toolbar = within(await screen.findByRole("group", { name: "HTML preview" }));
+  const address = toolbar.getByRole("textbox", { name: "Project HTML address" });
+  fireEvent.change(address, { target: { value: "detail.html" } });
+  fireEvent.submit(address.closest("form")!);
+  const menu = await toolbar.findByRole("button", { name: "File actions for detail.html" });
+  fireEvent.keyDown(menu, { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Download" }));
+  expect(props.onDownload).toHaveBeenCalledWith("detail.html");
 });

@@ -12,7 +12,7 @@
  * agent set they started with.
  */
 import type { FastifyInstance } from "fastify";
-import { activePaths } from "../projects.ts";
+import { activePaths, getProject, updateProject } from "../projects.ts";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -20,8 +20,10 @@ import {
   MEMORY_PATH_RE,
   THINKING_LEVELS,
   agentMemoryFile,
+  canDraftNotes,
   deleteProjectAgent,
   listAgents,
+  pinnedSpecialistModel,
   restoreDefaultAgents,
   seedAgentFiles,
   setSpecialistEnabled,
@@ -56,14 +58,9 @@ function patchFromBody(body: Record<string, unknown>): AgentFilePatch | string {
     return `systemPromptMode must be "append" or "replace"`;
   }
   const boolOrUndef = (v: unknown) => (v === undefined || v === null ? undefined : Boolean(v));
-  let extra: Record<string, unknown> | undefined;
-  if (body.extra && typeof body.extra === "object" && !Array.isArray(body.extra)) {
-    extra = {};
-    for (const [k, v] of Object.entries(body.extra as Record<string, unknown>)) {
-      extra[k] = v;
-    }
-    if (Object.keys(extra).length === 0) extra = undefined;
-  }
+  const extra = body.extra && typeof body.extra === "object" && !Array.isArray(body.extra)
+    ? body.extra as Record<string, unknown>
+    : undefined;
   let memory: AgentMemory | undefined;
   if (body.memory && typeof body.memory === "object" && !Array.isArray(body.memory)) {
     const m = body.memory as Record<string, unknown>;
@@ -88,7 +85,8 @@ function patchFromBody(body: Record<string, unknown>): AgentFilePatch | string {
 }
 
 export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/agents", async () => {
+  app.get("/agents", async (_req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const paths = activePaths();
     // Older projects may predate seeding; make sure the roster exists before
     // the first listing (no-op once the marker file is present).
@@ -98,13 +96,35 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     // may just have added verifiers, so bring the routing up to date first.
     applyVerifierDefault(paths, modelRefAvailable, { createSettings: true });
     const routed = routedVerifiers(paths);
+    const pinned = settingsPinnedModels(paths);
     return {
-      agents: listAgents(paths).map((agent) => !isVerifierAgent(agent.name) ? agent : {
+      noteDefaultExpert: getProject(paths.id)?.noteDefaultExpert ?? null,
+      agents: listAgents(paths).map((agent) => ({
         ...agent,
-        verifier: true,
+        canDraftNotes: canDraftNotes(agent),
+        noteDraftModel: pinnedSpecialistModel(agent, pinned),
+        ...(isVerifierAgent(agent.name) ? { verifier: true } : {}),
         ...(routed?.agents.includes(agent.name) ? { verifierModel: routed.model } : {}),
-      }),
+      })),
     };
+  });
+
+  app.put<{ Body: { expert?: unknown } }>("/agents/note-default", async (req, reply) => {
+    const paths = activePaths();
+    if (req.headers["x-project-id"] !== undefined && req.headers["x-project-id"] !== paths.id) {
+      return reply.code(404).send({ detail: "Requested project is unavailable; no fallback project was used" });
+    }
+    const expert = req.body?.expert;
+    if (expert !== null && (typeof expert !== "string" || !AGENT_NAME_RE.test(expert))) {
+      return reply.code(400).send({ detail: "Select an expert or clear the default." });
+    }
+    if (expert !== null) {
+      seedAgentFiles(paths);
+      if (!listAgents(paths).some((agent) => agent.name === expert && canDraftNotes(agent))) {
+        return reply.code(409).send({ detail: "The selected expert is unavailable for note drafting." });
+      }
+    }
+    return { noteDefaultExpert: updateProject(paths.id, { noteDefaultExpert: expert }).noteDefaultExpert ?? null };
   });
 
   // Project-wide specialist model (`subagents.defaultModel` in

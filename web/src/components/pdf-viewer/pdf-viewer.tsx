@@ -25,14 +25,17 @@ import {
 } from "react";
 
 import { ExternalLinkIcon } from "lucide-react";
+import { useT } from "@/components/i18n-provider";
 import { rawFileUrl } from "@/lib/use-sandbox";
 import { useProjectScopeId } from "@/lib/projects";
+import type { NoteCreationSource } from "@/lib/note-pages";
 import {
   type Annotation,
   type AnnotationsDoc,
   type Author,
   type HighlightAnnotation,
   type NoteAnnotation,
+  type PdfAnnotationFocus,
   type Rect,
   EMPTY_DOC,
   USER_AUTHOR,
@@ -47,7 +50,8 @@ import { cn } from "@/lib/utils";
 
 import { AnnotationLayer } from "./annotation-layer";
 import { usePdfPageRendering } from "./use-pdf-page-rendering";
-import { usePdfZoom } from "./use-pdf-zoom";
+import { usePreviewZoom } from "@/components/use-preview-zoom";
+import { PreviewZoomControls } from "@/components/preview-zoom-controls";
 import { AnnotationSidebar } from "./annotation-sidebar";
 import { NotePopover } from "./note-popover";
 
@@ -165,6 +169,8 @@ export interface PdfViewerProps {
   onSyncClick?: (pos: PdfSyncClick) => void; // Cmd/Ctrl+click on a page
   hideAnnotationUi?: boolean; // view-only: hide annotation UI and skip loading/polling the sidecar
   initialFitWidth?: boolean;
+  annotationFocus?: PdfAnnotationFocus;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }
 
 export function PdfViewer({
@@ -176,7 +182,10 @@ export function PdfViewer({
   onSyncClick,
   hideAnnotationUi = false,
   initialFitWidth = false,
+  annotationFocus,
+  onCreateNote,
 }: PdfViewerProps) {
+  const t = useT();
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
   const [pdfjs, setPdfjs] = useState<PdfjsModule | null>(null);
@@ -187,6 +196,7 @@ export function PdfViewer({
 
   const [annotations, setAnnotations] =
     useState<AnnotationsDoc>(EMPTY_DOC);
+  const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
   const [lastModified, setLastModified] = useState<string | null>(null);
   const annotationsRef = useRef<AnnotationsDoc>(EMPTY_DOC);
   const lastModifiedRef = useRef<string | null>(null);
@@ -201,7 +211,8 @@ export function PdfViewer({
   }, [lastModified]);
 
   const [mode, setMode] = useState<"none" | "highlight" | "note">("none");
-  const [showExpert, setShowExpert] = useState(true);
+  const [showAnnotationSidebar, setShowAnnotationSidebar] = useState(true);
+  const focusToken = annotationFocus?.token;
   const [activeAnnotationId, setActiveAnnotationId] =
     useState<string | null>(null);
   const [pendingNote, setPendingNote] = useState<{
@@ -209,9 +220,11 @@ export function PdfViewer({
     anchor: { x: number; y: number };
     screen: { x: number; y: number };
   } | null>(null);
+  const [savingPendingNote, setSavingPendingNote] = useState(false);
+  const [pendingNoteError, setPendingNoteError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const { zoom, setZoom, fitWidth, fitToWidth } = usePdfZoom(containerRef, pageSize?.w ?? 0, initialFitWidth);
+  const { zoom, setZoom, fitWidth, fitToWidth } = usePreviewZoom(containerRef, pageSize?.w ?? 0, initialFitWidth);
   const [currentPage, setCurrentPage] = useState(1);
   const docRef = useRef<PdfDoc | null>(null);
   const loadedPathRef = useRef<string | null>(null);
@@ -318,11 +331,15 @@ export function PdfViewer({
   useEffect(() => {
     if (hideAnnotationUi) return;
     let cancelled = false;
-    fetchAnnotations(path, scopedProjectId).then((res) => {
+    void fetchAnnotations(path, scopedProjectId).then((res) => {
       if (cancelled) return;
       setAnnotations(res.doc);
       setLastModified(res.lastModified);
       etagRef.current = res.etag;
+    }).catch(() => {
+      // Finish loading so a broken citation can fall back to its saved page.
+    }).finally(() => {
+      if (!cancelled) setAnnotationsLoaded(true);
     });
     return () => {
       cancelled = true;
@@ -330,10 +347,10 @@ export function PdfViewer({
   }, [path, hideAnnotationUi, scopedProjectId]);
 
   useEffect(() => {
-    if (hideAnnotationUi) return;
+    if (hideAnnotationUi || !annotationsLoaded) return;
     const unsub = subscribeAnnotations(
       path,
-      lastModifiedRef.current,
+      () => ({ lastModified: lastModifiedRef.current, etag: etagRef.current }),
       ({ doc: newDoc, lastModified: newMtime, etag: newEtag }) => {
         setAnnotations(newDoc);
         setLastModified(newMtime);
@@ -343,7 +360,7 @@ export function PdfViewer({
       scopedProjectId,
     );
     return unsub;
-  }, [path, hideAnnotationUi, scopedProjectId]);
+  }, [path, hideAnnotationUi, scopedProjectId, annotationsLoaded]);
 
   // --------------------------------------------------------------------
   // Persistence (debounced per keystroke is overkill — we save on every
@@ -371,7 +388,6 @@ export function PdfViewer({
           version: 1,
           annotations: Array.from(byId.values()),
         };
-        setAnnotations(merged);
         setLastModified(fresh.lastModified);
         etagRef.current = fresh.etag;
         const retry = await saveAnnotations(
@@ -381,15 +397,17 @@ export function PdfViewer({
           scopedProjectId,
         );
         if (retry.ok) {
+          setAnnotations(merged);
           setLastModified(retry.lastModified);
           etagRef.current = retry.etag;
         }
-        return;
+        return retry.ok;
       }
       if (res.ok) {
         setLastModified(res.lastModified);
         etagRef.current = res.etag;
       }
+      return res.ok;
     },
     [path, scopedProjectId],
   );
@@ -544,6 +562,7 @@ export function PdfViewer({
       const viewport = readViewport(el);
       if (!viewport) return;
       const [x, y] = viewport.convertToPdfPoint(cssX, cssY);
+      setPendingNoteError(null);
       setPendingNote({
         page,
         anchor: { x, y },
@@ -555,25 +574,21 @@ export function PdfViewer({
   );
 
   // --------------------------------------------------------------------
-  // Filtered view for the layers + sidebar
+  // Annotations shared by the page layers and sidebar
   // --------------------------------------------------------------------
 
-  const visibleAnnotations = useMemo(
-    () =>
-      annotations.annotations.filter(
-        (a) => showExpert || a.author.kind !== "expert",
-      ),
-    [annotations, showExpert],
-  );
-
+  const linkedAnnotation = annotationFocus && annotations.annotations.find((annotation) =>
+    annotation.id === annotationFocus.annotationId);
+  const linkedPage = linkedAnnotation?.page ?? annotationFocus?.page;
+  const linkedId = linkedAnnotation?.id;
   const annotationsByPage = useMemo(() => {
     const map = new Map<number, Annotation[]>();
-    for (const a of visibleAnnotations) {
+    for (const a of annotations.annotations) {
       if (!map.has(a.page)) map.set(a.page, []);
       map.get(a.page)!.push(a);
     }
     return map;
-  }, [visibleAnnotations]);
+  }, [annotations.annotations]);
 
   const jumpToAnnotation = useCallback((ann: Annotation) => {
     const el = containerRef.current?.querySelector<HTMLElement>(
@@ -599,6 +614,66 @@ export function PdfViewer({
   // --------------------------------------------------------------------
 
   const defaultSize = useMemo(() => pageSize ? { w: pageSize.w * zoom, h: pageSize.h * zoom } : null, [pageSize, zoom]);
+  const pagesReady = Boolean(doc && defaultSize);
+  useEffect(() => {
+    if (!pagesReady || linkedPage === undefined) return;
+    const page = containerRef.current?.querySelector<HTMLElement>(`[data-pdf-page="${linkedPage}"]`);
+    // Bring an unrendered page into range first. Its mounted annotation
+    // scrolls into view once the viewport transform is available.
+    if (page && !page.querySelector("[data-pdf-linked-annotation]")) {
+      page.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }, [focusToken, linkedPage, pagesReady]);
+
+  const createNoteFromAnnotation = onCreateNote ? (
+    annotation: Annotation,
+    comment = annotation.type === "highlight" ? annotation.note ?? "" : annotation.body,
+  ) => {
+    const highlighted = annotation.type === "highlight" ? annotation.text : "";
+    const initialSummary = [
+      highlighted?.trim() && `### ${t("Highlighted text")}\n\n${highlighted.trim().slice(0, 15_000)}`,
+      comment.trim() && `### ${t("Annotation text")}\n\n${comment.trim().slice(0, 15_000)}`,
+    ].filter(Boolean).join("\n\n");
+    onCreateNote({
+      title: `${path.split("/").at(-1)} · ${t("Page {page}", { page: annotation.page })}`,
+      anchor: { kind: "pdfAnnotation", path, annotationId: annotation.id },
+      initialSummary,
+    });
+  } : undefined;
+
+  async function savePendingNote(body: string, createPage: boolean) {
+    if (!pendingNote || savingPendingNote) return;
+    const annotation: NoteAnnotation = {
+      id: newAnnotationId(),
+      type: "note",
+      page: pendingNote.page,
+      anchor: pendingNote.anchor,
+      body,
+      color: USER_COLOR,
+      author: USER_AUTHOR,
+      createdAt: new Date().toISOString(),
+    };
+    setSavingPendingNote(true);
+    setPendingNoteError(null);
+    try {
+      const saved = await persist({ version: 1, annotations: [...annotationsRef.current.annotations, annotation] });
+      if (!saved) {
+        setPendingNoteError(t("Could not save the PDF annotation."));
+        return;
+      }
+      setAnnotations((current) => current.annotations.some(({ id }) => id === annotation.id) ? current : {
+        ...current,
+        annotations: [...current.annotations, annotation],
+      });
+      setPendingNote(null);
+      if (createPage) createNoteFromAnnotation?.(annotation);
+    } catch {
+      setPendingNoteError(t("Could not save the PDF annotation."));
+    } finally {
+      setSavingPendingNote(false);
+    }
+  }
+
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
@@ -673,8 +748,8 @@ export function PdfViewer({
         mode={mode}
         setMode={setMode}
         onCommitHighlight={handleHighlightSelection}
-        showExpert={showExpert}
-        setShowExpert={setShowExpert}
+        showAnnotationSidebar={showAnnotationSidebar}
+        setShowAnnotationSidebar={setShowAnnotationSidebar}
         hideAnnotationUi={hideAnnotationUi}
         openHref={rawFileUrl(path, scopedProjectId)}
         onJumpPage={(p) => {
@@ -684,13 +759,18 @@ export function PdfViewer({
           if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }}
       />
+      {annotationFocus && annotationsLoaded && !linkedAnnotation && (
+        <p role="status" className="shrink-0 border-b px-3 py-2 text-xs text-muted-foreground">
+          {t("The linked PDF annotation is unavailable.")}
+        </p>
+      )}
 
       <div className="flex flex-1 min-h-0">
         <div
           ref={containerRef}
           data-pdf-scroll
           className={cn(
-            "flex-1 overflow-auto bg-muted/30",
+            "min-w-0 flex-1 overflow-auto bg-muted/30",
             mode === "note" && "cursor-crosshair",
           )}
         >
@@ -709,8 +789,11 @@ export function PdfViewer({
                       annotationsByPage.get(pageNumber) ?? []
                     }
                     activeAnnotationId={activeAnnotationId}
+                    linkedAnnotationId={linkedPage === pageNumber ? linkedId : undefined}
+                    focusToken={focusToken}
                     onRemove={removeAnnotation}
                     onUpdate={updateAnnotation}
+                    onCreateNote={createNoteFromAnnotation}
                     onClickPage={(e) => handlePageClick(e, pageNumber)}
                   />
                 ),
@@ -723,11 +806,11 @@ export function PdfViewer({
           </div>
         </div>
 
-        {!hideAnnotationUi && (
+        {!hideAnnotationUi && showAnnotationSidebar && (
           <AnnotationSidebar
-            annotations={visibleAnnotations}
+            annotations={annotations.annotations}
+            loading={!annotationsLoaded}
             onJump={jumpToAnnotation}
-            onRemove={removeAnnotation}
           />
         )}
       </div>
@@ -737,21 +820,11 @@ export function PdfViewer({
           screen={pendingNote.screen}
           initialBody=""
           author={USER_AUTHOR}
+          saving={savingPendingNote}
+          error={pendingNoteError}
           onCancel={() => setPendingNote(null)}
-          onSave={(body) => {
-            const ann: NoteAnnotation = {
-              id: newAnnotationId(),
-              type: "note",
-              page: pendingNote.page,
-              anchor: pendingNote.anchor,
-              body,
-              color: USER_COLOR,
-              author: USER_AUTHOR,
-              createdAt: new Date().toISOString(),
-            };
-            addAnnotation(ann);
-            setPendingNote(null);
-          }}
+          onSave={(body) => void savePendingNote(body, false)}
+          onCreateNote={createNoteFromAnnotation ? (body) => void savePendingNote(body, true) : undefined}
         />
       )}
     </div>
@@ -772,8 +845,8 @@ function Toolbar({
   mode,
   setMode,
   onCommitHighlight,
-  showExpert,
-  setShowExpert,
+  showAnnotationSidebar,
+  setShowAnnotationSidebar,
   hideAnnotationUi,
   openHref,
   onJumpPage,
@@ -787,47 +860,16 @@ function Toolbar({
   mode: "none" | "highlight" | "note";
   setMode: (m: "none" | "highlight" | "note") => void;
   onCommitHighlight: () => void;
-  showExpert: boolean;
-  setShowExpert: (v: boolean) => void;
+  showAnnotationSidebar: boolean;
+  setShowAnnotationSidebar: (show: boolean) => void;
   hideAnnotationUi: boolean;
   openHref: string;
   onJumpPage: (p: number) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-background/60 px-2 py-1 text-xs">
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        title="Zoom out"
-        onClick={() => setZoom(Math.max(0.1, +(zoom - 0.1).toFixed(2)))}
-      >
-        −
-      </button>
-      <span className="w-12 text-center tabular-nums">
-        {Math.round(zoom * 100)}%
-      </span>
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        title="Zoom in"
-        onClick={() => setZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))}
-      >
-        +
-      </button>
-      <button
-        className="rounded px-2 py-1 hover:bg-muted"
-        onClick={() => setZoom(1)}
-        title="Fit 100%"
-      >
-        100%
-      </button>
-
-      <button
-        className={cn("rounded px-2 py-1 hover:bg-muted", fitWidth && "bg-muted")}
-        onClick={onFitWidth}
-        aria-pressed={fitWidth}
-        title="Fit page to pane width"
-      >
-        Fit width
-      </button>
+      <PreviewZoomControls zoom={zoom} setZoom={setZoom} fitWidth={fitWidth} onFitWidth={onFitWidth} />
 
       <div className="mx-2 h-4 w-px bg-border" />
 
@@ -884,13 +926,13 @@ function Toolbar({
 
       <div className="ml-auto flex items-center gap-2">
         {!hideAnnotationUi && (
-          <label className="flex items-center gap-1">
+          <label className="flex cursor-pointer items-center gap-1" title={t("Show or hide the annotation sidebar")}>
             <input
               type="checkbox"
-              checked={showExpert}
-              onChange={(e) => setShowExpert(e.target.checked)}
+              checked={showAnnotationSidebar}
+              onChange={(e) => setShowAnnotationSidebar(e.target.checked)}
             />
-            Expert annotations
+            {t("Show annotations")}
           </label>
         )}
         {/* Browser-native find/print/download live in the browser's own PDF
@@ -921,8 +963,11 @@ function PageView({
   sync,
   annotations,
   activeAnnotationId,
+  linkedAnnotationId,
+  focusToken,
   onRemove,
   onUpdate,
+  onCreateNote,
   onClickPage,
 }: {
   doc: PdfDoc;
@@ -932,13 +977,24 @@ function PageView({
   sync: { h: number; v: number; W: number; H: number; token: number } | null;
   annotations: Annotation[];
   activeAnnotationId: string | null;
+  linkedAnnotationId?: string;
+  focusToken?: number;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Annotation>) => void;
+  onCreateNote?: (annotation: Annotation, comment: string) => void;
   onClickPage: (ev: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   const { pageRef, canvasRef, textLayerRef, viewport, size } = usePdfPageRendering(
     doc, pageNumber, BASE_SCALE * zoom, loadPdfjs,
   );
+  const scrolledToken = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!viewport || !linkedAnnotationId || focusToken === undefined || scrolledToken.current === focusToken) return;
+    const element = pageRef.current?.querySelector<HTMLElement>("[data-pdf-linked-annotation]");
+    if (!element) return;
+    element.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+    scrolledToken.current = focusToken;
+  }, [viewport, linkedAnnotationId, focusToken, pageRef]);
 
   return (
     <div
@@ -974,10 +1030,12 @@ function PageView({
           height={size.h}
           annotations={annotations}
           activeAnnotationId={activeAnnotationId}
+          linkedAnnotationId={linkedAnnotationId}
           viewport={viewport as unknown as PdfjsViewport | null}
           colorForAuthor={colorForAuthor}
           onRemove={onRemove}
           onUpdate={onUpdate}
+          onCreateNote={onCreateNote}
         />
       )}
     </div>

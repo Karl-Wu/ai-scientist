@@ -90,7 +90,9 @@ describe("skill scopes over HTTP", () => {
       shadowed: string[];
     };
     expect(project.scope).toBe("project");
-    expect(project.enabled.map((s) => s.name)).toEqual(["council-mode", "pi-subagents", "shared"]);
+    expect(project.enabled.map((s) => s.name)).toEqual([
+      "council-mode", "pi-subagents", "shared",
+    ]);
 
     const globalListing = (await req("GET", "/skills/all?scope=global")).json() as {
       scope: string;

@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@codemirror/language": "^6.12.2",
     "@codemirror/merge": "^6.12.2",
     "@office-kit/pptx": "0.21.0",
     "@office-kit/pptx-preview": "0.12.0",

@@ -73,7 +73,7 @@ export function notebookTargetKey(entry: { sessionId?: string }, id: string, ses
 /**
  * Drop a link's `sessionId` when it names the chat the entries came from.
  * Session views key entries by bare id, so a link spelling out its own chat
- * (specialists copy it from notebook_search; proposal targets always carry
+ * (historical record APIs return it; proposal targets always carry
  * it) would otherwise resolve to nothing and silently stop counting as
  * evidence. An omitted sessionId already means "this chat", so this is lossless.
  */

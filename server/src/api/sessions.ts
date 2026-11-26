@@ -6,6 +6,7 @@
  * compact client schema from agent/events.ts, then emits a terminal `cost`
  * frame sourced from Pi's per-session usage accounting.
  */
+import { withPreviewOrigin } from "../agent/local-preview.ts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { registerTaskResponseRoutes } from "./task-responses.ts";
 import { activePaths, getProject, touchProject } from "../projects.ts";
@@ -47,13 +48,9 @@ import { withNotebookPlanHistory } from "../agent/notebook-research.ts";
 import { notebookToMarkdown } from "../agent/notebook-export.ts";
 import { snapshotChat } from "../agent/chat-snapshot.ts";
 import { buildNotebookZip } from "../agent/notebook-zip.ts";
-import {
-  normalizeNotebookAnnotations,
-  readNotebookAnnotations,
-  writeNotebookAnnotations,
-} from "../agent/notebook-annotations.ts";
-import { MethodsDraftError, runMethodsDraft } from "../agent/methods-draft.ts";
+import { readNotebookAnnotations } from "../agent/notebook-annotations.ts";
 import { runBroker, type RunHandle } from "../agent/run-broker.ts";
+import { readTaskTimeline, TASK_TIMELINE_MAX_PAGE } from "../agent/task-event-log.ts";
 import { deferSessionMessages } from "../agent/session-message-gate.ts";
 import {
   claimRun,
@@ -66,10 +63,11 @@ import {
 import { SandboxError } from "../sandbox-fs.ts";
 import {
   findSessionFile,
+  isArchivedSession,
   toNotebook,
   toShellScript,
 } from "../agent/session-export.ts";
-import { toHistory } from "../agent/session-history.ts";
+import { toHistory, withTaskObservations } from "../agent/session-history.ts";
 import {
   archiveSession,
   createSession,
@@ -78,6 +76,7 @@ import {
   getSession,
   lastModelInSessionFile,
   listSessions,
+  peekLiveSession,
   renameSession,
 } from "../agent/session-registry.ts";
 import { parseThinkingLevel } from "../agent/thinking.ts";
@@ -175,7 +174,10 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     const infos = await listSessions(paths);
     // Kady-owned resident sessions (the scheduler host) are not chats.
     const hidden = schedulerSessionId(paths);
-    const running = new Set(runBroker.activeForProject(projectId).map((run) => run.sessionId));
+    // A stopped task can still hold its run slot while the pipeline saves results.
+    const running = new Set(runBroker.activeForProject(projectId)
+      .filter((run) => !run.isAbortRequested)
+      .map((run) => run.sessionId));
     return infos.filter((i) => i.id !== hidden).map((i) => {
       let visibleInHistory = i.messageCount > 1;
       let firstMessage = i.firstMessage;
@@ -263,9 +265,15 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
         reply.code(404);
         return { detail: "No such session" };
       }
-      const session = await getSession(currentProjectId(), paths, req.params.id);
+      const projectId = currentProjectId();
+      const sessionId = req.params.id;
+      const messages = await withTaskObservations(
+        toHistory(file, paths.sandbox), paths, { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
+      );
+      // Reading the transcript must work even if the assistant cannot start.
+      const session = peekLiveSession(projectId, sessionId);
       return {
-        messages: toHistory(file, paths.sandbox),
+        messages,
         contextUsage: session ? contextUsageForClient(session) ?? null : null,
       };
     } catch (err) {
@@ -360,66 +368,6 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
         if (err instanceof SandboxError) {
           reply.code(err.statusCode);
           return { detail: err.message };
-        }
-        throw err;
-      }
-    },
-  );
-
-  app.put<{ Params: { id: string }; Body: unknown }>(
-    "/sessions/:id/notebook/annotations",
-    async (req, reply) => {
-      try {
-        const projectId = currentProjectId();
-        const { mtime, etag } = readNotebookAnnotations(req.params.id, projectId);
-        const ifMatch = req.headers["if-match"] ? String(req.headers["if-match"]) : null;
-        const ifUnmodifiedSince = req.headers["if-unmodified-since"];
-        if (ifMatch) {
-          // Exact check. The Last-Modified fallback below can only compare
-          // whole seconds, so a same-second edit would slip through it.
-          if (ifMatch === "*" ? !etag : ifMatch !== etag) {
-            reply.code(412);
-            return { detail: "Sidecar modified; re-read and retry" };
-          }
-        } else if (ifUnmodifiedSince && mtime) {
-          const since = new Date(String(ifUnmodifiedSince)).getTime();
-          if (
-            !Number.isNaN(since) &&
-            Math.floor(mtime.getTime() / 1000) > Math.floor(since / 1000)
-          ) {
-            reply.code(412);
-            return { detail: "Sidecar modified; re-read and retry" };
-          }
-        }
-        const doc = normalizeNotebookAnnotations(req.body);
-        const saved = writeNotebookAnnotations(req.params.id, doc, projectId);
-        touchProject(projectId);
-        reply.header("Last-Modified", saved.mtime.toUTCString());
-        if (saved.etag) reply.header("ETag", saved.etag);
-        return { saved: req.params.id, count: doc.annotations.length };
-      } catch (err) {
-        if (err instanceof SandboxError) {
-          reply.code(err.statusCode);
-          return { detail: err.message };
-        }
-        throw err;
-      }
-    },
-  );
-
-  app.post<{ Params: { id: string }; Body: { model?: string } | null }>(
-    "/sessions/:id/notebook/methods-draft",
-    async (req, reply) => {
-      try {
-        return await runMethodsDraft(req.params.id, currentProjectId(), {
-          model: req.body?.model,
-        });
-      } catch (err) {
-        if (err instanceof MethodsDraftError) {
-          reply.code(err.status);
-          return err.status === 402
-            ? { detail: "budget-exceeded", message: err.message }
-            : { detail: "methods-draft-failed", message: err.message };
         }
         throw err;
       }
@@ -534,6 +482,39 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     return { pending: pendingInterviewFor(currentProjectId(), req.params.id) };
   });
 
+  app.get<{ Params: { id: string }; Querystring: { after?: string; limit?: string; through?: string } }>(
+    "/sessions/:id/timeline",
+    async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const sessionId = req.params.id;
+      const projectId = currentProjectId();
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(sessionId)) {
+        return reply.code(400).send({ detail: "Invalid session id" });
+      }
+      const after = req.query.after === undefined ? 0 : Number(req.query.after);
+      const limit = req.query.limit === undefined ? 100 : Number(req.query.limit);
+      const through = req.query.through === undefined ? undefined : Number(req.query.through);
+      if (!Number.isSafeInteger(after) || after < 0 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > TASK_TIMELINE_MAX_PAGE ||
+          (through !== undefined && (!Number.isSafeInteger(through) || through < after))) {
+        return reply.code(400).send({ detail: "Invalid timeline cursor or limit" });
+      }
+      const paths = activePaths();
+      const isActive = () => isRunClaimed(projectId, sessionId);
+      // A process may die before Pi creates its transcript. A durable run
+      // can still be recovered by ID, except when its task was archived.
+      const hasSession = isActive() || Boolean(findSessionFile(paths, sessionId));
+      if (!hasSession && await isArchivedSession(paths, sessionId)) {
+        return reply.code(404).send({ detail: "No such session" });
+      }
+      const timeline = await readTaskTimeline(paths, { projectId, sessionId }, { after, limit, through }, isActive);
+      if (!hasSession && timeline.coverage === "legacy") {
+        return reply.code(404).send({ detail: "No such session" });
+      }
+      return timeline;
+    },
+  );
+
   // `?frames=0` returns metadata only (no replay buffer/baseline) so an idle
   // tab can poll cheaply for a run it did not start (system-initiated runs).
   app.get<{ Params: { id: string }; Querystring: { frames?: string } }>(
@@ -541,7 +522,15 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
     async (req, reply) => {
       reply.header("Cache-Control", "no-store");
       const includeFrames = req.query.frames !== "0";
-      return runBroker.state(currentProjectId(), req.params.id, { includeFrames });
+      const projectId = currentProjectId();
+      const sessionId = req.params.id;
+      const state = runBroker.state(projectId, sessionId, { includeFrames });
+      if (!includeFrames || !state.run || state.run.baseline.messages.length === 0) return state;
+      const baseline = state.run.baseline;
+      const messages = await withTaskObservations(
+        baseline.messages, activePaths(), { projectId, sessionId }, () => isRunClaimed(projectId, sessionId),
+      );
+      return { ...state, run: { ...state.run, baseline: { ...baseline, messages } } };
     },
   );
 
@@ -876,6 +865,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
           images: parsedImages.images.map(({ data, mimeType }) => ({ data, mimeType })),
           baseline,
           session,
+          timeline: { paths, log: req.log, basePiEntryId: session.sessionManager?.getLeafId() ?? undefined },
           onCleanup: () => {
             if (savedToolNames !== null) {
               session.setActiveToolsByName(savedToolNames);
@@ -976,11 +966,11 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
           billing: runBilling,
           budgetPolicy: "refuse",
           log: req.log,
-          run: () =>
+          run: () => withPreviewOrigin(req.headers.origin, () =>
             session.prompt(prompt, {
               expandPromptTemplates: dispatchExtensionCommand,
               ...(parsedImages.images.length > 0 ? { images: parsedImages.images } : {}),
-            }),
+            })),
         });
 
         // POST /run remains an SSE endpoint, now subscribed to the same replay

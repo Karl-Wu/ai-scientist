@@ -12,7 +12,7 @@ import {
 
 import { createFramePublisher } from "./frame-publisher";
 import type { PromptImage } from "./image-attachments";
-import { parseNotebookFrame, mergeNotebookEntries, type NotebookEntry } from "./notebook";
+import { consumeSse } from "./sse";
 
 // Keep the full tool-call trace per message: scientists rely on it to see and
 // reproduce what the agent ran, and the session export reads it too.
@@ -25,8 +25,11 @@ export interface ActivityItem {
   id: string;
   label: string;
   detail?: string;
-  status: "running" | "complete" | "error";
+  status: "running" | "complete" | "error" | "unknown";
   timestamp: number;
+  /** Server observation time and elapsed time, when available. */
+  startedAt?: number;
+  durationMs?: number;
   /** Raw tool name (e.g. "bash", "write") for icon + summary rendering. */
   toolName?: string;
   /** Frontmatter skill name when this read is a skill activation (server-resolved). */
@@ -50,7 +53,8 @@ export interface ActivityItem {
 }
 
 export type AssistantMessageSegment =
-  | { type: "text"; content: string }
+  | { type: "text"; content: string; blockId?: string }
+  | { type: "reasoning"; content: string }
   | { type: "activity"; activityId: string };
 
 // Retained for backwards-compatible imports; citation verification is deferred
@@ -82,6 +86,8 @@ export interface ChatMessage {
    *  finding, scheduled-run completion) or a compaction marker. */
   role: "user" | "assistant" | "system";
   content: string;
+  /** Offsets of synthetic paragraph breaks before tools in the displayed reply. */
+  toolParagraphBreaks?: number[];
   /** Custom message type — system messages only (e.g. `subagent_watchdog_warning`). */
   customType?: string;
   /** Whitelisted scalar details — system messages only. */
@@ -91,6 +97,7 @@ export interface ChatMessage {
   activities?: ActivityItem[];
   /** Stream-ordered assistant prose and tool references. */
   segments?: AssistantMessageSegment[];
+  summary?: { blockId: string; confirmed: boolean; executionMs?: number };
   reasoning?: string;
   modelVersion?: string;
   timestamp: number;
@@ -189,19 +196,21 @@ function existingSegments(message: ChatMessage): AssistantMessageSegment[] {
   ];
 }
 
-function appendTextSegment(
+function appendContentSegment(
   segments: AssistantMessageSegment[],
   text: string,
+  type: "text" | "reasoning" = "text",
+  blockId?: string,
 ): AssistantMessageSegment[] {
   if (!text) return segments;
   const last = segments[segments.length - 1];
-  if (last?.type === "text") {
+  if (last?.type === type && (!blockId || (last.type === "text" && last.blockId === blockId))) {
     return [
       ...segments.slice(0, -1),
       { ...last, content: last.content + text },
     ];
   }
-  return [...segments, { type: "text", content: text }];
+  return [...segments, type === "text" && blockId ? { type, content: text, blockId } : { type, content: text }];
 }
 
 /** Apply one SSE frame to the in-progress assistant message. */
@@ -213,14 +222,38 @@ export function applyFrameToMessage(
   switch (frame.type) {
     case "text_delta": {
       const delta = frame.delta ?? "";
+      const blockId = typeof frame.blockId === "string" ? frame.blockId : undefined;
       return {
         ...message,
         content: message.content + delta,
-        segments: appendTextSegment(existingSegments(message), delta),
+        segments: appendContentSegment(existingSegments(message), delta, "text", blockId),
       };
     }
-    case "thinking_delta":
-      return { ...message, reasoning: (message.reasoning ?? "") + (frame.delta ?? "") };
+    case "message_start":
+      return frame.role === "assistant" && message.summary ? { ...message, summary: undefined } : message;
+    case "message_end":
+      return frame.summaryEligible === false && message.summary ? { ...message, summary: undefined } : message;
+    case "summary_candidate": {
+      if (typeof frame.blockId !== "string") return message;
+      const executionMs = typeof frame.executionMs === "number" && Number.isFinite(frame.executionMs) && frame.executionMs >= 0
+        ? frame.executionMs : undefined;
+      return { ...message, summary: { blockId: frame.blockId, confirmed: frame.confirmed === true, executionMs } };
+    }
+    case "done":
+      return message.summary ? {
+        ...message, summary: frame.outcome === "completed" ? { ...message.summary, confirmed: true } : undefined,
+      } : message;
+    case "thinking_delta": {
+      const delta = frame.delta ?? "";
+      const segments = existingSegments(message);
+      return {
+        ...message,
+        reasoning: (message.reasoning ?? "") + delta,
+        segments: frame.reasoningStart === true && delta
+          ? [...segments, { type: "reasoning", content: delta }]
+          : appendContentSegment(segments, delta, "reasoning"),
+      };
+    }
     case "tool_start": {
       const id = String(frame.toolCallId ?? frame.toolName ?? now);
       const label =
@@ -238,10 +271,14 @@ export function applyFrameToMessage(
           ? message.content + "\n\n"
           : message.content;
       const paragraphBreak = content.slice(message.content.length);
-      const segments = appendTextSegment(existingSegments(message), paragraphBreak);
+      const priorSegments = existingSegments(message);
+      const segments = priorSegments.at(-1)?.type === "text"
+        ? appendContentSegment(priorSegments, paragraphBreak) : priorSegments;
       return {
         ...message,
+        ...(message.summary ? { summary: undefined } : {}),
         content,
+        ...(paragraphBreak ? { toolParagraphBreaks: [...(message.toolParagraphBreaks ?? []), message.content.length] } : {}),
         activities: [
           ...activities,
           {
@@ -249,6 +286,7 @@ export function applyFrameToMessage(
             label,
             status: "running" as const,
             timestamp: now,
+            ...(typeof frame.startedAt === "number" && Number.isFinite(frame.startedAt) ? { startedAt: frame.startedAt } : {}),
             toolName: frame.toolName ? String(frame.toolName) : undefined,
             skillName: typeof frame.skill === "string" ? frame.skill : undefined,
             args: frame.args,
@@ -309,6 +347,8 @@ export function applyFrameToMessage(
       next[idx] = {
         ...next[idx],
         status,
+        ...(typeof frame.durationMs === "number" && Number.isFinite(frame.durationMs) && frame.durationMs >= 0
+          ? { durationMs: frame.durationMs } : {}),
         result: typeof frame.result === "string" ? frame.result : next[idx].result,
         ...(scientificResult ? { scientificResult } : {}),
         ...(resultImages.length > 0 ? { resultImages } : {}),
@@ -343,8 +383,9 @@ export function applyFrameToMessage(
       const text = message.content ? `\n\n${errorText}` : errorText;
       return {
         ...message,
+        ...(message.summary ? { summary: undefined } : {}),
         content: message.content + text,
-        segments: appendTextSegment(existingSegments(message), text),
+        segments: appendContentSegment(existingSegments(message), text),
       };
     }
     default:
@@ -447,9 +488,17 @@ export function applyFrameToTranscript(
       steering: null,
     };
   }
+  // A notice or steering message can start a new bubble while a tool is
+  // running. Keep its result on the card where that call began.
+  const activityId = frame.type === "tool_end" ? frame.toolCallId
+    : frame.type === "permission_resolved" ? frame.requestId : undefined;
+  const owner = typeof activityId === "string"
+    ? messages.findLast((message) => message.activities?.some((activity) => activity.id === activityId))
+    : undefined;
+  const targetId = owner?.id ?? state.assistantId;
   let changed = false;
   const next = messages.map((m) => {
-    if (m.id !== state.assistantId) return m;
+    if (m.id !== targetId) return m;
     const applied = applyFrameToMessage(m, frame, now);
     if (applied !== m) changed = true;
     return applied;
@@ -576,6 +625,7 @@ function restoreHistory(
       restored.push({
         id: nextId(),
         role: "user",
+        entryId: item.entryId,
         content: item.content ?? "",
         ...(item.images && item.images.length > 0 ? { images: item.images } : {}),
         timestamp,
@@ -597,7 +647,7 @@ function restoreHistory(
         ...message,
         activities: (message.activities ?? []).map((activity) =>
           activity.status === "running"
-            ? { ...activity, status: "complete" as const }
+            ? { ...activity, status: "unknown" as const }
             : activity,
         ),
       };
@@ -666,17 +716,14 @@ export function pruneEmptyTrailingAssistant(messages: ChatMessage[]): ChatMessag
   return messages;
 }
 
-function finishActivities(
-  messages: ChatMessage[],
-  status: ActivityItem["status"],
-): ChatMessage[] {
+function finishActivities(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message) =>
     message.role === "assistant" &&
     message.activities?.some((activity) => activity.status === "running")
       ? {
           ...message,
           activities: message.activities.map((activity) =>
-            activity.status === "running" ? { ...activity, status } : activity,
+            activity.status === "running" ? { ...activity, status: "unknown" } : activity,
           ),
         }
       : message,
@@ -705,55 +752,12 @@ function waitForReconnect(signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Parse one SSE response and feed each JSON data frame to a shared consumer. */
-async function consumeSse(
-  response: Response,
-  onFrame: (frame: AgentFrame) => void,
-): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body");
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  const consumeLine = (rawLine: string) => {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (!line.startsWith("data:")) return;
-    const json = line.slice(5).trim();
-    if (!json) return;
-    let frame: AgentFrame;
-    try {
-      frame = JSON.parse(json) as AgentFrame;
-    } catch {
-      return;
-    }
-    onFrame(frame);
-    return frame.type === "done";
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (consumeLine(line)) {
-        await reader.cancel();
-        return;
-      }
-    }
-  }
-  buffer += decoder.decode();
-  if (buffer) consumeLine(buffer);
-}
-
 export function useAgent(projectId?: string) {
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagePublisher] = useState(() => createFramePublisher(setMessages));
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
-  const [notebookEntries, setNotebookEntries] = useState<NotebookEntry[]>([]);
   const [subagentCompletions, setSubagentCompletions] = useState(0);
   const [status, setStatus] = useState<Status>("ready");
   const [reconnecting, setReconnecting] = useState(false);
@@ -812,10 +816,6 @@ export function useAgent(projectId?: string) {
         const usage = parseContextUsage(frame);
         if (usage) setContextUsage(usage);
       }
-      const notebook = parseNotebookFrame(frame, consumer.currentRunId);
-      if (notebook) {
-        setNotebookEntries((previous) => mergeNotebookEntries(previous, [notebook]));
-      }
       if (frame.type === "tool_end" && frame.toolName === "subagent") {
         setSubagentCompletions((count) => count + 1);
       }
@@ -843,7 +843,7 @@ export function useAgent(projectId?: string) {
   );
 
   const finalizeRun = useCallback((consumer: RunConsumer) => {
-    consumer.transcript = finishActivities(consumer.transcript, "complete");
+    consumer.transcript = finishActivities(consumer.transcript);
     messagePublisher.publish(consumer.transcript);
     setPendingSteers([]);
     setPendingFollowUps([]);
@@ -852,12 +852,10 @@ export function useAgent(projectId?: string) {
   }, [messagePublisher]);
 
   const failRun = useCallback((consumer: RunConsumer, aborted: boolean) => {
-    consumer.transcript = finishActivities(
-      consumer.transcript,
-      aborted ? "complete" : "error",
-    ).map((message) =>
-      message.id === consumer.transcriptState.assistantId && !aborted && !message.content
-        ? { ...message, content: "Something went wrong. Please try again." }
+    consumer.transcript = finishActivities(consumer.transcript).map((message) =>
+      message.id === consumer.transcriptState.assistantId
+        ? { ...message, summary: undefined,
+            ...(!aborted && !message.content ? { content: "Something went wrong. Please try again." } : {}) }
         : message,
     );
     messagePublisher.publish(consumer.transcript);
@@ -869,8 +867,9 @@ export function useAgent(projectId?: string) {
 
   const consumeRunResponse = useCallback(
     async (response: Response, consumer: RunConsumer) => {
-      await consumeSse(response, (frame) => {
+      await consumeSse<AgentFrame>(response, (frame) => {
         if (mountedRef.current) applyRunFrame(consumer, frame);
+        return frame.type === "done";
       });
     },
     [applyRunFrame],
@@ -1515,6 +1514,9 @@ export function useAgent(projectId?: string) {
           scopedProjectId,
         );
         if (response.ok) {
+          // Disconnecting the stream can trigger a list refresh before the
+          // server has received the stop request. Refresh again after it has.
+          window.dispatchEvent(new Event("kady:tasks-changed"));
           const data = (await response.json()) as { restored?: unknown };
           if (Array.isArray(data.restored)) restored = data.restored.map(String);
         }
@@ -1536,7 +1538,6 @@ export function useAgent(projectId?: string) {
     clientFetchRef.current = null;
     setMessages([]);
     setContextUsage(null);
-    setNotebookEntries([]);
     setSubagentCompletions(0);
     setPendingSteers([]);
     setPendingFollowUps([]);
@@ -1577,7 +1578,6 @@ export function useAgent(projectId?: string) {
     compact,
     pendingSteers,
     pendingFollowUps,
-    notebookEntries,
     subagentCompletions,
   };
 }

@@ -4,26 +4,27 @@ import type { ResearchRef } from "@/lib/composer-context";
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body }) as Response;
 
-const record: ResearchRef = {
-  kind: "record",
-  type: "decision",
+const note: ResearchRef = {
+  kind: "note",
+  type: "note",
+  id: "ad94e200-56c4-4100-98b4-e2e643a24b01",
+  version: 1,
   title: "Keep Emax",
-  source: { kind: "notebook", sessionId: "s-1", entryId: "e1" },
 };
 
 describe("withChatSnapshots", () => {
-  it("snapshots each referenced chat in the referenced project and leaves records alone", async () => {
+  it("snapshots each referenced chat in the referenced project and leaves note pages alone", async () => {
     const fetcher = vi.fn(async (url: string) =>
       json({ path: `.kady/chat-snapshots/${url.split("/")[2]}-abc.md` }),
     );
     const { refs, failed } = await withChatSnapshots(
-      [record, { kind: "chat", sessionId: "s-2", title: "QC chat" }],
+      [note, { kind: "chat", sessionId: "s-2", title: "QC chat" }],
       "project-a",
       fetcher as never,
     );
     expect(failed).toEqual([]);
     expect(refs).toEqual([
-      record,
+      note,
       { kind: "chat", sessionId: "s-2", title: "QC chat", snapshot: ".kady/chat-snapshots/s-2-abc.md" },
     ]);
     expect(fetcher).toHaveBeenCalledTimes(1);

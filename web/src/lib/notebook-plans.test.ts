@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { normalizeAnalysisPlan, planHistoryText, type AnalysisPlanInput, type AnalysisPlanHistory, type FrozenPlanEvent } from "./notebook-plans";
-import { buildNotebookPrintHtml } from "./notebook-print";
 const plan: AnalysisPlanInput = { hypothesis: "Treatment effect", primaryOutcome: "Mean score", exclusions: "QC only", model: "Linear model", multiplicity: "One test", qc: "No missingness", stopping: "100 samples", exposureNotes: "Unknown", datasets: ["data.csv"], intent: "exploratory", priorExposure: "unknown" };
 const source = { sessionId: "s", entryId: "h" };
 const frozen: FrozenPlanEvent = { version: 1, kind: "freeze", id: "plan-1", sequence: 1, previousDigest: null, digest: "digest", source, actor: "user", recordedAt: 1000, revision: 1, previewId: "preview", plan, datasets: [{ path: "data.csv", capturedAt: 1000, reason: "missing" }], revisionReason: "", acknowledgedUnverified: true, sourceDigest: "source" };
@@ -18,17 +17,5 @@ describe("analysis-plan protocol and exports", () => {
     expect(text).toContain("Frozen revision 1"); expect(text).toContain("Robust model");
     expect(text).toContain("after-results (self-reported)");
     expect(text).toContain("not external preregistration"); expect(text).toContain("unverified (missing)");
-  });
-  it("preserves plan/deviation and result-reference metadata in printed notebooks", () => {
-    const html = buildNotebookPrintHtml([{ id: "h", type: "hypothesis", title: "Question", timestamp: 1000, planHistory: history }, { id: "o", type: "observation", title: "Finding", timestamp: 2000, results: [{ toolCallId: "r", sessionId: "s" }], resultSnapshots: [{ toolCallId: "r", sessionId: "s", status: "available", sha256: "pinned" }] }]);
-    expect(html).toContain("Frozen revision 1"); expect(html).toContain("Robust model");
-    expect(html).toContain("s/r · sha256 pinned");
-  });
-  it("does not execute or interpret plain-text plan fields as HTML", () => {
-    const malicious = { ...frozen, plan: { ...plan, model: "<script>bad()</script> **not markup**" } };
-    const html = buildNotebookPrintHtml([{ id: "h", type: "hypothesis", title: "Q", timestamp: 1, planHistory: { source, head: "digest", events: [malicious] } }]);
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("&lt;script&gt;");
-    expect(html).toContain("**not markup**");
   });
 });

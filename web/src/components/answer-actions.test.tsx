@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,7 +30,11 @@ it("saves icon-only feedback, toggles off, and switches mutually exclusively", a
 });
 it("creates and opens a task directly when there are no children", async () => {
   show();
-  fireEvent.click(screen.getByRole("button", { name: "New task from here" }));
+  const fork = screen.getByRole("button", { name: "New task from here" });
+  expect(within(fork).getByText("New task from here")).toHaveClass("sr-only");
+  await userEvent.hover(fork);
+  expect(await screen.findByRole("tooltip", {}, { timeout: 2500 })).toHaveTextContent("New task from here");
+  fireEvent.click(fork);
   await waitFor(() => expect(onOpenTask).toHaveBeenCalledWith("child", "Research (1)"));
   expect(api.apiFetch).toHaveBeenCalledWith("/sessions/s1/responses/answer/fork", { method: "POST" }, "p1");
 });
@@ -46,4 +50,12 @@ it("prevents creating branches during a run and before persistence", () => {
   expect(screen.getByRole("button", { name: "New task from here" })).toBeDisabled();
   view.rerender(<TooltipProvider><AnswerActions {...props} response={undefined} /></TooltipProvider>);
   expect(screen.getByRole("button", { name: "Like" })).toBeDisabled();
+});
+
+it("opens a note draft anchored to the persisted answer", async () => {
+  const onCreateNote = vi.fn();
+  render(<TooltipProvider><AnswerActions {...props} onCreateNote={onCreateNote} /></TooltipProvider>);
+  await userEvent.click(screen.getByRole("button", { name: "Create note from this answer" }));
+  expect(onCreateNote).toHaveBeenCalledWith({ title: "Finding", anchor: { kind: "message", sessionId: "s1", entryId: "answer" } });
+  expect(api.apiFetch).not.toHaveBeenCalled();
 });

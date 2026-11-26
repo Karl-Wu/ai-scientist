@@ -40,13 +40,19 @@ function managerFor(paths: ProjectPaths, id: string) {
   if (!file) throw new TaskResponseError(404, "Task not found");
   return { file, manager: SessionManager.open(file, paths.sessionsDir, paths.sandbox) };
 }
+function answerRows(file: string) {
+  const history = toHistory(file);
+  // A recovered length stop can contain text before Pi compacts and retries.
+  return history.filter((message, index) => message.role === "assistant" && message.entryId &&
+    !(history[index + 1]?.customType === "compaction" && history[index + 2]?.role === "assistant"));
+}
 function answer(paths: ProjectPaths, id: string, entryId: string) {
   const { file, manager } = managerFor(paths, id);
   const row = manager.getBranch().find((entry) => entry.id === entryId);
   if (row?.type !== "message" || row.message.role !== "assistant" ||
     !["stop", "length"].includes(row.message.stopReason) ||
     !row.message.content.some((part) => part.type === "text" && part.text.trim()) ||
-    !toHistory(file).some((message) => message.role === "assistant" && message.entryId === entryId)) {
+    !answerRows(file).some((message) => message.entryId === entryId)) {
     throw new TaskResponseError(400, "Select a completed answer");
   }
   return { file, manager };
@@ -77,11 +83,16 @@ export function taskResponses(paths: ProjectPaths, id: string) {
   const { file, manager } = managerFor(paths, id);
   const data = readStore(paths);
   const entries = new Map(manager.getBranch().map((entry) => [entry.id, entry]));
-  const responses = toHistory(file).filter((message) => message.role === "assistant" && message.entryId).flatMap((message) => {
+  const responses = answerRows(file).flatMap((message) => {
     const row = entries.get(message.entryId!);
     if (row?.type !== "message" || row.message.role !== "assistant" || !["stop", "length"].includes(row.message.stopReason)) return [];
     if (!row.message.content.some((part) => part.type === "text" && part.text.trim())) return [];
-    const content = (message.frames ?? []).filter((frame) => frame.type === "text_delta").map((frame) => frame.delta ?? "").join("");
+    const content = (message.frames ?? []).reduce((text, frame) => {
+      if (frame.type === "text_delta") return text + (frame.delta ?? "");
+      // The live transcript inserts a paragraph break when a tool interrupts prose.
+      if (frame.type === "tool_start" && text && !text.endsWith("\n")) return text + "\n\n";
+      return text;
+    }, "");
     if (!content.trim()) return [];
     const key = canonical(data, id, message.entryId!);
     const children = Object.entries(data.origins).flatMap(([childId, origin]) => {

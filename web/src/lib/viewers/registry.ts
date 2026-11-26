@@ -1,4 +1,4 @@
-import { lazy, type ComponentType } from "react";
+import { lazy, type ReactNode, type ComponentType } from "react";
 import type { FileCategory } from "@/lib/use-sandbox";
 
 export type LoadMode = "text" | "raw" | "none";
@@ -9,6 +9,11 @@ export interface ViewerProps {
   content: string | null;
   projectId?: string;
   onRetry?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+  renderFileActions?: (path: string) => ReactNode;
+  revealLine?: number;
+  revealToken?: number;
 }
 
 export interface ViewerDef {
@@ -26,12 +31,14 @@ const ArrayDataViewer = lazy(() => import("@/components/viewers/arraydata-viewer
 const PhyloViewer = lazy(() => import("@/components/viewers/phylo-viewer"));
 const AlignmentViewer = lazy(() => import("@/components/viewers/alignment-viewer"));
 const OfficeViewer = lazy(() => import("@/components/viewers/office-viewer"));
+const HtmlViewer = lazy(() => import("@/components/viewers/html-viewer"));
 const ImagingViewer = lazy(() => import("@/components/viewers/imaging-viewer"));
 
 /** Registry of viewers for NEW scientific categories. Existing categories keep
  *  their dispatch in file-preview-panel.tsx; this is additive. */
 export const VIEWER_REGISTRY: Partial<Record<FileCategory, ViewerDef>> = {
   office: { loadMode: "none", Viewer: OfficeViewer, canEditSource: false, managesOwnScroll: true },
+  html: { loadMode: "text", Viewer: HtmlViewer, canEditSource: true, managesOwnScroll: true },
   molecule2d: { loadMode: "none", Viewer: MoleculeViewer, canEditSource: false, managesOwnScroll: true },
   structure3d: { loadMode: "raw", Viewer: StructureViewer, canEditSource: false, managesOwnScroll: true },
   massspec: { loadMode: "none", Viewer: SpectrumViewer, canEditSource: false, managesOwnScroll: true },

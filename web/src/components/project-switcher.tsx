@@ -100,6 +100,7 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
   const handleDelete = useCallback(
     async (project: Project) => {
       if (project.id === DEFAULT_PROJECT_ID) return;
+      setPopoverOpen(false);
       const confirmed = await confirm({
         title: t('Delete "{name}"?', { name: project.name }),
         description:
@@ -110,8 +111,10 @@ export function ProjectSwitcher({ onOpenProjectView }: ProjectSwitcherProps) {
       if (!confirmed) return;
       try {
         await remove(project.id);
-      } catch {
-        // swallow
+      } catch (error) {
+        toast.error(t("Could not delete project"), {
+          description: error instanceof Error ? error.message : undefined,
+        });
       }
     },
     [confirm, remove, t]

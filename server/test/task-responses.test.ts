@@ -34,6 +34,33 @@ function fixture() {
 }
 
 describe("answer actions and task forks", () => {
+  it("distinguishes a retried answer from a completed answer followed by compaction", () => {
+    const f = fixture();
+    f.manager.appendCompaction("First findings", f.answerId, 1000);
+    const prompt = f.manager.appendMessage({ role: "user", content: "Review the sample", timestamp: Date.now() });
+    const partial = f.manager.appendMessage(reply("Checking the sample", { stopReason: "length" }));
+    f.manager.appendCompaction("Sample context", prompt, 2000);
+    const final = f.manager.appendMessage(reply("Checking the sample"));
+
+    expect(taskResponses(f.paths, f.id).responses.map(({ entryId }) => entryId)).toEqual([f.answerId, final]);
+    expect(() => setAnswerFeedback(f.paths, f.id, partial, "up")).toThrow("Select a completed answer");
+  });
+
+  it("matches the live paragraph break between prose and tool activity", () => {
+    const f = fixture();
+    f.manager.appendMessage({ role: "user", content: "Review the data", timestamp: Date.now() });
+    f.manager.appendMessage(reply("", {
+      stopReason: "toolUse",
+      content: [
+        { type: "text", text: "I'll check the data." },
+        { type: "toolCall", id: "call-2", name: "read", arguments: { path: "data.csv" } },
+      ],
+    }));
+    f.manager.appendMessage({ role: "toolResult", toolCallId: "call-2", toolName: "read", content: [{ type: "text", text: "Evidence" }], isError: false, timestamp: Date.now() });
+    f.manager.appendMessage(reply("The data is ready."));
+    expect(taskResponses(f.paths, f.id).responses.at(-1)?.content).toBe("I'll check the data.\n\nThe data is ready.");
+  });
+
   it("preserves compaction boundaries and ignores later source changes", () => {
     const f = fixture();
     const firstKept = f.manager.appendMessage({ role: "user", content: "After compaction", timestamp: Date.now() });

@@ -43,6 +43,7 @@ import { attachSessionObserver } from "./agent/session-observer.ts";
 import { registerNextExperimentRoutes } from "./api/next-experiments.ts";
 import { registerEvidencePackageRoutes } from "./api/evidence-packages.ts";
 import { registerNotebookMemoryRoutes } from "./api/notebook-memory.ts";
+import { registerNotesRoutes } from "./api/notes.ts";
 import { registerNotebookResearchRoutes } from "./api/notebook-research.ts";
 import { registerNotebookRobustnessRoutes } from "./api/notebook-robustness.ts";
 import { notebookRobustness } from "./agent/notebook-robustness.ts";
@@ -184,6 +185,7 @@ export async function buildApp() {
 
   await registerProjectRoutes(app);
   await registerSessionRoutes(app);
+  await registerNotesRoutes(app);
   await registerNotebookResearchRoutes(app);
   await registerNotebookMemoryRoutes(app);
   await registerEvidencePackageRoutes(app);

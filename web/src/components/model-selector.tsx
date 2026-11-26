@@ -502,10 +502,10 @@ export function ModelSelector({
           tabIndex={0}
           aria-label={
             selectedAvailability === "checking"
-              ? `Select model, checking ${selected.label} provider`
+              ? t("Select model, checking {model} provider", { model: selected.label })
               : selectedAvailable
-              ? `Select model, current ${selected.label}`
-              : `Select model, current ${selected.label} is disconnected`
+              ? t("Select model, current {model}", { model: selected.label })
+              : t("Select model, current {model} is disconnected", { model: selected.label })
           }
         >
           <BrainCircuitIcon className="size-3 shrink-0 text-muted-foreground" />
@@ -520,7 +520,7 @@ export function ModelSelector({
                   : "text-destructive",
               )}
             >
-              {selectedAvailability === "checking" ? "checking…" : t("disconnected")}
+              {selectedAvailability === "checking" ? t("checking…") : t("disconnected")}
             </span>
           ) : null}
           <ChevronDownIcon

@@ -1,7 +1,39 @@
-import { parseDelimitedText, serializeDelimitedText } from "./delimited-text";
+import { parseDelimitedText, serializeDelimitedCell, serializeDelimitedText } from "./delimited-text";
 export interface ExplorerTable { columns: string[]; rows: (string | null)[][] }
 export type ColumnType = "number" | "boolean" | "date" | "text";
 export const TABLE_PAGE_SIZE = 100;
+const delimitedOptions = { strict: true, skipEmptyLines: true, maxCells: 1_000_000 };
+
+export function tableDelimiter(path: string): "," | "\t" | undefined {
+  return /\.csv$/i.test(path) ? "," : /\.tsv$/i.test(path) ? "\t" : undefined;
+}
+
+/** Apply changes in source order, preserving every untouched field and line ending. */
+export function updateDelimitedTable(content: string, delimiter: string, edits: ReadonlyMap<number, ReadonlyMap<number, string>>): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  parseDelimitedText(content, delimiter, {
+    ...delimitedOptions,
+    onRow(record, ranges) {
+      const changes = edits.get(record - 1);
+      if (!changes) return;
+      let lastColumn = ranges.length - 1;
+      for (const [column, value] of [...changes].sort(([a], [b]) => a - b)) {
+        const range = ranges[column];
+        const end = range?.end ?? ranges.at(-1)!.end;
+        parts.push(content.slice(cursor, range?.start ?? end));
+        if (!range) {
+          parts.push(delimiter.repeat(column - lastColumn));
+          lastColumn = column;
+        }
+        // Keep a one-cell row present when its new value is empty or whitespace.
+        parts.push(serializeDelimitedCell(value, delimiter, ranges.length === 1 && !value.trim()));
+        cursor = end;
+      }
+    },
+  });
+  return parts.join("") + content.slice(cursor);
+}
 export function tableNumber(value: string | null): number | null {
   if (value === null || !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) || /^[+-]?0\d/.test(value.trim())) return null;
   const n = Number(value);
@@ -37,13 +69,13 @@ function objectCells(text: string): Map<string, string | null> {
   return cells;
 }
 export function parseExplorerTable(content: string, format: string): ExplorerTable {
-  const text = ["csv", "tsv"].includes(format) ? content.replace(/^\uFEFF/, "") : content.replace(/^\uFEFF/, "").trim();
   if (format === "csv" || format === "tsv") {
-    const parsed = parseDelimitedText(text, format === "csv" ? "," : "\t", { strict: true, skipEmptyLines: true, maxCells: 1_000_000 });
+    const parsed = parseDelimitedText(content, format === "csv" ? "," : "\t", delimitedOptions);
     const width = parsed.reduce((n, row) => Math.max(n, row.length), 0);
     if (width > 1000 || width * parsed.length > 1_000_000) throw new Error("Table has too many columns. Use Download to access the complete file.");
     return { columns: Array.from({ length: width }, (_, i) => parsed[0]?.[i] || `Column ${i + 1}`), rows: parsed.slice(1).map(row => Array.from({ length: width }, (_, i) => row[i] ?? null)) };
   }
+  const text = content.replace(/^\uFEFF/, "").trim();
   const records: Map<string, string | null>[] = [];
   if (format === "json") {
     if (!Array.isArray(JSON.parse(text))) throw new Error("Expected a JSON array of objects. Use Source to view this file.");

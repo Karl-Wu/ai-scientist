@@ -54,11 +54,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const current = getActiveProjectId();
-    setActiveProjectIdState(current);
-    // Re-persist to sync the cookie (used by <img>/<a> backend URLs that
-    // can't carry custom headers). No-op if already matching.
-    setActiveProjectId(current);
+    setActiveProjectIdState(getActiveProjectId());
     const unsub = onProjectChange((id) => setActiveProjectIdState(id));
     return unsub;
   }, []);

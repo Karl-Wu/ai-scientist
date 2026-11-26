@@ -53,8 +53,9 @@ describe("snapshotChat", () => {
     expect(text).not.toContain(paths.sandbox);
     expect(text).toContain("- `bash` cd . && python fit.py → error: xxx");
     expect(text).not.toContain("x".repeat(400));
-    expect(text).toContain('- `notebook_search` search "Emax" → 1 hit: "Fit Emax"');
-    expect(text).toContain("- `notebook` decision: Keep Emax → logged (id: call_9)");
+    expect(text).not.toContain("`notebook_search`");
+    expect(text).not.toContain("`notebook`");
+    expect(text).not.toContain("Keep Emax");
     expect(text).toContain("> Notice (subagent_notice): Reviewer finished");
     expect(text).toContain("> **Earlier messages were compacted.** Summary:");
     expect(text).toContain("Saved figures/dose.png");
@@ -97,9 +98,7 @@ describe("fitTurns", () => {
 });
 
 describe("toolResultSummary", () => {
-  it("falls back to omitting unknown notebook_search output", () => {
-    expect(toolResultSummary({ type: "toolCall", id: "x", name: "notebook_search" }, "not json")).toBe("");
-    expect(toolResultSummary({ type: "toolCall", id: "x", name: "notebook_search" }, JSON.stringify({ hit: { title: "A" } }))).toBe('read "A"');
+  it("summarizes a specialist catalogue lookup", () => {
     expect(toolResultSummary({ type: "toolCall", id: "x", name: "subagent", arguments: { action: "list" } }, "long")).toBe("listed specialists");
   });
 });

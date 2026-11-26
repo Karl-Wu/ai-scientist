@@ -437,7 +437,11 @@ export function toClientFrame(
     case "message_update": {
       const a = ev.assistantMessageEvent;
       if (a.type === "text_delta") return { type: "text_delta", delta: a.delta };
-      if (a.type === "thinking_delta") return { type: "thinking_delta", delta: a.delta };
+      if (a.type === "thinking_delta") {
+        const block = a.partial?.content?.[a.contentIndex];
+        if (block?.type === "thinking" && block.redacted) return null;
+        return { type: "thinking_delta", delta: a.delta };
+      }
       if (a.type === "error") {
         // Pi's `reason` is only "error" | "aborted"; the provider's own words
         // live on the failed assistant message. Dropping them left every
@@ -479,4 +483,118 @@ export function toClientFrame(
     default:
       return null;
   }
+}
+
+function textPhase(signature: string | undefined): "commentary" | "final_answer" | undefined {
+  if (!signature?.startsWith("{")) return undefined;
+  try {
+    const { v, phase } = JSON.parse(signature);
+    if (v === 1 && (phase === "commentary" || phase === "final_answer")) return phase;
+  } catch { /* Other providers may use opaque signatures. */ }
+  return undefined;
+}
+
+export function summaryTextIndex(
+  parts: readonly { type: string; text?: string; textSignature?: string }[],
+  stopReason: string | undefined,
+): number {
+  if (stopReason !== "stop" || parts.some((part) => part.type === "toolCall")) return -1;
+  const explicit = parts.findIndex((part) => part.type === "text" && part.text?.trim() && textPhase(part.textSignature) === "final_answer");
+  return explicit >= 0 ? explicit : parts.findIndex((part) =>
+    part.type === "text" && part.text?.trim() && textPhase(part.textSignature) !== "commentary");
+}
+
+/** Frame projection that retains message-local provider block boundaries. */
+export function createRunFrameMapper(sandboxRoot: string, runStartedAt?: number) {
+  const streamedReasoning = new Set<number>();
+  const redactedReasoning = new Set<number>();
+  const textBlocks = new Map<number, { blockId: string; startedAt: number }>();
+  let nextTextBlock = 0;
+  let explicitSummary: number | undefined;
+  function textFrame(contentIndex: number, delta: string, observedAt: number): ClientFrame | null {
+    let block = textBlocks.get(contentIndex);
+    if (!block) {
+      if (!delta.trim()) return null;
+      block = { blockId: `text-${++nextTextBlock}`, startedAt: observedAt };
+      textBlocks.set(contentIndex, block);
+    }
+    return { type: "text_delta", delta, blockId: block.blockId, contentIndex };
+  }
+
+  function summaryFrame(contentIndex: number, confirmed: boolean): ClientFrame | null {
+    const block = textBlocks.get(contentIndex);
+    if (!block) return null;
+    return { type: "summary_candidate", blockId: block.blockId, contentIndex, confirmed,
+      ...(runStartedAt !== undefined ? { executionMs: Math.max(0, block.startedAt - runStartedAt) } : {}) };
+  }
+  function reasoningFrame(contentIndex: number, delta: string): ClientFrame | null {
+    const reasoningStart = !streamedReasoning.has(contentIndex);
+    if (reasoningStart && !delta.trim()) return null;
+    streamedReasoning.add(contentIndex);
+    return { type: "thinking_delta", delta, contentIndex, ...(reasoningStart ? { reasoningStart: true } : {}) };
+  }
+
+  return (event: AgentSessionEvent, observedAt = Date.now()): ClientFrame[] => {
+    const frame = toClientFrame(event, sandboxRoot);
+    if (event.type === "message_start" && event.message.role === "assistant") {
+      streamedReasoning.clear();
+      redactedReasoning.clear();
+      textBlocks.clear();
+      explicitSummary = undefined;
+    }
+    if (event.type === "message_update") {
+      const update = event.assistantMessageEvent;
+      if (update.type === "text_delta" || update.type === "text_end") {
+        const frames: ClientFrame[] = [];
+        const index = update.contentIndex;
+        if (update.type === "text_delta" || !textBlocks.has(index)) {
+          const text = textFrame(index, update.type === "text_delta" ? update.delta : update.content, observedAt);
+          if (text) frames.push(text);
+        }
+        const block = update.partial?.content?.[index];
+        if (explicitSummary === undefined && block?.type === "text" && textPhase(block.textSignature) === "final_answer") {
+          const summary = summaryFrame(index, true);
+          if (summary) {
+            explicitSummary = index;
+            frames.push(summary);
+          }
+        }
+        return frames;
+      }
+      if (update.type === "thinking_delta" || update.type === "thinking_end") {
+        const block = update.partial?.content?.[update.contentIndex];
+        if (("redacted" in update && update.redacted === true) || (block?.type === "thinking" && block.redacted)) {
+          redactedReasoning.add(update.contentIndex);
+        }
+        if (redactedReasoning.has(update.contentIndex)) return [];
+      }
+      if (update.type === "thinking_delta") {
+        const delta = frame ? reasoningFrame(update.contentIndex, update.delta) : null;
+        return delta ? [delta] : [];
+      }
+      if (update.type === "thinking_end" && !streamedReasoning.has(update.contentIndex)) {
+        const final = reasoningFrame(update.contentIndex, update.content);
+        return final ? [final] : [];
+      }
+    }
+    if (event.type === "message_end" && event.message.role === "assistant") {
+      const frames: ClientFrame[] = [];
+      const parts = event.message.content ?? [];
+      for (const [index, part] of parts.entries()) {
+        if (part.type === "text" && !textBlocks.has(index)) {
+          const text = textFrame(index, part.text, observedAt);
+          if (text) frames.push(text);
+        }
+        if (part.type !== "thinking" || part.redacted || redactedReasoning.has(index) || streamedReasoning.has(index)) continue;
+        const final = reasoningFrame(index, part.thinking);
+        if (final) frames.push(final);
+      }
+      const index = summaryTextIndex(parts, event.message.stopReason);
+      const summary = summaryFrame(index, explicitSummary === index);
+      if (summary) frames.push(summary);
+      if (frame) frames.push({ ...frame, summaryEligible: Boolean(summary) });
+      return frames;
+    }
+    return frame ? [frame] : [];
+  };
 }

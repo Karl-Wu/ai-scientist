@@ -84,6 +84,7 @@ export const READ_ONLY_TOOLS = new Set([
   "notebook",
   "scientific_result",
   "notebook_search",
+  "note_read",
   "list_pdf_annotations",
   "modal_status",
   "modal_instances",
@@ -97,7 +98,7 @@ export const READ_ONLY_TOOLS = new Set([
 ]);
 
 /** Tools whose args name the single file they write. */
-const DECLARED_WRITE_TOOLS = new Set(["write", "edit", "multiedit", "str_replace"]);
+export const DECLARED_WRITE_TOOLS = new Set(["write", "edit", "multiedit", "str_replace"]);
 
 /** Args keys that carry a target path across Pi built-ins and MCP tools. */
 const PATH_KEYS = ["path", "file_path", "filePath", "file"] as const;
@@ -380,11 +381,11 @@ export class ProvenanceRecorder {
             environmentFingerprint(this.opts.sandboxRoot) !== this.environmentFingerprint);
         for (const rel of diff.created) {
           const ref = this.refFor(rel, "created", confidence);
-          if (ref) outputs.push(ref);
+          if (ref) outputs.push({ ...ref, via: "sandbox-scan" });
         }
         for (const rel of diff.modified) {
           const ref = this.refFor(rel, "modified", confidence);
-          if (ref) outputs.push(ref);
+          if (ref) outputs.push({ ...ref, via: "sandbox-scan" });
         }
         for (const rel of diff.deleted) {
           // Build the deleted ref against `before`, which still has its stats.
@@ -397,6 +398,7 @@ export class ProvenanceRecorder {
             mtimeMs: previous?.mtimeMs ?? 0,
             change: "deleted",
             confidence,
+            via: "sandbox-scan",
           });
         }
       }

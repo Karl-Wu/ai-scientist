@@ -7,6 +7,7 @@
  * cascade on move/delete. AnnData previews shell out to a small Python helper.
  */
 import { createHash } from "node:crypto";
+import { isUtf8 } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -16,6 +17,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { activePaths, getProject, touchProject } from "../projects.ts";
 import { buildProjectArchive } from "../project-archive.ts";
 import { artifactProvenance } from "../provenance/lookup.ts";
+import { fileOrigin } from "../provenance/file-origin.ts";
 import {
   collectPrior,
   priorIdentity,
@@ -28,6 +30,7 @@ import { currentProjectId } from "../scope.ts";
 import { apiRelative, guessMime, isUserVisible, isWithin, safePath, SandboxError } from "../sandbox-fs.ts";
 import { sciHelperFor } from "./sci-helpers.ts";
 import { requestPreview } from "./sci-previews.ts";
+import { registerHtmlPreviewOpen } from "./html-preview.ts";
 import { LATEX_ENGINES, compileLatex } from "../latex/compile.ts";
 import { synctexAvailable, synctexForward, synctexInverse } from "../latex/synctex.ts";
 import { AssistError, runLatexAssist, type AssistRequest } from "../latex/assist.ts";
@@ -45,8 +48,26 @@ const MAX_PREVIEW_BYTES = 512_000;
 // Text tables paginate the DOM. Read the complete bounded file so search,
 // profiles and exports agree; other text/code retains its smaller bound.
 const MAX_TABLE_PREVIEW_BYTES = 8_000_000;
+// A self-contained HTML report can carry both a renderer and its data.
+const MAX_HTML_PREVIEW_BYTES = 8_000_000;
 const MAX_UPLOAD_CHUNK_BYTES = 16 * 1024 * 1024;
 const TREE_EXCLUDED_DIRS = new Set(["__pycache__", "node_modules"]);
+
+function textFileVersion(stat: fs.BigIntStats): string {
+  return 'W/"' + [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join("-") + '"';
+}
+
+function isDelimitedFile(target: string): boolean {
+  return /\.(csv|tsv)$/i.test(target);
+}
+
+function editableTableVersion(target: string): string {
+  const stat = fs.statSync(target, { bigint: true, throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.size > BigInt(MAX_TABLE_PREVIEW_BYTES)) {
+    throw new SandboxError(412, "The table changed since it was opened");
+  }
+  return textFileVersion(stat);
+}
 
 function isTreeExcludedDir(name: string): boolean {
   return (
@@ -389,6 +410,8 @@ async function handleChunkTransfer(req: ChunkTransferRequest, reply: FastifyRepl
 }
 
 export async function registerSandboxRoutes(app: FastifyInstance): Promise<void> {
+  registerHtmlPreviewOpen(app);
+
   app.get("/sandbox/tree", async (req, reply) => {
     const root = activePaths().sandbox;
     const payload = fs.existsSync(root)
@@ -506,15 +529,16 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
       try {
         const stat = await file.stat({ bigint: true });
         if (!stat.isFile()) return reply.code(404).send("File not found");
-        const maxBytes = [".csv", ".tsv", ".json", ".jsonl", ".ndjson"].includes(path.extname(target).toLowerCase()) ? MAX_TABLE_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
+        const extension = path.extname(target).toLowerCase();
+        const maxBytes = [".html", ".htm"].includes(extension) ? MAX_HTML_PREVIEW_BYTES
+          : [".csv", ".tsv", ".json", ".jsonl", ".ndjson"].includes(extension) ? MAX_TABLE_PREVIEW_BYTES
+          : MAX_PREVIEW_BYTES;
         if (stat.size > BigInt(maxBytes)) {
           return reply.code(413).send("File too large to preview");
         }
         // Include inode + change time: atomic replacement and same-size edits
         // with restored mtimes must invalidate the preview too.
-        const version = (s: typeof stat) =>
-          `W/"${s.dev}-${s.ino}-${s.size}-${s.mtimeNs}-${s.ctimeNs}"`;
-        const etag = version(stat);
+        const etag = textFileVersion(stat);
         reply.header("Cache-Control", "private, no-cache");
         if (req.headers["if-none-match"]?.split(/\s*,\s*/).includes(etag)) {
           return reply.header("ETag", etag).code(304).send();
@@ -529,10 +553,15 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
           length += bytesRead;
         }
         if (length > maxBytes) return reply.code(413).send("File too large to preview");
-        const content = buffer.subarray(0, length).toString("utf-8");
+        const bytes = buffer.subarray(0, length);
         // Don't let an in-place write during this read validate mixed bytes.
-        if (version(await file.stat({ bigint: true })) === etag) reply.header("ETag", etag);
-        return reply.type("text/plain; charset=utf-8").send(content);
+        if (textFileVersion(await file.stat({ bigint: true })) === etag) {
+          reply.header("ETag", etag);
+          if (isDelimitedFile(target) && isUtf8(bytes)) {
+            reply.header("X-Content-SHA256", createHash("sha256").update(bytes).digest("hex"));
+          }
+        }
+        return reply.type("text/plain; charset=utf-8").send(bytes.toString("utf-8"));
       } finally {
         await file.close();
       }
@@ -558,14 +587,29 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
       }
       const target = safePath(req.query.path);
       const sandboxRoot = activePaths().sandbox;
-      const before = await priorIdentity(sandboxRoot, target);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
       const body = req.body instanceof Buffer ? req.body : Buffer.from(String(req.body ?? ""));
+      const expected = req.headers["if-match"];
+      if (expected !== undefined) {
+        if (!isDelimitedFile(target) || !/^[a-f0-9]{64}$/.test(expected)) {
+          throw new SandboxError(400, "Send a CSV or TSV with its original revision in If-Match");
+        }
+        if (body.length > MAX_TABLE_PREVIEW_BYTES) throw new SandboxError(413, "The edited table exceeds the preview size limit");
+        if (!isUtf8(body)) throw new SandboxError(400, "The edited table must be UTF-8");
+      }
+      const version = expected === undefined ? undefined : editableTableVersion(target);
+      const before = await priorIdentity(sandboxRoot, target);
+      // Recheck after hashing so another API save cannot overwrite a newer file.
+      if (expected !== undefined && (before?.identity?.sha256 !== expected ||
+        editableTableVersion(safePath(req.query.path)) !== version)) {
+        throw new SandboxError(412, "The table changed since it was opened");
+      }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
       writeFileAtomic(target, body);
       touchProject(currentProjectId());
       // An editor save otherwise leaves the artifact "stale" with nothing in
       // its history to explain the change.
       await recordSave(currentProjectId(), sandboxRoot, target, before, provenanceWarn(req));
+      if (expected !== undefined) reply.header("X-Content-SHA256", createHash("sha256").update(body).digest("hex"));
       return { saved: req.query.path, size: body.length };
     } catch (err) {
       return handle(reply, err);
@@ -803,6 +847,21 @@ export async function registerSandboxRoutes(app: FastifyInstance): Promise<void>
   });
 
   // --- provenance ---
+  app.get<{ Querystring: { path?: string; sessionId?: string; stepId?: string; runId?: string } }>(
+    "/sandbox/file-origin", async (req, reply) => {
+      const { path, sessionId, stepId, runId } = req.query;
+      if (!path || (Boolean(sessionId) !== Boolean(stepId)) || (runId && !sessionId)) {
+        return reply.code(400).send({ detail: "A file path and a complete reading step reference are required" });
+      }
+      try {
+        reply.header("Cache-Control", "no-store");
+        return await fileOrigin(currentProjectId(), path, sessionId && stepId ? { sessionId, stepId, runId } : undefined);
+      } catch (err) {
+        return handle(reply, err);
+      }
+    },
+  );
+
   app.get<{ Querystring: { path: string } }>("/sandbox/provenance", async (req, reply) => {
     try {
       const rel = req.query.path;

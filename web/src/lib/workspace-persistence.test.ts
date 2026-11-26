@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import databases from "@/data/databases.json";
 
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -41,11 +42,11 @@ const projectState: ProjectWorkspaceState = {
         ],
         researchRefs: [
           {
-            kind: "record",
-            type: "decision",
+            kind: "note",
+            type: "note",
             title: "Keep Emax",
-            source: { kind: "notebook", sessionId: "session-0", entryId: "e1" },
-            digest: "b".repeat(64),
+            id: "ad94e200-56c4-4100-98b4-e2e643a24b01",
+            version: 1,
           },
           { kind: "chat", sessionId: "session-0", title: "Earlier QC" },
         ],
@@ -69,6 +70,7 @@ const projectState: ProjectWorkspaceState = {
   sandbox: {
     openPaths: ["notes.md", "figure.png"],
     activePath: "figure.png",
+    previewPath: "figure.png",
   },
 };
 
@@ -96,6 +98,7 @@ describe("workspace persistence schema", () => {
       sandbox: {
         openPaths: ["notes.md", "figure.png"],
         activePath: "figure.png",
+        previewPath: "figure.png",
       },
       tabs: [
         {
@@ -112,6 +115,22 @@ describe("workspace persistence schema", () => {
         },
       ],
     });
+  });
+
+  it("restores only still-listed databases in the composer", async () => {
+    const active = { ...databases.find(({ id }) => id === "crossref")!, domain: "science" as const };
+    const removed = { ...active, id: "nasa-apis", name: "NASA APIs" };
+    const originalTab = projectState.tabs[0];
+    await saveProjectWorkspaceState("project-a", {
+      ...projectState,
+      tabs: [{ ...originalTab, chat: {
+        ...originalTab.chat!,
+        selectedDatabases: [removed, active],
+      } }],
+    });
+    await saveWorkspaceShellState("workspace", ["project-a"]);
+    const restored = await loadWorkspaceSnapshot();
+    expect(restored.projects["project-a"].tabs[0].chat?.selectedDatabases).toEqual([active]);
   });
 
   it.each([true, false])("preserves a manual placeholder title across reload (chat state: %s)", async (withChat) => {

@@ -1,0 +1,103 @@
+/* Keep the final summary readable in both the full chat and a split pane. */
+.prose {
+  max-inline-size: 78ch;
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+
+.prose > * {
+  margin-block: 0;
+}
+
+.prose > * + * {
+  margin-block-start: 0.8rem;
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6),
+.prose > [data-standalone-strong] {
+  line-height: 1.4;
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+.prose > * + :is(h1, h2, h3, h4, h5, h6, [data-standalone-strong]) {
+  margin-block-start: 1.5rem;
+}
+
+.prose > :is(h1, h2, h3, h4, h5, h6, [data-standalone-strong]) + * {
+  margin-block-start: 0.45rem;
+}
+
+.prose h1 { font-size: 1.25rem; }
+.prose h2 { font-size: 1.125rem; }
+.prose h3,
+.prose > [data-standalone-strong] { font-size: 1rem; }
+.prose :is(h4, h5, h6) { font-size: inherit; }
+
+.prose :is(ul, ol) {
+  padding-inline-start: 1.5em;
+  list-style-position: outside;
+}
+
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li { padding-block: 0; }
+.prose li + li { margin-block-start: 0.3em; }
+.prose li::marker { color: var(--muted-foreground); }
+.prose li:global(.task-list-item) { list-style-type: none; }
+.prose li :is(ul, ol) { margin-block-start: 0.3em; }
+.prose li > p { display: block; }
+.prose li > p + p { margin-block-start: 0.45em; }
+
+.prose a {
+  text-decoration-style: dotted;
+  text-decoration-color: var(--muted-foreground);
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.prose a:hover {
+  text-decoration-style: solid;
+}
+
+.prose [data-streamdown="inline-code"] {
+  padding: 0.08em 0.28em;
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  font-size: 0.87em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.prose [data-streamdown="table-wrapper"] {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.prose div:has(> [data-streamdown="table"]) {
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.prose [data-streamdown="table-header"] {
+  background: transparent;
+}
+
+.prose :is(th, td) {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.875rem;
+  vertical-align: top;
+}
+
+.prose th {
+  border-block-end: 1px solid var(--border);
+  white-space: normal;
+}
+
+.prose tbody tr + tr {
+  border-block-start: 1px solid var(--border);
+}
+
+.prose :is(th, td):first-child { padding-inline-start: 0; }
+.prose :is(th, td):last-child { padding-inline-end: 0; }

@@ -276,7 +276,7 @@ describe("recorder: inferred inputs and environment stamping", () => {
     write("data/counts.csv", "a,b\n");
     const rec = recorder(async () => null);
     await rec.flush();
-    rec.observe(startEvent("tc_b", "bash", { command: "uv run python de_analysis.py data/counts.csv > fig.png" }));
+    rec.observe(startEvent("tc_b", "bash", { command: "uv run python de_analysis.py data/counts.csv" }));
     write("fig.png", "PNG");
     rec.observe(endEvent("tc_b", "bash"));
     await rec.flush();
@@ -287,7 +287,7 @@ describe("recorder: inferred inputs and environment stamping", () => {
       ["de_analysis.py", "read", "inferred"],
     ]);
     expect(row.inputs[0].sha256).toHaveLength(64);
-    expect(row.outputs.map((o) => o.path)).toEqual(["fig.png"]);
+    expect(row.outputs).toMatchObject([{ path: "fig.png", via: "sandbox-scan" }]);
     expect(row.environmentId).toBeUndefined();
   });
 

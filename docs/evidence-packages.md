@@ -4,7 +4,11 @@
 records, linked evidence, provenance, plans, results and version-matched artifacts.
 It makes no model/compute call and never executes captured analyses.
 
-## Prepare and download
+Package preparation and storage mutation routes have been retired. The
+project evidence-package API still lists, inspects and downloads existing
+ZIPs using the saved review digest and download acknowledgements.
+
+## How retained packages were prepared
 
 1. Select **Evidence package** in the notebook header or on a saved hypothesis, observation or decision. Choose **1–8 roots**; use All chats for cross-chat roots.
 2. Choose artifact inclusion. Optional current/unverified copies are labelled comparison material. Raw command arguments are excluded by default.
@@ -70,12 +74,11 @@ hardware detail. Storage assumes one backend and filesystem hard-link support.
 Packages live under `.kady/evidence/packages/<id>/`; retained versions live in
 `.kady/evidence/blobs/<sha256>`.
 
-- **Remove package** deletes only that ZIP/payload, leaving original research files and shared snapshots.
-- **Prune unreferenced snapshots** removes versions no retained package uses. Old notebook citations may become unrecoverable; corrupt references block pruning.
+Retirement preserves the saved ZIPs and snapshot files.
 
 Preparation does not publish or share anything. Local files remain within the
 [same-user trust boundary](limitations.md#local-shell-trust-boundary).
 
 Implementation: [`server/src/evidence/`](../server/src/evidence/). Routes under
-`/projects/:projectId/notebook/evidence-packages` support prepare, list, inspect,
-reviewed download, removal and snapshot pruning; there is no execution endpoint.
+`/projects/:projectId/notebook/evidence-packages` support list, inspect and
+reviewed download of retained packages.

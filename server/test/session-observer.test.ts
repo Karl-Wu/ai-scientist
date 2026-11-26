@@ -24,7 +24,8 @@ import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { recordRun } from "../src/cost/ledger.ts";
 import { runBroker, type SequencedClientFrame } from "../src/agent/run-broker.ts";
-import { claimRun, isRunClaimed } from "../src/agent/run-pipeline.ts";
+import { claimRun, isRunClaimed, waitForRunRelease } from "../src/agent/run-pipeline.ts";
+import { readTaskTimeline } from "../src/agent/task-event-log.ts";
 import { currentRunId } from "../src/agent/run-ids.ts";
 import { attachSessionObserver } from "../src/agent/session-observer.ts";
 import { getModelRuntime } from "../src/agent/session-registry.ts";
@@ -226,7 +227,12 @@ describe("session observer", () => {
     expect(state.run).toMatchObject({ origin: "system", kind: "notice", reason: "subagent_watchdog_warning" });
     expect(frameTypes(state.run!.frames)).toEqual(["run_start", "message_start", "done"]);
     expect(costRows(projectId, session.sessionId)).toHaveLength(0);
+    await waitForRunRelease(projectId, session.sessionId);
     expect(isRunClaimed(projectId, session.sessionId)).toBe(false);
+    const timeline = await readTaskTimeline(resolvePaths(projectId), { projectId, sessionId: session.sessionId },
+      { after: 0, limit: 20 }, () => false);
+    expect(timeline.events.map((event) => event.type)).toEqual(["run_started", "system_notice", "run_ended"]);
+    expect(timeline.events[1]?.payload).toMatchObject({ code: "subagent_watchdog_warning" });
 
     // A hidden message publishes nothing.
     runBroker.clear();

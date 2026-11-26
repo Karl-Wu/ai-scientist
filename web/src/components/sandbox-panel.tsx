@@ -16,7 +16,7 @@ import {
 } from "@/lib/file-tree-virtualization";
 import { cn, isHiddenManagedSandboxFilePath } from "@/lib/utils";
 import { hasDirectoryEntries, traverseDroppedEntries } from "@/lib/directory-upload";
-import { type TreeNode } from "@/lib/use-sandbox";
+import { type FileOpenMode, type TreeNode } from "@/lib/use-sandbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,7 +130,7 @@ function InlineInput({
 interface VirtualTreeRowProps {
   row: VisibleTreeRow;
   top: number;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, mode: FileOpenMode) => void;
   onDownload: (path: string) => void;
   onDelete: (path: string) => void;
   onDownloadDir: (path: string) => void;
@@ -343,11 +343,21 @@ const VirtualTreeRow = memo(function VirtualTreeRow({
       tabIndex={0}
       style={style}
       draggable={renamingPath !== node.path}
-      onClick={() => onSelect(node.path)}
+      onClick={(event) => {
+        if (renamingPath !== node.path && !(event.target as HTMLElement).closest("button")) {
+          onSelect(node.path, "preview");
+        }
+      }}
+      onDoubleClick={(event) => {
+        if (renamingPath !== node.path && !(event.target as HTMLElement).closest("button")) {
+          onSelect(node.path, "open");
+        }
+      }}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onSelect(node.path);
+          onSelect(node.path, event.key === "Enter" ? "open" : "preview");
         }
       }}
       onDragStart={(event) => {
@@ -428,7 +438,7 @@ interface FileTreePanelProps {
   tree: TreeNode | null;
   selectedPath: string | null;
   uploading: boolean;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, mode: FileOpenMode) => void;
   onDownload: (path: string) => void;
   onDelete: (path: string) => void;
   onDownloadDir: (path: string) => void;

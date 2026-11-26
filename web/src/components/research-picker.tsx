@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "@/components/i18n-provider";
+import { useLocale, useT } from "@/components/i18n-provider";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,34 +12,21 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/projects";
-import type { MemoryKind, MemorySearchResponse } from "@/lib/notebook-memory";
-import type { NotebookEntry } from "@/lib/notebook";
+import { NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn, type NoteSummary, type NoteType } from "@/lib/note-pages";
+import { useNotePagesRevision } from "@/lib/note-events";
+import { relativeTime } from "@/lib/locale-time";
 import { commandPreview } from "@/lib/command-blocks";
 import {
-  RECORD_KIND_LABELS,
   researchRefKey,
   type ResearchRef,
 } from "@/lib/composer-context";
 
-type Mode = "records" | "chats";
-
-const FILTERS: { id: MemoryKind | "all"; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "hypothesis", label: "Hypotheses" },
-  { id: "observation", label: "Observations" },
-  { id: "decision", label: "Decisions" },
-  { id: "method", label: "Methods" },
-  { id: "plan", label: "Plans" },
-  { id: "user-note", label: "Notes" },
-];
-
-const RECENT_LIMIT = 12;
+type Mode = "notes" | "chats";
 
 interface Row {
   ref: ResearchRef;
   excerpt?: string;
   meta: string;
-  muted?: boolean;
 }
 
 interface SessionListItem {
@@ -50,72 +37,24 @@ interface SessionListItem {
   firstMessage?: string | null;
 }
 
-function relativeTime(value: string | number): string {
-  const then = new Date(value).getTime();
-  if (!Number.isFinite(then)) return "";
-  const mins = Math.round((Date.now() - then) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return days < 30 ? `${days}d ago` : new Date(then).toLocaleDateString();
-}
-
 function chatTitle(s: SessionListItem): string {
   const raw = (s.name ?? commandPreview(s.firstMessage ?? "")).replace(/\s+/g, " ").trim();
   return raw || "Untitled task";
 }
 
-/** Latest project notebook entries that nothing later amends. */
-function recentRows(entries: NotebookEntry[]): Row[] {
-  const superseded = new Set(
-    entries.filter((e) => e.supersedes).map((e) => `${e.sessionId}:${e.supersedes}`),
-  );
-  return entries
-    .filter((e) => e.sessionId && !e.provisional && !superseded.has(`${e.sessionId}:${e.id}`))
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, RECENT_LIMIT)
-    .map((e) => ({
-      ref: {
-        kind: "record",
-        type: e.type,
-        title: e.title,
-        source: { kind: "notebook", sessionId: e.sessionId as string, entryId: e.id },
-      },
-      excerpt: e.body?.replace(/\s+/g, " ").slice(0, 160),
-      meta: [e.role, relativeTime(e.timestamp)].filter(Boolean).join(" · "),
-    }));
+async function fetchNotePages(projectId: string, search: string, signal: AbortSignal): Promise<NoteSummary[] | null> {
+  try {
+    const url = search ? `/notes?${new URLSearchParams({ q: search })}` : "/notes";
+    const response = await apiFetch(url, { signal, cache: "no-store" }, projectId);
+    if (!response.ok) return null;
+    const { pages } = (await response.json()) as { pages: NoteSummary[] };
+    return pages;
+  } catch {
+    return null;
+  }
 }
 
-function hitRows(result: MemorySearchResponse): Row[] {
-  return result.hits.map((hit) => ({
-    ref: {
-      kind: "record",
-      type: hit.type,
-      title: hit.title,
-      source: hit.source,
-      digest: hit.digest,
-    },
-    // A title-only match repeats the row title as "title: …"; skip it.
-    excerpt: hit.excerpt.startsWith("title: ") ? undefined : hit.excerpt.replace(/\s+/g, " "),
-    meta: [
-      hit.author,
-      relativeTime(hit.timestamp),
-      hit.recordStatus !== "active" ? hit.recordStatus : "",
-      hit.outcome ? `outcome ${hit.outcome}` : "",
-    ].filter(Boolean).join(" · "),
-    muted: hit.recordStatus === "superseded",
-  }));
-}
-
-/**
- * Research context for the next message: project notebook records, frozen
- * plans and notes (via the same research-memory search the agent's
- * notebook_search tool uses), plus earlier chats in this project. Picked
- * items become references AI Scientist reads with its own tools; nothing is pasted
- * into the prompt.
- */
+/** Pick project note revisions and earlier tasks as context for the next message. */
 export function ResearchPickerBody({
   projectId,
   currentSessionId,
@@ -130,15 +69,18 @@ export function ResearchPickerBody({
   autoFocus?: boolean;
 }) {
   const t = useT();
-  const [mode, setMode] = useState<Mode>("records");
+  const locale = useLocale();
+  const [mode, setMode] = useState<Mode>("notes");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<MemoryKind | "all">("all");
-  const [rows, setRows] = useState<Row[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<NoteType | "all">("all");
+  const [projectNotes, setProjectNotes] = useState<{ projectId: string; pages: NoteSummary[] | null }>();
+  const [searchResults, setSearchResults] = useState<{ projectId: string; search: string; pages: NoteSummary[] | null }>();
   const [sessions, setSessions] = useState<SessionListItem[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const search = query.trim();
+  const notesRevision = useNotePagesRevision(projectId);
 
-  const selectedKeys = useMemo(() => new Set(selected.map(researchRefKey)), [selected]);
+  const selectedByKey = useMemo(() => new Map(selected.map((ref) => [researchRefKey(ref), ref])), [selected]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -146,55 +88,27 @@ export function ResearchPickerBody({
     return () => clearTimeout(t);
   }, [autoFocus, mode]);
 
-  // Records: recent entries when idle, research-memory search otherwise.
   useEffect(() => {
-    if (mode !== "records") return;
+    if (mode !== "notes") return;
     const controller = new AbortController();
-    const q = query.trim();
-    const t = setTimeout(async () => {
-      setError(null);
-      try {
-        if (!q && filter === "all") {
-          const res = await apiFetch(
-            `/projects/${encodeURIComponent(projectId)}/notebook`,
-            { signal: controller.signal, cache: "no-store" },
-            projectId,
-          );
-          if (!res.ok) throw new Error(`Notebook unavailable (${res.status})`);
-          const data = (await res.json()) as { entries?: NotebookEntry[] };
-          setRows(recentRows(data.entries ?? []));
-        } else {
-          const res = await apiFetch(
-            `/projects/${encodeURIComponent(projectId)}/notebook/memory/search`,
-            {
-              method: "POST",
-              signal: controller.signal,
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                query: q,
-                limit: 12,
-                ...(filter !== "all" ? { type: filter } : {}),
-              }),
-            },
-            projectId,
-          );
-          const data = (await res.json().catch(() => null)) as
-            | (MemorySearchResponse & { detail?: string })
-            | null;
-          if (!res.ok || !data) throw new Error(data?.detail || `Search failed (${res.status})`);
-          setRows(hitRows(data));
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setRows([]);
-        setError(err instanceof Error ? err.message : "Search failed");
-      }
-    }, q ? 250 : 0);
+    void fetchNotePages(projectId, "", controller.signal).then((pages) => {
+      if (!controller.signal.aborted) setProjectNotes({ projectId, pages });
+    });
+    return () => controller.abort();
+  }, [mode, projectId, notesRevision]);
+
+  useEffect(() => {
+    if (mode !== "notes" || !search) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const pages = await fetchNotePages(projectId, search, controller.signal);
+      if (!controller.signal.aborted) setSearchResults({ projectId, search, pages });
+    }, 150);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       controller.abort();
     };
-  }, [mode, query, filter, projectId]);
+  }, [mode, search, projectId, notesRevision]);
 
   useEffect(() => {
     if (mode !== "chats" || sessions !== null) return;
@@ -222,22 +136,32 @@ export function ResearchPickerBody({
       .filter(({ title }) => !q || title.toLowerCase().includes(q))
       .map(({ s, title }) => ({
         ref: { kind: "chat" as const, sessionId: s.id, title },
-        meta: [relativeTime(s.modified), `${s.messageCount} messages`].join(" · "),
+        meta: [relativeTime(new Date(s.modified).getTime(), locale), `${s.messageCount} messages`].filter(Boolean).join(" · "),
       }));
-  }, [sessions, query, currentSessionId]);
+  }, [sessions, query, currentSessionId, locale]);
 
   const toggle = (ref: ResearchRef) => {
     const key = researchRefKey(ref);
     onChange(
-      selectedKeys.has(key)
+      selectedByKey.has(key)
         ? selected.filter((r) => researchRefKey(r) !== key)
         : [...selected, ref],
     );
   };
 
-  const visible = mode === "records" ? rows : chatRows;
-  const loading = visible === null;
-  const idleRecords = mode === "records" && !query.trim() && filter === "all";
+  const allNotes = projectNotes?.projectId === projectId ? projectNotes.pages : undefined;
+  const availableTypes = useMemo(() => noteTypesIn(allNotes ?? undefined), [allNotes]);
+  const activeFilter = filter !== "all" && availableTypes.includes(filter) ? filter : "all";
+  const matchingNotes = searchResults?.projectId === projectId && searchResults.search === search ? searchResults.pages : undefined;
+  const currentNotes = search ? matchingNotes : allNotes;
+  const noteRows = currentNotes?.filter((page) => activeFilter === "all" || page.type === activeFilter).map<Row>((page) => ({
+    ref: { kind: "note", id: page.id, type: page.type, version: page.version, title: page.title },
+    excerpt: page.excerpt.replace(/\s+/g, " "),
+    meta: [page.status === "pending" ? t(NOTE_STATUS_LABELS.pending) : "", relativeTime(page.savedAt, locale)].filter(Boolean).join(" · "),
+  }));
+  const visible = mode === "notes" ? noteRows : chatRows;
+  const error = mode === "notes" && currentNotes === null;
+  const idleNotes = mode === "notes" && !search && activeFilter === "all";
 
   return (
     <>
@@ -246,19 +170,20 @@ export function ResearchPickerBody({
         <input
           ref={inputRef}
           value={query}
+          maxLength={300}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
-            mode === "records"
-              ? "Search notebook entries, plans and notes…"
+            mode === "notes"
+              ? t("Search note pages")
               : t("Filter earlier tasks…")
           }
-          aria-label={mode === "records" ? "Search research records" : t("Filter earlier tasks")}
-          className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+          aria-label={mode === "notes" ? t("Search note pages") : t("Filter earlier tasks")}
+          className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
         />
-        <div className="flex shrink-0 rounded-md border p-0.5" role="radiogroup" aria-label="Research source">
+        <div className="flex shrink-0 rounded-md border p-0.5" role="radiogroup" aria-label={t("Context source")}>
           {(
             [
-              { id: "records", label: "Records", icon: BookOpenIcon },
+              { id: "notes", label: t("Notes"), icon: BookOpenIcon },
               { id: "chats", label: t("Tasks"), icon: MessagesSquareIcon },
             ] as const
           ).map(({ id, label, icon: Icon }) => (
@@ -286,40 +211,40 @@ export function ResearchPickerBody({
         </div>
       </div>
 
-      {mode === "records" && (
+      {mode === "notes" && availableTypes.length > 0 && (
         <div className="flex flex-wrap gap-1 border-b px-3 py-1.5">
-          {FILTERS.map((f) => (
+          {(["all", ...availableTypes] as const).map((id) => (
             <button
-              key={f.id}
+              key={id}
               type="button"
-              onClick={() => setFilter(f.id)}
-              aria-pressed={filter === f.id}
+              onClick={() => setFilter(id)}
+              aria-pressed={activeFilter === id}
               className={cn(
                 "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
-                filter === f.id
+                activeFilter === id
                   ? "border-primary/40 bg-primary/10 text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              {f.label}
+              {t(id === "all" ? "All" : NOTE_TYPES[id].label)}
             </button>
           ))}
         </div>
       )}
 
       <div className="max-h-72 overflow-y-auto py-1">
-        {idleRecords && rows && rows.length > 0 && (
+        {idleNotes && noteRows && noteRows.length > 0 && (
           <div className="px-3 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-            Recent notebook entries
+            {t("Recent note pages")}
           </div>
         )}
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
-            <LoaderIcon className="size-3.5 animate-spin" /> Loading…
-          </div>
-        ) : error ? (
+        {error ? (
           <div role="alert" className="px-3 py-6 text-center text-xs text-destructive">
-            {error}
+            {t("Could not load notes.")}
+          </div>
+        ) : !visible ? (
+          <div role="status" className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+            <LoaderIcon className="size-3.5 animate-spin" /> {t("Loading…")}
           </div>
         ) : visible.length === 0 ? (
           <div className="px-6 py-8 text-center text-xs text-muted-foreground">
@@ -327,14 +252,16 @@ export function ResearchPickerBody({
               ? query.trim()
                 ? t("No matching tasks.")
                 : t("No other tasks in this project yet.")
-              : idleRecords
-                ? "No notebook entries yet. AI Scientist records hypotheses, methods and findings here as it works."
-                : "No matching records."}
+              : idleNotes
+                ? t("No note pages yet")
+                : t("No matching note pages")}
           </div>
         ) : (
           visible.map((row) => {
             const key = researchRefKey(row.ref);
-            const isSelected = selectedKeys.has(key);
+            const picked = selectedByKey.get(key);
+            const isSelected = Boolean(picked);
+            const earlierRevision = picked?.kind === "note" && row.ref.kind === "note" && picked.version !== row.ref.version;
             return (
               <div
                 key={key}
@@ -351,7 +278,6 @@ export function ResearchPickerBody({
                 className={cn(
                   "flex cursor-pointer items-start gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none",
                   isSelected && "bg-muted/40",
-                  row.muted && "opacity-70",
                 )}
               >
                 <div
@@ -366,9 +292,9 @@ export function ResearchPickerBody({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    {row.ref.kind === "record" && (
+                    {row.ref.kind === "note" && (
                       <span className="shrink-0 rounded bg-sky-500/10 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
-                        {RECORD_KIND_LABELS[row.ref.type]}
+                        {t(NOTE_TYPES[row.ref.type].label)}
                       </span>
                     )}
                     <span className="truncate font-medium text-foreground">{row.ref.title}</span>
@@ -381,6 +307,9 @@ export function ResearchPickerBody({
                   {row.meta && (
                     <p className="mt-0.5 text-[10px] text-muted-foreground/70">{row.meta}</p>
                   )}
+                  {earlierRevision && <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {t("Selected revision {version}", { version: picked.version })}
+                  </p>}
                 </div>
               </div>
             );
@@ -390,8 +319,8 @@ export function ResearchPickerBody({
 
       <div className="flex items-center justify-between gap-3 border-t px-3 py-1.5">
         <span className="text-[10px] text-muted-foreground">
-          {mode === "records"
-            ? "AI Scientist reads picked records with notebook_search before relying on them."
+          {mode === "notes"
+            ? t("Selected notes are read as context for the next message.")
             : t("AI Scientist reads a compact snapshot of each picked task, taken when you send.")}
         </span>
         {selected.length > 0 && (
@@ -400,7 +329,7 @@ export function ResearchPickerBody({
             onClick={() => onChange([])}
             className="whitespace-nowrap text-[10px] text-muted-foreground transition-colors hover:text-destructive"
           >
-            Clear {selected.length}
+            {t("Clear selection ({count})", { count: selected.length })}
           </button>
         )}
       </div>

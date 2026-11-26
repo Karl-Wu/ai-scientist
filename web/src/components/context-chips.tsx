@@ -2,7 +2,7 @@
 
 import { useT } from "@/components/i18n-provider";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   XIcon,
   DatabaseIcon,
@@ -16,10 +16,11 @@ import {
 import { KadyFileIcon } from "@/components/file-icon";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { NoteReferenceDialog } from "@/components/note-pages-view";
 import type { Database } from "@/components/database-selector";
 import type { Skill } from "@/lib/use-skills";
+import { NOTE_TYPES } from "@/lib/note-pages";
 import {
-  RECORD_KIND_LABELS,
   researchRefKey,
   type ComposerContext,
   type DelegationChoice,
@@ -29,6 +30,7 @@ import {
 const RESEARCH_CHIP = "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-400";
 const DELEGATE_CHIP = "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400";
 const VERIFY_CHIP = "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+type OpenNoteReference = (ref: Extract<ResearchRef, { kind: "note" }>, trigger: HTMLButtonElement) => void;
 
 const DOMAIN_COLORS: Record<
   string,
@@ -51,24 +53,25 @@ const DOMAIN_COLORS: Record<
 function Chip({
   children,
   onRemove,
+  onOpen,
   ariaLabel,
   className,
   tooltip,
 }: {
   children: ReactNode;
-  /** Omitted for read-only chips (sent messages). */
+  /** Omitted for sent messages. */
   onRemove?: () => void;
+  onOpen?: (trigger: HTMLButtonElement) => void;
   ariaLabel?: string;
   className?: string;
   tooltip?: ReactNode;
 }) {
-  const body = (
-    <div
-      className={cn(
-        "group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-        className,
-      )}
-    >
+  const styles = cn("group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors", className);
+  const body = onOpen ? (
+    <button type="button" className={cn(styles, "hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring")}
+      aria-label={ariaLabel} onClick={(event) => onOpen(event.currentTarget)}>{children}</button>
+  ) : (
+    <div className={styles}>
       <div className="flex min-w-0 items-center gap-1.5">{children}</div>
       {onRemove && (
         <button
@@ -104,32 +107,33 @@ function ComposerContextChips({
   context,
   onResearchChange,
   onDelegationChange,
+  onOpenNote,
 }: {
   context: ComposerContext;
   onResearchChange?: (refs: ResearchRef[]) => void;
   onDelegationChange?: (next: DelegationChoice) => void;
+  onOpenNote?: OpenNoteReference;
 }) {
   const t = useT();
   const { delegation, research } = context;
-  const scope = onResearchChange ? "Applies to the next message only." : null;
+  const scope = onResearchChange ? t("Applies to the next message only.") : null;
   return (
     <>
       {delegation.auto && (
         <Chip
           className={DELEGATE_CHIP}
           onRemove={onDelegationChange && (() => onDelegationChange({ ...delegation, auto: false }))}
-          ariaLabel="Stop letting AI Scientist choose specialists"
+          ariaLabel={t("Stop letting AI Scientist choose specialists")}
           tooltip={
             <>
-              <b>Delegate · AI Scientist chooses</b>
+              <b>{t("Delegate · AI Scientist chooses")}</b>
               <br />
-              AI Scientist splits the work and hands parts to specialists picked by
-              their descriptions. {scope}
+              {t("AI Scientist splits the work and hands parts to specialists picked by their descriptions.")} {scope}
             </>
           }
         >
           <SparklesIcon className="size-3 shrink-0 opacity-70" />
-          <span>Specialists: AI Scientist picks</span>
+          <span>{t("Specialists: AI Scientist picks")}</span>
         </Chip>
       )}
       {delegation.specialists.map((name) => (
@@ -144,13 +148,12 @@ function ComposerContextChips({
                 specialists: delegation.specialists.filter((n) => n !== name),
               }))
           }
-          ariaLabel={`Don't delegate to ${name}`}
+          ariaLabel={t("Don't delegate to {name}", { name })}
           tooltip={
             <>
-              <b>Delegate · {name}</b>
+              <b>{t("Delegate · {name}", { name })}</b>
               <br />
-              AI Scientist briefs this specialist and checks its handoff before
-              replying. {scope}
+              {t("AI Scientist briefs this specialist and checks its handoff before replying.")} {scope}
             </>
           }
         >
@@ -162,24 +165,27 @@ function ComposerContextChips({
         <Chip
           className={VERIFY_CHIP}
           onRemove={onDelegationChange && (() => onDelegationChange({ ...delegation, verify: false, verifiers: [] }))}
-          ariaLabel="Remove verification gate"
+          ariaLabel={t("Remove verification gate")}
           tooltip={
             <>
-              <b>Verification gate</b>
+              <b>{t("Verification gate")}</b>
               <br />
-              The best-suited verifier specialist reviews the result
-              adversarially; AI Scientist accepts it only if the review passes.{" "}
+              {t("The best-suited verifier specialist reviews the result adversarially; AI Scientist accepts it only if the review passes.")}{" "}
               {scope}
             </>
           }
         >
           <ShieldCheckIcon className="size-3 shrink-0 opacity-70" />
-          <span>Verify before accepting</span>
+          <span>{t("Verify before accepting")}</span>
         </Chip>
       )}
       {research.map((ref) => {
         const key = researchRefKey(ref);
-        const label = ref.kind === "chat" ? t("Earlier task") : RECORD_KIND_LABELS[ref.type];
+        const label = ref.kind === "chat" ? t("Earlier task")
+          : t(NOTE_TYPES[ref.type].label);
+        const guidance = ref.kind === "chat" ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
+          : t("AI Scientist reads revision {version} of this note page.", { version: ref.version });
+        const openReference = ref.kind === "note" && onOpenNote ? (trigger: HTMLButtonElement) => onOpenNote(ref, trigger) : undefined;
         return (
           <Chip
             key={key}
@@ -188,16 +194,16 @@ function ComposerContextChips({
               onResearchChange &&
               (() => onResearchChange(research.filter((r) => researchRefKey(r) !== key)))
             }
-            ariaLabel={`Remove ${ref.title}`}
+            onOpen={openReference}
+            ariaLabel={ref.kind === "note" && openReference ? t("Open {name}, revision {version}", { name: ref.title, version: ref.version })
+              : t("Remove {name}", { name: ref.title })}
             tooltip={
               <>
                 <b>{label}</b>
                 <br />
                 {ref.title}
                 <br />
-                {ref.kind === "chat"
-                  ? t("AI Scientist reads a compact snapshot of this task, taken when the message is sent.")
-                  : "AI Scientist reads this record with notebook_search before relying on it."}{" "}
+                {guidance}{" "}
                 {scope}
               </>
             }
@@ -216,10 +222,13 @@ function ComposerContextChips({
 }
 
 /** Read-only chips under a sent user message. */
-export function SentContextChips({ context }: { context: ComposerContext }) {
+export function SentContextChips({ context, projectId }: { context: ComposerContext; projectId: string }) {
+  const [opened, setOpened] = useState<{ ref: Extract<ResearchRef, { kind: "note" }>; trigger: HTMLButtonElement }>();
   return (
     <div className="flex flex-wrap gap-1.5">
-      <ComposerContextChips context={context} />
+      <ComposerContextChips context={context} onOpenNote={(ref, trigger) => setOpened({ ref, trigger })} />
+      {opened && <NoteReferenceDialog key={`${projectId}:${opened.ref.id}:${opened.ref.version}`}
+        projectId={projectId} reference={opened.ref} returnFocus={opened.trigger} onClose={() => setOpened(undefined)} />}
     </div>
   );
 }
@@ -241,6 +250,7 @@ export function ContextChipsBar({
   delegation,
   onDelegationChange,
 }: ContextChipsBarProps) {
+  const t = useT();
   const hasAny =
     attachedFiles.length > 0 ||
     selectedDbs.length > 0 ||
@@ -266,7 +276,7 @@ export function ContextChipsBar({
           <Chip
             key={`file:${path}`}
             onRemove={() => onRemoveFile(path)}
-            ariaLabel={`Remove ${name}`}
+            ariaLabel={t("Remove {name}", { name })}
             className="border-border/70 bg-muted/60 text-foreground/80 hover:bg-muted"
             tooltip={
               <>
@@ -274,8 +284,7 @@ export function ContextChipsBar({
                 <br />
                 <span className="opacity-80">{path}</span>
                 <br />
-                Attached to the next message. The agent can read this file
-                directly from the sandbox.
+                {t("Attached to the next message. The agent can read this file directly from the sandbox.")}
               </>
             }
           >
@@ -298,12 +307,12 @@ export function ContextChipsBar({
           <Chip
             key={`db:${db.id}`}
             onRemove={() => removeDb(db.id)}
-            ariaLabel={`Remove ${db.name}`}
+            ariaLabel={t("Remove {name}", { name: db.name })}
             className={cn(c.bg, c.text, c.border)}
             tooltip={
               <>
                 <b>{db.name}</b>{" "}
-                <span className="opacity-70 capitalize">· {db.domain}</span>
+                <span className="opacity-70 capitalize">· {db.domain === "science" ? t("Science") : t("Finance")}</span>
                 <br />
                 {db.description}
                 <br />
@@ -323,19 +332,18 @@ export function ContextChipsBar({
         <Chip
           key={`skill:${skill.id}`}
           onRemove={() => removeSkill(skill.id)}
-          ariaLabel={`Remove ${skill.name}`}
+          ariaLabel={t("Remove {name}", { name: skill.name })}
           className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20"
           tooltip={
             <>
-              <b>Skill · {skill.name}</b>
+              <b>{t("Skill · {name}", { name: skill.name })}</b>
               {skill.author ? (
-                <span className="opacity-70"> by {skill.author}</span>
+                <span className="opacity-70"> {t("by {author}", { author: skill.author })}</span>
               ) : null}
               <br />
               {skill.description}
               <br />
-              AI Scientist follows this skill&apos;s instructions on every message
-              until you remove it.
+              {t("AI Scientist follows this skill's instructions on every message until you remove it.")}
             </>
           }
         >

@@ -1,6 +1,6 @@
 /**
- * Seed the pinned plugin's prompts and complete skill trees into a project,
- * and carry unchanged copies forward when the plugin is upgraded.
+ * Seed the pinned plugin's prompts and skill trees and carry unchanged copies
+ * forward when their shipped content changes.
  *
  * `.kady/subagent-resources.json` records the plugin version and the hash of
  * each file as Kady last wrote it. On a new plugin version a file that still

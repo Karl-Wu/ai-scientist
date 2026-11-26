@@ -11,24 +11,18 @@ import {
 } from "@/lib/composer-context";
 import { commandPreview } from "@/lib/command-blocks";
 
-const DIGEST = "a".repeat(64);
+const note = { kind: "note", id: "ad94e200-56c4-4100-98b4-e2e643a24b01", type: "observation", title: "Batch effect · dominates PC1", version: 2 } as const;
+const retiredRecord = {
+  kind: "record",
+  type: "observation",
+  title: "Retired record",
+  source: { kind: "notebook", sessionId: "s-1", entryId: "e1" },
+};
 
 const full: ComposerContext = {
   delegation: { specialists: ["reviewer", "investigator"], auto: false, verify: true, verifiers: ["reviewer", "evidence-auditor"] },
   research: [
-    {
-      kind: "record",
-      type: "observation",
-      title: "Batch effect · dominates PC1",
-      source: { kind: "notebook", sessionId: "s-1", entryId: "e1" },
-      digest: DIGEST,
-    },
-    {
-      kind: "record",
-      type: "plan",
-      title: "Frozen plan v2",
-      source: { kind: "plan-event", sessionId: "s-2", entryId: "plan", eventId: "0f8fad5b-d9cb-469f-a165-70867728950e" },
-    },
+    note,
     { kind: "chat", sessionId: "01a0fdac-bdea", title: "Earlier QC chat" },
   ],
 };
@@ -45,8 +39,9 @@ describe("buildComposerContext", () => {
     expect(text).toContain("Delegation: reviewer, investigator");
     expect(text).toContain("subagent tool");
     expect(text).toContain('opens with "Verification gate:" to the verifier specialist best suited to the result (one of: reviewer, evidence-auditor)');
-    expect(text).toContain(`source {"kind":"notebook","sessionId":"s-1","entryId":"e1"} · digest ${DIGEST}`);
-    expect(text).toContain('notebook_search (action "read"');
+    expect(text).toContain(`note ${note.id} · revision ${note.version}`);
+    expect(text).toContain("note_read");
+    expect(text).not.toContain("notebook_search");
     expect(text).toContain(".pi/sessions/*_<session>.jsonl");
   });
 
@@ -64,17 +59,25 @@ describe("splitComposerContext", () => {
     const { text, context } = splitComposerContext(sent);
     expect(text).toBe("Is the effect real?");
     expect(context?.delegation).toMatchObject({ specialists: ["reviewer", "investigator"], auto: false, verify: true });
-    expect(context?.research).toEqual([
-      full.research[0],
-      full.research[1],
-      full.research[2],
-    ]);
+    expect(context?.research).toEqual(full.research);
   });
 
   it("keeps earlier appended context (files, skills) in the visible text", () => {
     const sent = "Run QC\nuser_data/a.csv\n\nMake sure to use the skills: 'scanpy'" +
       buildComposerContext({ delegation: { ...EMPTY_DELEGATION, auto: true }, research: [] });
     expect(splitComposerContext(sent).text).toBe("Run QC\nuser_data/a.csv\n\nMake sure to use the skills: 'scanpy'");
+  });
+
+  it("strips retired record attachments from history while keeping later task references", () => {
+    const oldSection = `Referenced research records:\n- observation · ${retiredRecord.title} · source ${JSON.stringify(retiredRecord.source)}`;
+    const prefix = "Continue the analysis\n\n<composer-context>\n";
+    const suffix = "\n</composer-context>";
+    expect(splitComposerContext(prefix + oldSection + suffix)).toEqual({ text: "Continue the analysis", context: null });
+    const mixed = prefix + oldSection + "\n\nReferenced earlier chats:\n- Earlier task · session s-9" + suffix;
+    expect(splitComposerContext(mixed)).toMatchObject({
+      text: "Continue the analysis",
+      context: { research: [{ kind: "chat", sessionId: "s-9", title: "Earlier task" }] },
+    });
   });
 
   it("leaves ordinary and malformed messages alone", () => {
@@ -122,13 +125,20 @@ describe("chat snapshots", () => {
 });
 
 describe("persistence normalizers", () => {
+  it("preserves exact note references in sent messages and draft context", () => {
+    const ref = { kind: "note", id: "ad94e200-56c4-4100-98b4-e2e643a24b01", type: "qualityCheck", title: "QC findings", version: 3 } as const;
+    const text = "Use the note" + buildComposerContext({ delegation: EMPTY_DELEGATION, research: [ref] });
+    expect(splitComposerContext(text)).toMatchObject({ text: "Use the note", context: { research: [ref] } });
+    expect(normalizeResearchRefs([ref, ref, { ...ref, id: "../another-project" }, { ...ref, version: 0 }, { ...ref, type: "invalid" }])).toEqual([ref]);
+  });
+
   it("keeps valid refs, drops malformed or duplicate ones, and never restores a snapshot", () => {
     const valid = full.research;
     const restored = normalizeResearchRefs([
       ...valid,
       valid[0],
       { kind: "chat", sessionId: "../x", title: "bad id" },
-      { kind: "record", type: "bogus", title: "bad type", source: { kind: "notebook", sessionId: "s", entryId: "e" } },
+      retiredRecord,
       { kind: "chat", sessionId: "s-5", title: "snap", snapshot: ".kady/x.md" },
       "junk",
     ]);

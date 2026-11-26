@@ -1,7 +1,11 @@
 "use client";
 
+import { LOCAL_PREVIEW_EVENT, previewAction } from "@/lib/local-preview";
+import taskSummaryStyles from "./task-summary.module.css";
+
 import { ConversationMap } from "@/components/conversation-map";
 import { hasCompletedChatTurn } from "@/lib/chat-history-visibility";
+import { isRetiredNotebookTool } from "@/lib/legacy-notebook";
 import { useSessionModel } from "@/lib/use-session-model";
 import { useInputHistory } from "@/lib/use-input-history";
 
@@ -36,6 +40,8 @@ import {
   type PromptInputProviderState,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useShowReasoningDetails } from "@/lib/reasoning-display";
 import { buildDatabaseContext, type Database } from "@/components/database-selector";
 import {
   ModelSelector,
@@ -66,10 +72,14 @@ import { ContextUsageIndicator } from "@/components/context-usage-indicator";
 import { CitationBadge } from "@/components/citation-badge";
 import {
   ModalJobChip,
-  NotebookEntryChip,
-  ReasoningBlock,
+  ToolTiming,
   ToolActivityList,
+  ToolActivityRows,
+  ToolActivitySummary,
+  ToolDisclosure,
 } from "@/components/tool-activity";
+import type { FileSourceFocus } from "@/lib/provenance";
+import type { NoteCreationSource } from "@/lib/note-pages";
 import { InterviewCard } from "@/components/interview-form";
 import { SystemCard } from "@/components/system-card";
 import { PermissionCard } from "@/components/permission-card";
@@ -94,7 +104,6 @@ import {
   type ChatMessage,
   type ContextUsage,
 } from "@/lib/use-agent";
-import type { NotebookEntry } from "@/lib/notebook";
 import { routeSubmit, type SendIntent } from "@/lib/chat-routing";
 import {
   moveQueuedMessage,
@@ -119,7 +128,9 @@ import {
 } from "@/components/ai-elements/speech-input";
 import {
   BookOpenIcon,
+  BrainIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
   DatabaseIcon,
   ImageIcon,
@@ -135,6 +146,7 @@ import {
 import { cn, formatUsd } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
+  Fragment,
   forwardRef,
   memo,
   useCallback,
@@ -157,6 +169,12 @@ import { workflowScriptsIn } from "@/lib/workflow-script";
 /** Toast action for "provider disconnected" errors. */
 const PROVIDERS_TOAST_ACTION = {
   action: { label: "Open Settings", onClick: () => openSettings({ tab: "providers" }) },
+};
+
+const SEND_SHORTCUTS: Readonly<Record<string, ReactNode>> = {
+  "{enter}": <kbd>↵</kbd>,
+  "{newLine}": <><kbd>⇧</kbd>+<kbd>↵</kbd></>,
+  "{queue}": <><kbd>⌥</kbd>+<kbd>↵</kbd></>,
 };
 
 const MAX_QUEUE = 5;
@@ -1375,33 +1393,29 @@ function ChatInput({
                     <>
                       <b>
                         {modelAvailability === "checking"
-                          ? "Checking model provider"
-                          : "Model provider disconnected"}
+                          ? t("Checking model provider")
+                          : t("Model provider disconnected")}
                       </b>
                       <br />
                       {modelAvailability === "checking"
-                        ? "Wait a moment for provider status to load."
-                        : "Reconnect it in Settings → Providers or choose another model."}
+                        ? t("Wait a moment for provider status to load.")
+                        : t("Reconnect it in Settings → Providers or choose another model.")}
                     </>
                   ) : budgetBlocked ? (
                     <>
                       <b>{t("Spend limit reached")}</b>
                       <br />
-                      Project has hit its spend limit (
-                      {formatUsd(budgetTotalUsd)}
-                      {budgetLimitUsd !== null
-                        ? ` / ${formatUsd(budgetLimitUsd)}`
-                        : ""}
-                      ). Raise the limit in Settings → Project → General to continue.
+                      {t("Project has hit its spend limit ({amount}). Raise the limit in Settings → Project → General to continue.", {
+                        amount: budgetLimitUsd !== null
+                          ? `${formatUsd(budgetTotalUsd)} / ${formatUsd(budgetLimitUsd)}`
+                          : formatUsd(budgetTotalUsd),
+                      })}
                     </>
                   ) : isStreaming ? (
                     <>
                       <b>{t("Stop")}</b>
                       <br />
-                      Cancel the current turn (⏎ steers it instead). Undelivered
-                      steering messages return to the composer, queued prompts
-                      pause until you resume them, and files the agent already
-                      wrote stay in the sandbox.
+                      {t("Stop the current turn. Press ↵ to steer it. Undelivered messages return to the composer, queued messages pause until resumed, and files already written stay in the sandbox.")}
                     </>
                   ) : queuedMessages.length >= MAX_QUEUE ? (
                     <>
@@ -1412,14 +1426,15 @@ function ChatInput({
                     <>
                       <b>{t("Send message")}</b>
                       <br />
-                      Press <kbd>↵</kbd> to send, <kbd>⇧</kbd>+<kbd>↵</kbd> for
-                      a new line. Prompts sent while the agent is busy steer
-                      the live run; ⌥⏎ queues a new run instead.
+                      {t("Press {enter} to send and {newLine} for a new line. While the agent is running, {enter} steers the current turn and {queue} queues a follow-up.")
+                        .split(/(\{(?:enter|newLine|queue)\})/g)
+                        .map((part, index) => <Fragment key={index}>{SEND_SHORTCUTS[part] ?? part}</Fragment>)}
                     </>
                   )
                 }
               >
                 <PromptInputSubmit
+                  aria-label={isStreaming ? t("Stop") : t("Send message")}
                   status={submitStatus as "streaming" | "error" | "ready"}
                   onStop={onStop}
                   disabled={(budgetBlocked || !modelAvailable || tableSubmitting) && !isStreaming}
@@ -1433,86 +1448,239 @@ function ChatInput({
   );
 }
 
+/** Reasoning summaries use headings or standalone bold lines for section titles. */
+function reasoningTitles(content: string): string[] {
+  const titles: string[] = [];
+  let fence: string | undefined;
+  for (const line of content.split(/\r?\n/)) {
+    const fenceLine = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fenceLine) {
+      const [, marker, suffix] = fenceLine;
+      if (!fence) fence = marker;
+      else if (marker.startsWith(fence) && !suffix.trim()) fence = undefined;
+      continue;
+    }
+    if (fence || /^(?: {4}|\t)/.test(line)) continue;
+
+    const text = line.trim();
+    const heading = /^#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?$/.exec(text)?.[1];
+    const label = heading ?? text;
+    const bold = label.startsWith("**") ? "**" : label.startsWith("__") ? "__" : undefined;
+    if (bold && label.length > 4 && label.indexOf(bold, 2) === label.length - 2) {
+      const title = label.slice(2, -2).trim();
+      if (title) titles.push(title);
+    } else if (heading) {
+      titles.push(heading);
+    }
+  }
+  return titles;
+}
+
+function ReasoningLabel({ titles = [] }: { titles?: string[] }) {
+  const t = useT();
+  return (
+    <>
+      <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
+      {titles.length ? (
+        <span className="min-w-0 break-words text-left leading-relaxed">
+          {titles.map((title, index) => (
+            <span key={index}>
+              {index > 0 && <span className="text-muted-foreground/60">{" · "}</span>}
+              <bdi>{title}</bdi>
+            </span>
+          ))}
+        </span>
+      ) : <span>{t("Reasoning")}</span>}
+    </>
+  );
+}
+
+function formatExecutionDuration(ms: number, locale: string): string {
+  const elapsed = Math.round(ms / 1000);
+  const hours = Math.floor(elapsed / 3600);
+  const minutes = Math.floor((elapsed % 3600) / 60);
+  const format = (value: number, unit: "hour" | "minute" | "second") =>
+    new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(value);
+  return [
+    hours > 0 ? format(hours, "hour") : "",
+    minutes > 0 ? format(minutes, "minute") : "",
+    format(elapsed % 60, "second"),
+  ].filter(Boolean).join(" ");
+}
+
+function ExecutionDisclosure({ activities, children, processLabel, focusNonce }: {
+  activities: ActivityItem[];
+  children: ReactNode;
+  processLabel?: string;
+  focusNonce?: number;
+}) {
+  const t = useT();
+  return <ToolDisclosure className="my-1" focusNonce={focusNonce}>
+    <CollapsibleTrigger className={cn("group flex items-center gap-2 rounded-md text-left text-muted-foreground transition-colors",
+      processLabel ? "px-1 py-1 text-sm hover:text-foreground"
+        : "w-full border bg-muted/30 px-2.5 py-1.5 text-xs hover:bg-muted/60")}>
+      <ChevronRightIcon aria-hidden="true" className={cn("size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90",
+        processLabel && "order-last size-3.5")} />
+      {processLabel ?? (activities.length ? <ToolActivitySummary activities={activities} /> : t("Execution details"))}
+    </CollapsibleTrigger>
+    <CollapsibleContent>
+      <div className="mt-1 space-y-2 border-l-2 border-muted pl-2">
+        {processLabel && activities.length > 0 && <p className="flex items-center gap-2 px-1 py-0.5 text-xs text-muted-foreground">
+          <ToolActivitySummary activities={activities} />
+        </p>}
+        {children}
+      </div>
+    </CollapsibleContent>
+  </ToolDisclosure>;
+}
+
 export const AssistantMessageBody = memo(function AssistantMessageBody({
   message,
   isStreaming,
   isLast,
+  showReasoningDetails = false,
   sessionId,
   projectId,
-  onViewInNotebook,
   onViewCompute,
   onOpenFile,
+  onCreateNote,
+  fileSourceFocus,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   isLast: boolean;
+  showReasoningDetails?: boolean;
   sessionId: string | null;
   projectId: string;
-  onViewInNotebook?: (entryId: string) => void;
   onViewCompute?: (jobId?: string) => void;
   onOpenFile?: (path: string) => void;
+  onCreateNote?: (source: NoteCreationSource) => void;
+  fileSourceFocus?: FileSourceFocus;
 }) {
   const t = useT();
-  const activities = message.activities ?? [];
-  const hasReasoning = Boolean(message.reasoning?.trim());
-  const hasAnything =
-    Boolean(message.content) || activities.length > 0 || hasReasoning;
+  const locale = useLocale();
+  const activities = (message.activities ?? []).filter((activity) => !isRetiredNotebookTool(activity.toolName));
   // Some models occasionally end a turn right after a tool call with no
   // closing text, which used to leave the chat silently "done". Surface that
   // explicitly on the final bubble so the user knows the run ended.
   const endedWithoutReply =
-    !isStreaming && isLast && !message.content && (activities.length > 0 || hasReasoning);
+    !isStreaming && isLast && !message.content && activities.length > 0;
 
-  // Prose and activities share one ordered timeline so a preamble stays above
-  // the tool it introduced and the post-tool answer stays below it.
-  const orderedBlocks: ReactNode[] = [];
+  // Keep prose, reasoning and tools in their observed order.
+  const processBlocks: ReactNode[] = [];
+  const summaryBlocks: ReactNode[] = [];
+  const resultBlocks: ReactNode[] = [];
+  const processActivities: ActivityItem[] = [];
+  let orderedBlocks = processBlocks;
   let chunk: ActivityItem[] = [];
-  const flushChunk = () => {
+  let executionBlocks: ReactNode[] = [];
+  let executionActivities: ActivityItem[] = [];
+  let latestReasoningTitle: string | undefined;
+  const flushChunk = (current = false) => {
     if (!chunk.length) return;
-    orderedBlocks.push(
-      <ToolActivityList
-        key={`tools-${chunk[0].id}`}
-        activities={chunk}
-        compactHistory={!isLast}
-      />,
-    );
+    const key = `tools-${chunk[0].id}`;
+    if (isExecutionLive) {
+      orderedBlocks.push(<ToolActivityList key={key} activities={chunk} current={current} fileSourceFocus={fileSourceFocus} />);
+    } else {
+      executionActivities.push(...chunk);
+      executionBlocks.push(<ToolActivityRows key={key} activities={chunk} fileSourceFocus={fileSourceFocus} />);
+    }
     chunk = [];
   };
-  const appendActivity = (a: ActivityItem) => {
-    if (a.toolName === "interview") {
-      flushChunk();
+  const flushExecution = (current = false) => {
+    flushChunk(current);
+    if (!executionBlocks.length) return;
+    if (hasSummary && orderedBlocks === processBlocks) {
+      processBlocks.push(...executionBlocks);
+    } else {
+      const focused = executionActivities.some((item) => item.id === fileSourceFocus?.step.stepId);
       orderedBlocks.push(
-        <InterviewCard
-          key={a.id}
-          item={a}
-          sessionId={sessionId}
-          projectId={projectId}
-        />,
+        <ExecutionDisclosure key={`execution-${orderedBlocks.length}`} activities={executionActivities}
+          focusNonce={focused ? fileSourceFocus?.nonce : undefined}>
+          {executionBlocks}
+        </ExecutionDisclosure>,
+      );
+    }
+    executionBlocks = [];
+    executionActivities = [];
+  };
+  const appendReasoning = (content: string, key: string) => {
+    if (!content.trim()) return;
+    const titles = reasoningTitles(content);
+    if (isExecutionLive) {
+      latestReasoningTitle = titles.at(-1) ?? latestReasoningTitle;
+      return;
+    }
+    if (!showReasoningDetails && !titles.length) return;
+    flushChunk();
+    if (!showReasoningDetails) {
+      executionBlocks.push(
+        <p key={key} className="flex items-start gap-1.5 px-1 py-0.5 text-xs text-muted-foreground">
+          <ReasoningLabel titles={titles} />
+        </p>,
+      );
+      return;
+    }
+    executionBlocks.push(
+      <Collapsible key={key}>
+        <CollapsibleTrigger aria-label={titles.length ? titles.join(", ") : undefined}
+          className="group flex items-start gap-1.5 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground">
+          <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+          <ReasoningLabel titles={titles} />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div dir="auto" className="mt-1 min-w-0 whitespace-pre-wrap break-words border-l-2 pl-3 text-xs leading-relaxed text-muted-foreground">
+            {content}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>,
+    );
+  };
+  const appendActivity = (a: ActivityItem, current: boolean) => {
+    if (hasSummary && orderedBlocks === processBlocks && !a.scientificResult && a.toolName !== "permission") processActivities.push(a);
+    const preview = a.toolName === "open_local_preview" && a.status === "complete" && previewAction(a.result);
+    if (preview && sessionId) {
+      flushExecution();
+      (hasSummary ? resultBlocks : orderedBlocks).push(
+        <button type="button" key={a.id} className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+          onClick={() => window.dispatchEvent(new CustomEvent(LOCAL_PREVIEW_EVENT, {
+            detail: { ...preview, projectId, sessionId },
+          }))}>{t("Open preview")} · {preview.title}</button>,
+      );
+    } else if (a.toolName === "interview") {
+      flushExecution();
+      orderedBlocks.push(
+        <div key={a.id}>
+          <InterviewCard item={a} sessionId={sessionId} projectId={projectId} />
+          <ToolTiming item={a} className="mt-1 text-xs" />
+        </div>,
       );
     } else if (a.toolName === "permission") {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
         <PermissionCard key={a.id} item={a} sessionId={sessionId} projectId={projectId} />,
       );
-    } else if (a.toolName === "notebook") {
-      flushChunk();
-      orderedBlocks.push(
-        <NotebookEntryChip key={a.id} item={a} onView={onViewInNotebook} />,
-      );
     } else if (a.toolName?.startsWith("modal_")) {
-      flushChunk();
+      flushExecution();
       orderedBlocks.push(
-        <ModalJobChip key={a.id} item={a} onView={onViewCompute} />,
+        <div key={a.id}>
+          <ModalJobChip item={a} onView={onViewCompute} />
+          <ToolTiming item={a} className="mt-1 text-xs" />
+        </div>,
       );
     } else if (a.scientificResult) {
-      flushChunk();
+      flushExecution();
+      const result = a.scientificResult;
+      (hasSummary ? resultBlocks : orderedBlocks).push(
+        <ScientificResultCard key={a.id} item={a} projectId={projectId} onOpenFile={onOpenFile}
+          onRecordResult={!isStreaming && sessionId && a.status === "complete" && onCreateNote ? () => onCreateNote({
+            title: result.title, anchor: { kind: "result", sessionId, toolCallId: a.id },
+          }) : undefined} />,
+      );
+    } else if (a.toolName === "generate_image") {
+      flushExecution();
       orderedBlocks.push(
-        <ScientificResultCard
-          key={a.id}
-          item={a}
-          projectId={projectId}
-          onOpenFile={onOpenFile}
-        />,
+        <ToolActivityList key={a.id} activities={[a]} current={current} includeUnknown={isExecutionLive} fileSourceFocus={fileSourceFocus} />,
       );
     } else {
       chunk.push(a);
@@ -1524,7 +1692,7 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   // tool card so it can name the specialists the script launches.
   let replyWorkflowScript: string | undefined;
   const segments = message.segments?.length
-    ? message.segments
+    ? message.segments.filter((segment) => segment.type !== "activity" || activityById.has(segment.activityId))
     : [
         ...activities.map((activity) => ({
           type: "activity" as const,
@@ -1534,15 +1702,38 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
           ? [{ type: "text" as const, content: message.content }]
           : []),
       ];
+  const lastSegment = segments.findLast((segment) => segment.type === "activity" || segment.content.trim());
+  const summary = message.summary?.confirmed && !activities.some((activity) => activity.status === "running")
+    ? message.summary : undefined;
+  const summaryIndex = summary ? segments.findIndex((segment) =>
+    segment.type === "text" && segment.blockId === summary.blockId && Boolean(segment.content.trim())) : -1;
+  const hasSummary = summaryIndex >= 0;
+  const isExecutionLive = isStreaming && !hasSummary;
+  const focusInProcess = hasSummary && fileSourceFocus && segments.slice(0, summaryIndex).some(
+    (segment) => segment.type === "activity" && segment.activityId === fileSourceFocus.step.stepId,
+  );
+  if (message.reasoning && !segments.some((segment) => segment.type === "reasoning")) {
+    appendReasoning(message.reasoning, "reasoning");
+  }
   for (const [index, segment] of segments.entries()) {
+    if (segment.type === "reasoning") {
+      appendReasoning(segment.content, `reasoning-${index}`);
+      continue;
+    }
+    if (segment.type === "text" && !segment.content.trim()) continue;
     if (segment.type === "text") {
-      flushChunk();
+      flushExecution();
+      if (index === summaryIndex) orderedBlocks = summaryBlocks;
       replyWorkflowScript = workflowScriptsIn(segment.content).at(-1) ?? replyWorkflowScript;
-      if (segment.content) {
-        orderedBlocks.push(
-          <MessageResponse key={`text-${index}`} onOpenFile={onOpenFile}>{segment.content}</MessageResponse>,
-        );
-      }
+      orderedBlocks.push(
+        <MessageResponse
+          key={`text-${index}`}
+          className={hasSummary && index >= summaryIndex ? taskSummaryStyles.prose : undefined}
+          onOpenFile={onOpenFile}
+        >
+          {segment.content}
+        </MessageResponse>,
+      );
       continue;
     }
     const activity = activityById.get(segment.activityId);
@@ -1552,17 +1743,45 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
       activity.toolName === "subagent" && args?.workflow === true && replyWorkflowScript
         ? { ...activity, replyWorkflowScript }
         : activity,
+      isExecutionLive && segment === lastSegment,
     );
   }
-  flushChunk();
+  flushExecution(isExecutionLive && lastSegment?.type === "activity");
+  const elapsedLabel = summary?.executionMs === undefined
+    ? undefined : t("Execution took {duration}", { duration: formatExecutionDuration(summary.executionMs, locale) });
 
   return (
     <>
-      {hasReasoning && <ReasoningBlock reasoning={message.reasoning ?? ""} />}
-      {orderedBlocks}
-      {isStreaming && !hasAnything ? (
-        <Shimmer className="text-sm" duration={1.5}>
-          {t("Thinking...")}</Shimmer>
+      {hasSummary && processBlocks.length > 0 ? (
+        <ExecutionDisclosure activities={processActivities} processLabel={elapsedLabel ?? t("Execution details")}
+          focusNonce={focusInProcess ? fileSourceFocus?.nonce : undefined}>
+          {processBlocks}
+        </ExecutionDisclosure>
+      ) : (
+        <>
+          {hasSummary && summaryIndex > 0 && elapsedLabel && (
+            <p className="px-1 text-sm text-muted-foreground">{elapsedLabel}</p>
+          )}
+          {processBlocks}
+        </>
+      )}
+      {summaryBlocks.length > 0 && (
+        <div data-task-summary="" className="flex min-w-0 flex-col gap-3 ps-2 pe-1 pt-1">
+          {summaryBlocks}
+        </div>
+      )}
+      {resultBlocks.length > 0 && (
+        <div className="mt-4 flex min-w-0 flex-col gap-2">
+          {resultBlocks}
+        </div>
+      )}
+      {isExecutionLive ? (
+        <p role="status" className="flex items-center gap-1.5 px-1 py-0.5 text-xs text-muted-foreground">
+          <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
+          <span dir="auto" className="min-w-0 break-words">
+            <Shimmer as="span" duration={1.5}>{latestReasoningTitle ?? t("Thinking...")}</Shimmer>
+          </span>
+        </p>
       ) : endedWithoutReply ? (
         <p className="text-xs italic text-muted-foreground">
           {t("This turn ended without a closing message. Review the tool results above before continuing, or ask a follow-up for a summary.")}</p>
@@ -1578,38 +1797,52 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
 
 /** Unchanged history rows keep their tool disclosures and skip token renders. */
 export const ChatMessageRow = memo(function ChatMessageRow({
-  message, isStreaming, isLast, sessionId, projectId,
-  onViewInNotebook, onViewCompute, onOpenFile, onCopy, copied, response, onOpenTask, canFork,
+  message, isStreaming, isLast, showReasoningDetails, sessionId, projectId,
+  onViewCompute, onOpenFile, fileSourceFocus, onCopy, copied, response, onOpenTask, canFork, onCreateNote,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   isLast: boolean;
+  showReasoningDetails?: boolean;
   sessionId: string | null;
   projectId: string;
-  onViewInNotebook?: (id: string) => void;
   onViewCompute?: (id?: string) => void;
   onOpenFile?: (path: string) => void;
+  fileSourceFocus?: FileSourceFocus;
   onCopy: (id: string, content: string) => void;
   copied: boolean;
   response?: TaskResponse;
   canFork?: boolean;
   onOpenTask?: OpenTask;
+  onCreateNote?: (source: NoteCreationSource) => void;
 }) {
   // Extension notices and compaction markers sit between the bubbles.
   if (message.role === "system") return <SystemCard message={message} />;
+  if (
+    message.role === "assistant" && !isStreaming && !message.content.trim() &&
+    !message.reasoning?.trim() && !message.citations && message.activities?.length &&
+    message.activities.every((activity) => isRetiredNotebookTool(activity.toolName))
+  ) return null;
+  const hasAnswerActions = message.role === "assistant" && Boolean(response) && !isStreaming;
+  const hasUsage = message.role === "assistant" && (
+    (typeof message.runCostUsd === "number" && message.runCostUsd > 0) ||
+    (message.runBillingMode === "subscription" && (message.runTokens ?? 0) > 0)
+  );
   return (
-    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId}>
+    <Message from={message.role} key={message.id} data-chat-user-id={message.role === "user" ? message.id : undefined} data-response-entry-id={response?.entryId ?? message.entryId}>
       <MessageContent>
         {message.role === "assistant" ? (
           <AssistantMessageBody
             message={message}
             isStreaming={isStreaming}
             isLast={isLast}
+            showReasoningDetails={showReasoningDetails}
             sessionId={sessionId}
             projectId={projectId}
-            onViewInNotebook={onViewInNotebook}
             onViewCompute={onViewCompute}
             onOpenFile={onOpenFile}
+            onCreateNote={onCreateNote}
+            fileSourceFocus={fileSourceFocus}
           />
         ) : (
           <>
@@ -1630,7 +1863,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
               return (
                 <>
                   {block ? <CommandBlockChip block={block} /> : <MessageResponse onOpenFile={onOpenFile}>{text}</MessageResponse>}
-                  {context && <SentContextChips context={context} />}
+                  {context && <SentContextChips context={context} projectId={projectId} />}
                 </>
               );
             })()}
@@ -1642,16 +1875,14 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           </span>
         )}
       </MessageContent>
-      {message.role === "assistant" && message.content && (
+      {(hasAnswerActions || hasUsage) && (
         <MessageToolbar>
-          <MessageActions>
+          {hasAnswerActions && <MessageActions className="min-w-0 flex-wrap">
             <AnswerActions projectId={projectId} sessionId={sessionId} response={response}
-              canFork={canFork ?? !isStreaming} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask} />
-          </MessageActions>
-          {((typeof message.runCostUsd === "number" &&
-            message.runCostUsd > 0) ||
-            (message.runBillingMode === "subscription" &&
-              (message.runTokens ?? 0) > 0)) && (
+              canFork={canFork ?? true} copied={copied} onCopy={() => onCopy(message.id, message.content)} onOpenTask={onOpenTask}
+              onCreateNote={onCreateNote} />
+          </MessageActions>}
+          {hasUsage && (
               <InfoTooltip
                 content={
                   <>
@@ -1677,7 +1908,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                   </>
                 }
               >
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
                   {message.runBillingMode === "subscription"
                     ? `subscription · ${(message.runTokens ?? 0).toLocaleString()} tok`
                     : formatUsd(message.runCostUsd ?? 0)}
@@ -1705,7 +1936,6 @@ export interface ChatTabMeta {
   userMessageCount: number;
   hasCompletedTurn: boolean;
   suggestedTitle?: string;
-  notebookEntries: NotebookEntry[];
   subagentCompletions: number;
 }
 
@@ -1748,7 +1978,9 @@ export interface ChatTabProps {
   /** Stored session to reopen into this tab (History menu / reload recovery). */
   initialSessionId?: string | null;
   onOpenTask?: OpenTask;
+  onCreateNote?: (source: NoteCreationSource) => void;
   focusResponse?: { entryId: string; nonce: number };
+  fileSourceFocus?: FileSourceFocus;
   /** Browser-persisted controls, queue, and composer state for this tab. */
   initialWorkspaceState?: ChatWorkspaceState;
   // Shared sandbox/state passed in (one instance for the whole project)
@@ -1766,8 +1998,6 @@ export interface ChatTabProps {
   onWorkspaceStateChange?: (tabId: string, state: ChatWorkspaceState) => void;
   /** The stored session couldn't be reopened; forget the binding for this tab. */
   onSessionUnavailable?: (tabId: string) => void;
-  /** Open the Lab Notebook panel focused on this entry (chat → notebook). */
-  onViewInNotebook?: (entryId: string) => void;
   /** Open the Compute panel, optionally focused on a durable Modal job. */
   onViewCompute?: (jobId?: string) => void;
   /** Open a typed result artifact in the center file preview. */
@@ -1782,7 +2012,9 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     isActiveTab,
     initialSessionId,
     onOpenTask,
+    onCreateNote,
     focusResponse,
+    fileSourceFocus,
     initialWorkspaceState,
     allFiles,
     sandboxReady,
@@ -1797,13 +2029,13 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     onMetaChange,
     onWorkspaceStateChange,
     onSessionUnavailable,
-    onViewInNotebook,
     onViewCompute,
     onOpenFile,
   },
   ref,
 ) {
   const t = useT();
+  const showReasoningDetails = useShowReasoningDetails();
   const {
     messages,
     contextUsage,
@@ -1819,7 +2051,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     pendingFollowUps,
     getSessionId,
     loadSession,
-    notebookEntries,
     subagentCompletions,
   } = useAgent(projectId);
   const isStreaming = status === "streaming" || status === "submitted";
@@ -2146,12 +2377,34 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
   // strip badges from the active tab.
   const sessionId = getSessionId();
   const taskResponses = useTaskResponses(projectId, sessionId, isStreaming, messages);
+  const handledSourceJump = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!isActive || !focusResponse) return;
-    const target = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-response-entry-id]") ?? [])
-      .find((element) => element.dataset.responseEntryId === focusResponse.entryId);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusResponse, isActive, taskResponses.byMessage]);
+    if (!isActive || !fileSourceFocus || !transcriptReady || handledSourceJump.current === fileSourceFocus.nonce) return;
+    const frame = requestAnimationFrame(() => {
+      handledSourceJump.current = fileSourceFocus.nonce;
+      const id = CSS.escape(fileSourceFocus.step.stepId);
+      const target = rootRef.current?.querySelector<HTMLElement>(`[data-tool-call-id="${id}"]`);
+      if (!target) {
+        toast.error(t(fileSourceFocus.fromNote ? "The cited item is unavailable in this task." : "The recorded writing step is unavailable in this task."));
+        return;
+      }
+      target.querySelector("button")?.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.classList.add("kady-flash");
+      setTimeout(() => target.classList.remove("kady-flash"), 1800);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fileSourceFocus, isActive, messages, transcriptReady, t]);
+  const handledMessageJump = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!isActive || !focusResponse || !transcriptReady || handledMessageJump.current === focusResponse.nonce) return;
+    const target = rootRef.current?.querySelector<HTMLElement>(
+      `[data-response-entry-id="${CSS.escape(focusResponse.entryId)}"]`,
+    );
+    if (!target) return;
+    handledMessageJump.current = focusResponse.nonce;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusResponse, isActive, messages, taskResponses.byMessage, transcriptReady]);
   useEffect(() => {
     const onModalJobFinished = (event: Event) => {
       const detail = (
@@ -2188,7 +2441,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
       userMessageCount,
       hasCompletedTurn,
       suggestedTitle,
-      notebookEntries,
       subagentCompletions,
     });
   }, [
@@ -2201,7 +2453,6 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
     userMessageCount,
     hasCompletedTurn,
     suggestedTitle,
-    notebookEntries,
     subagentCompletions,
     onMetaChange,
   ]);
@@ -2500,16 +2751,18 @@ export const ChatTab = forwardRef<ChatTabHandle, ChatTabProps>(function ChatTab(
                 message={message}
                 isStreaming={isStreaming && i === messages.length - 1}
                 isLast={i === messages.length - 1}
+                showReasoningDetails={showReasoningDetails}
                 sessionId={sessionId}
                 projectId={projectId}
-                onViewInNotebook={onViewInNotebook}
                 onViewCompute={onViewCompute}
                 onOpenFile={onOpenFile}
+                fileSourceFocus={message.activities?.some((item) => item.id === fileSourceFocus?.step.stepId) ? fileSourceFocus : undefined}
                 onCopy={handleCopy}
                 copied={copiedId === message.id}
                 response={taskResponses.byMessage.get(message.id)}
                 canFork={!isStreaming}
                 onOpenTask={onOpenTask}
+                onCreateNote={onCreateNote}
               />
             ))
           )}

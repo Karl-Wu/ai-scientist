@@ -36,9 +36,9 @@ import { defaultModel, pruneStaleOpenRouterCatalog, resolveModel, setupModelRunt
 import { canonicalProviderId } from "./provider-catalog.ts";
 import { seedAgentFiles } from "./agent-files.ts";
 import { makeInterviewTool } from "./interview.ts";
-import { makeNotebookTool } from "./notebook.ts";
-import { notebookSearchTool } from "../../pi-packages/kady-notebook/memory-tool.ts";
-import { executeMemoryRecall } from "./notebook-memory.ts";
+import { makeChatOpeningExtension } from "./chat-opening.ts";
+import { localPreviewTools } from "./local-preview.ts";
+import { makeNoteReadTool } from "../notes/read-tool.ts";
 import { makeScientificResultTool } from "./scientific-result.ts";
 import { clearSessionCompute, makeModalTools } from "./modal-tool.ts";
 import { makeCodemodeModelBudgetExtension, makeImageTool } from "./image-tool.ts";
@@ -55,11 +55,7 @@ import { seedGuardPackage } from "./guard-bridge.ts";
 import { seedPromptTemplates } from "./prompts.ts";
 import { seedWatchdogGuidance } from "./watchdog-settings.ts";
 import { ensureWebAccess } from "./web-access-bridge.ts";
-import {
-  seedNotebookPackage,
-  seedBuiltinAgentNotebookTools,
-  makeSubagentNotebookExtension,
-} from "./notebook-bridge.ts";
+import { retireNotebookTools } from "./notebook-bridge.ts";
 import { makeSubagentProvenanceExtension } from "../provenance/bridge.ts";
 import {
   makeSubagentModalExtension,
@@ -142,7 +138,7 @@ const observers = new Map<string, () => void>();
 // Insertion-ordered Map doubles as an LRU: we delete+re-set an entry on access
 // so the first matching key for a project is always the least-recently-used.
 const live = new Map<string, AgentSession>();
-// History, controls and run requests can cold-open the same session together.
+// Controls and run requests can cold-open the same session together.
 // Share construction as well as the resulting live object: duplicate builds
 // register conflicting extension hosts and can route Stop to the wrong agent.
 const opening = new Map<string, Promise<AgentSession | null>>();
@@ -353,12 +349,7 @@ async function build(
   // sessions in a detached runner that loads the sandbox's ambient packages)
   // get the web tools (web-access-bridge.ts explains why children need this).
   ensureWebAccess(paths);
-  // Reference the kady-notebook package so child sessions get the notebook
-  // tool (sandbox trust is already handled by ensureWebAccess above).
-  seedNotebookPackage(paths);
-  // Builtin pi-subagents specialists pin a tools allowlist that would filter
-  // the notebook tool out of their child processes — extend it via overrides.
-  seedBuiltinAgentNotebookTools(paths);
+  retireNotebookTools(paths);
   // Child-only localhost bridge for the same durable project-scoped Modal
   // jobs. Builtin allowlists are extended only when they retain our generated
   // shape; user-pinned lists remain authoritative.
@@ -394,6 +385,7 @@ async function build(
     settingsManager,
     additionalExtensionPaths: [subagentsExtensionPath()],
     extensionFactories: [
+      makeChatOpeningExtension(projectId, modelRuntime, () => holder.session),
       makeSubagentLedgerExtension(
         projectId,
         () => holder.session?.sessionId ?? "",
@@ -414,10 +406,6 @@ async function build(
       makeScientificCompactionExtension(projectId, () => holder.session?.sessionId ?? "", {
         readChildStatus: async () => subagentHost(projectId, holder.session?.sessionId ?? "").rpc("status"),
       }),
-      // Harvest notebook entries the roster's subagents logged (child pi
-      // processes get the notebook tool via seedNotebookPackage above) into
-      // the parent notebook — the parent is the single writer.
-      makeSubagentNotebookExtension(projectId, () => holder.session?.sessionId ?? ""),
       // Reconstruct provenance for the child's tool calls from its session file
       // and append it to the parent's log. Needs no tool inside the child — the
       // session file is the record, which is what makes it unauthorable.
@@ -452,8 +440,6 @@ async function build(
   // The interview tool blocks mid-run on answers posted to the HTTP API; it
   // reads the live sessionId through the same holder as the ledger extension.
   const interviewTool = makeInterviewTool(projectId, () => holder.session?.sessionId ?? "");
-  // Non-blocking lab-notebook tool: logs the agent's own narrative entries.
-  const notebookTool = makeNotebookTool(projectId, () => holder.session?.sessionId ?? "");
   // Typed presentation layer for compact scientific results and artifact links.
   const scientificResultTool = makeScientificResultTool(projectId);
   const pdfAnnotationTools = makePdfAnnotationTools(projectId);
@@ -464,6 +450,7 @@ async function build(
   // Pi 1.0 image models (OpenRouter's), saved into the sandbox and billed by
   // their own provider; reachable without codemode.
   const imageTool = makeImageTool(projectId, (provider) => modelRuntime.checkAuth(provider));
+  const previewTools = localPreviewTools(projectId, () => holder.session?.sessionId ?? "", paths.sandbox);
   const { session } = await createAgentSession({
     cwd: paths.sandbox,
     // A cold-opened session starts on the model it last ran with (or the
@@ -484,11 +471,13 @@ async function build(
     // pi-subagents 0.78 that includes `contact_supervisor`: forks then declare
     // their parent's exact tool list and reuse its prompt cache; a lead call
     // just returns an error.
+    // Pi restores historical tool declarations on resume. Apply additions to that loadout too.
+    tools: previewTools.length ? previewTools.map(tool => "+" + tool.name) : undefined,
     excludeTools: LEAD_EXCLUDED_TOOLS,
     customTools: [
       interviewTool,
-      notebookTool,
-      notebookSearchTool((params) => executeMemoryRecall(projectId, params)),
+      makeNoteReadTool(projectId),
+      ...previewTools,
       scientificResultTool,
       ...pdfAnnotationTools,
       ...modalTools,
@@ -533,6 +522,11 @@ export async function createSession(
   live.set(keyFor(projectId, session.sessionId), session);
   evictOverCap(projectId);
   return session;
+}
+
+/** Inspect an already-open session without starting it or changing its LRU position. */
+export function peekLiveSession(projectId: string, sessionId: string): AgentSession | undefined {
+  return live.get(keyFor(projectId, sessionId));
 }
 
 /** Return a live session, cold-opening its JSONL file from disk if needed. */

@@ -6,7 +6,7 @@ import { isWithin, SandboxError } from "../sandbox-fs.ts";
 import { isValidSessionId, readNotebookEntries } from "./notebook-store.ts";
 import { scientificResultFromDetails, type ScientificResultCard } from "./scientific-result.ts";
 import { planDigest } from "./notebook-plans.ts";
-import { normalizeResultLinks, type NotebookResultLink, type NotebookResultSnapshot, type NotebookResolvedResult } from "../../../web/src/lib/notebook-result-links.ts";
+import { normalizeResultLinks, type NotebookResultSnapshot, type NotebookResolvedResult } from "../../../web/src/lib/notebook-result-links.ts";
 
 export const RESULT_SCAN_BYTES = 64 * 1024 * 1024;
 const MAX_LINE_CHARS = 256 * 1024;
@@ -80,17 +80,6 @@ export async function lookupSessionResults(projectId: string, sessionId: string,
       return [id, { status: "available", card: match.card, sha256: match.sha256 }];
     }));
   } catch { return all("unverified", "Source log could not be read safely"); }
-}
-
-export async function snapshotNotebookResults(projectId: string, sessionId: string, input: NotebookResultLink[]): Promise<NotebookResultSnapshot[]> {
-  const refs = normalizeResultLinks(input).map((r) => ({ ...r, sessionId: r.sessionId ?? sessionId }));
-  const budget = { bytes: RESULT_SCAN_BYTES };
-  const lookups = new Map<string, Map<string, Lookup>>();
-  for (const sid of new Set(refs.map((r) => r.sessionId))) lookups.set(sid, await lookupSessionResults(projectId, sid, refs.filter((r) => r.sessionId === sid).map((r) => r.toolCallId), budget));
-  return refs.map((ref) => {
-    const result = lookups.get(ref.sessionId)!.get(ref.toolCallId)!;
-    return { ...ref, status: result.status, ...(result.status === "available" && result.sha256 ? { sha256: result.sha256 } : {}), ...(result.reason ? { reason: result.reason } : {}) };
-  });
 }
 
 export async function resolveNotebookResult(projectId: string, sessionId: string, entryId: string, index: number): Promise<NotebookResolvedResult<ScientificResultCard>> {

@@ -12,7 +12,7 @@ import { ensureProjectExists, type ProjectPaths } from "../src/projects.ts";
 import { piSettingsPath } from "../src/agent/capability-state.ts";
 import { deleteProjectAgent, listProjectAgents, seedAgentFiles, writeProjectAgent } from "../src/agent/agent-files.ts";
 import { SEEDED_TEMPLATES, seedPromptTemplates, listPromptTemplates } from "../src/agent/prompts.ts";
-import { SUBAGENT_TYPES } from "../src/agent/subagents.ts";
+import { RESEARCH_NOTE_CURATOR, SUBAGENT_TYPES } from "../src/agent/subagents.ts";
 import {
   isVerifierAgent,
   reconcileVerifierModels,
@@ -191,9 +191,10 @@ describe("seeding later roster and template additions", () => {
     // A project seeded by an older Kady: legacy marker, no names file.
     fs.writeFileSync(path.join(dir, ".seeded"), "2026-01-01T00:00:00.000Z\n");
     fs.writeFileSync(path.join(dir, "code-reviewer.md"), "---\nname: code-reviewer\ndescription: mine\n---\n\nMine.\n");
-    expect(seedAgentFiles(paths)).toBe(2);
+    const additions = ["comparative-reviewer", "investigator", "scientific-result-reviewer", RESEARCH_NOTE_CURATOR];
+    expect(seedAgentFiles(paths)).toBe(additions.length);
     const names = listProjectAgents(paths).map((a) => a.name);
-    expect(names).toEqual(expect.arrayContaining(["comparative-reviewer", "investigator", "code-reviewer"]));
+    expect(names).toEqual(expect.arrayContaining([...additions, "code-reviewer"]));
     // Deleted legacy specialists stay deleted, edited ones are untouched.
     expect(names).not.toContain("math-checker");
     expect(fs.readFileSync(path.join(dir, "code-reviewer.md"), "utf-8")).toContain("Mine.");

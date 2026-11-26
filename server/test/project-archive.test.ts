@@ -9,11 +9,10 @@ import {
   ensureProjectExists,
   resolvePaths,
 } from "../src/projects.ts";
-import {
-  appendNotebookEntry,
-  type NotebookEntry,
-} from "../src/agent/notebook-store.ts";
+import type { NotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { writeNotebookAnnotations } from "../src/agent/notebook-annotations.ts";
+import { createManualNotePage, updateNotePage } from "../src/notes/store.ts";
 import {
   buildProjectArchive,
   type ProjectArchiveOptions,
@@ -315,5 +314,37 @@ describe("GET /sandbox/download-all", () => {
     expect(names).toContain("alpha.txt");
     expect(names).not.toContain("AGENTS.md");
     expect(names).not.toContain("beta.txt");
+  });
+
+  it("exports project note pages with their complete revisions and citations", async () => {
+    const alpha = ensureProjectExists("alpha");
+    ensureProjectExists("beta");
+    fs.mkdirSync(path.join(alpha.sandbox, "note-pages"), { recursive: true });
+    fs.writeFileSync(path.join(alpha.sandbox, "note-pages", "README.md"), "User's own folder");
+    fs.writeFileSync(path.join(alpha.sandbox, "results.csv"), "value\n1\n");
+    const original = createManualNotePage("alpha", {
+      title: "Review the data", summary: "Initial review", source: { kind: "file", path: "results.csv" },
+    });
+    const revised = updateNotePage("alpha", original.id, {
+      action: "edit", expectedVersion: 1, title: "Review the data", summary: "Revised interpretation", fields: {},
+    });
+    const deleted = updateNotePage("alpha", original.id, { action: "delete", expectedVersion: 2 });
+    const other = createManualNotePage("beta", { title: "Other project's note" });
+    const unreadable = "01aa4567-0123-0123-0123-0123456789ab";
+    fs.writeFileSync(path.join(alpha.kadyDir, "note-pages", unreadable + ".json"), "{");
+
+    const response = await app.inject({ url: "/sandbox/download-all", headers: { "x-project-id": "alpha" } });
+    expect(response.statusCode).toBe(200);
+    const zip = new AdmZip(response.rawPayload);
+    const root = "note-pages-kady-export";
+    expect(zipText(zip, "note-pages/README.md")).toBe("User's own folder");
+    expect(JSON.parse(zipText(zip, `${root}/${original.id}.json`))).toEqual({ ...revised, deletedAt: deleted.deletedAt });
+    expect(deleted.deletedAt).toBeGreaterThan(0);
+    expect(revised.revisions.map(({ summary }) => summary)).toEqual(["Initial review", "Revised interpretation"]);
+    expect(revised.sources[0]).toMatchObject({ kind: "file", path: "results.csv", label: "results.csv" });
+    expect(JSON.parse(zipText(zip, `${root}/manifest.json`))).toEqual({
+      version: 1, projectId: "alpha", pageIds: [original.id], unavailablePageIds: [unreadable],
+    });
+    expect(zip.getEntries().map(({ entryName }) => entryName).some((name) => name.startsWith(".kady/") || name.includes(other.id))).toBe(false);
   });
 });

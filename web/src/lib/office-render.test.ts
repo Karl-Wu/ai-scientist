@@ -9,7 +9,9 @@ describe("Office render isolation", () => {
   });
   it("renders a real deck with images, styled text and tables to passive SVG images", async () => {
     const data = readFileSync(resolve(process.cwd(), "../server/test/fixtures/office/slides.pptx")).toString("base64");
-    const result = await renderOffice({ kind: "pptx", revision: "test", data, groups: [], readOnly: false }); expect(result.slides).toHaveLength(2);
-    const svg = decodeURIComponent(result.slides![0].split(",").slice(1).join(",")); expect(svg).toContain("Research overview"); expect(svg).toContain("<image"); expect(svg).not.toContain("foreignObject");
+    const result = await renderOffice({ kind: "pptx", revision: "test", data, groups: [], readOnly: false });
+    if (!("slides" in result)) throw new Error("Expected a slide preview");
+    expect(result.slides).toHaveLength(2);
+    const svg = decodeURIComponent(result.slides[0].split(",").slice(1).join(",")); expect(svg).toContain("Research overview"); expect(svg).toContain("<image"); expect(svg).not.toContain("foreignObject");
   });
 });

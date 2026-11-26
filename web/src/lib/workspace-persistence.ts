@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizePastedTables, type PastedTable } from "@/lib/clipboard-table";
+import databases from "@/data/databases.json";
 import type { Database } from "@/components/database-selector";
 import type { ModalInstance } from "@/components/compute-selector";
 import type { Model } from "@/components/model-selector";
@@ -23,6 +24,7 @@ const DB_VERSION = 1;
 const BLOB_STORE = "blobs";
 const MAX_TABS = 10;
 const MAX_QUEUE = 5;
+const availableDatabaseIds = new Set(databases.map(({ id }) => id));
 
 export type WorkspaceScreen = "projects" | "workspace";
 export type WorkspaceView = "chat" | "workflows";
@@ -81,6 +83,7 @@ export interface ChatWorkspaceState {
 export interface SandboxWorkspaceState {
   openPaths: string[];
   activePath: string | null;
+  previewPath?: string;
 }
 
 export interface WorkspaceTabState {
@@ -322,7 +325,7 @@ function sanitizeStoredChat(value: unknown): StoredChatState | undefined {
     thinkingLevel: sanitizeThinkingLevel(value.thinkingLevel) ?? "high",
     selectedComputeTarget: sanitizeComputeTarget(value.selectedComputeTarget),
     attachedFiles: stringArray(value.attachedFiles),
-    selectedDatabases: sanitizeDatabases(value.selectedDatabases),
+    selectedDatabases: sanitizeDatabases(value.selectedDatabases).filter(({ id }) => availableDatabaseIds.has(id)),
     selectedSkills: sanitizeSkills(value.selectedSkills),
     researchRefs: normalizeResearchRefs(value.researchRefs),
     delegation: normalizeDelegation(value.delegation),
@@ -364,6 +367,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
   const sandbox = isRecord(value.sandbox) ? value.sandbox : {};
   const openPaths = stringArray(sandbox.openPaths);
   const requestedActivePath = stringValue(sandbox.activePath);
+  const previewPath = stringValue(sandbox.previewPath);
   const showNotebook = value.showNotebook === true;
   return {
     tabs,
@@ -383,6 +387,7 @@ function sanitizeStoredProject(value: unknown): StoredProjectState | null {
     mobileFilesHeight: boundedNumber(value.mobileFilesHeight, 50, 25, 75),
     sandbox: {
       openPaths,
+      ...(previewPath && openPaths.includes(previewPath) ? { previewPath } : {}),
       activePath: requestedActivePath && openPaths.includes(requestedActivePath)
         ? requestedActivePath
         : openPaths[0] ?? null,

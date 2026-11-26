@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { resolvePaths } from "../src/projects.ts";
 import { captureNotebookArtifacts, compareNotebookArtifact, withNotebookArtifactHealth, NOTEBOOK_HASH_FILE_BYTES } from "../src/agent/notebook-artifacts.ts";
-import { makeNotebookTool } from "../src/agent/notebook.ts";
-import { readNotebookEntries, type NotebookEntry } from "../src/agent/notebook-store.ts";
+import type { NotebookEntry } from "../src/agent/notebook-store.ts";
 
 beforeEach(() => { fs.rmSync(PROJECTS_ROOT, { recursive: true, force: true }); fs.mkdirSync(PROJECTS_ROOT, { recursive: true }); });
 function write(project = "default", name = "result.txt", text = "first") {
@@ -89,22 +88,14 @@ describe("notebook artifact verification", () => {
     expect(checked[0].artifactHealth!.every((h) => h.status === "unverified" && h.reason?.includes("budget"))).toBe(true);
     expect(checked[4].artifactHealth!.every((h) => h.status === "missing")).toBe(true);
   });
-  it("ignores model-injected health/snapshots and saves only server identities", async () => {
+
+  it("recomputes the artifact health of a saved entry", async () => {
     write();
-    const tool = makeNotebookTool("default", () => "owner");
-    await tool.execute("real", {
-      type: "observation", title: "Result", artifacts: ["result.txt"],
-      artifactSnapshots: [{ path: "result.txt", sha256: "forged", timing: "entry" }],
-      artifactHealth: [{ path: "result.txt", status: "unchanged" }], sessionId: "forged",
-      evidence: [{ entryId: "h", relation: "supports" }], limitations: ["One cohort"], outcome: "signal",
-    } as never, undefined as never);
-    const saved = readNotebookEntries("owner", "default")[0];
-    expect(saved.artifactSnapshots![0].sha256).not.toBe("forged");
-    expect(saved.artifactHealth).toBeUndefined();
-    expect((saved as unknown as { sessionId?: string }).sessionId).toBeUndefined();
-    expect(saved.evidence).toEqual([{ entryId: "h", relation: "supports" }]);
-    expect(saved.limitations).toEqual(["One cohort"]);
-    const again = await withNotebookArtifactHealth([{ ...saved, artifactHealth: [{ path: "result.txt", status: "changed", checkedAt: 1 }] }], "default");
-    expect(again[0].artifactHealth![0].status).toBe("unchanged");
+    const saved = entry({
+      artifactSnapshots: await captureNotebookArtifacts("default", ["result.txt"]),
+      artifactHealth: [{ path: "result.txt", status: "changed", checkedAt: 1 }],
+    });
+    const [checked] = await withNotebookArtifactHealth([saved], "default");
+    expect(checked.artifactHealth?.[0].status).toBe("unchanged");
   });
 });

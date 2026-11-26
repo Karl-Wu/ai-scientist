@@ -651,7 +651,6 @@ export function makeScientificResultTool(
       "Do not send a schemaVersion; it is stamped for you. Every path must be an existing, user-visible sandbox file.",
       "Use only values you actually observed or computed; this tool presents evidence but does not independently verify it.",
       "Keep previews compact and save complete tables, plots, scripts, and reports as sandbox artifacts.",
-      "Use the notebook tool separately for hypotheses, methods, observations, and decisions.",
     ].join("\n"),
     promptSnippet:
       "scientific_result: present observed tables, statistics, plots, QC, schemas, citations, molecules, and artifacts as typed cards",
@@ -669,7 +668,7 @@ export function makeScientificResultTool(
         content: [
           {
             type: "text",
-            text: `Presented ${card.kind} result: ${card.title} (result id: ${toolCallId}). Reference it in notebook results: [{toolCallId: ${JSON.stringify(toolCallId)}}].`,
+            text: `Presented ${card.kind} result: ${card.title} (result id: ${toolCallId}).`,
           },
         ],
         details: { scientificResult: card },

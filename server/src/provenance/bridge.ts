@@ -1,14 +1,11 @@
 /**
  * Wiring so SUBAGENT work lands in the parent's provenance log.
  *
- * Mirrors makeSubagentNotebookExtension: on subagent completion — the
- * synchronous `tool_result` and the async `subagent:async-complete` event, the
- * same pair the cost ledger and notebook harvest already use — each child's
- * session file is parsed into steps and appended to the PARENT's log. The parent
- * is the single writer.
+ * On subagent completion (synchronous `tool_result` or asynchronous
+ * `subagent:async-complete`), the parent parses each child's session file into
+ * steps and appends them to its own log.
  *
- * Nothing is seeded into the sandbox for this. Unlike the notebook, provenance
- * needs no tool inside the child: the child's own session file is the record,
+ * This requires no tool inside the child. The child's own session file is the record,
  * and it exists whether or not the child knows it is being observed. That is the
  * point — provenance the agent cannot author.
  */

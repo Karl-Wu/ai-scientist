@@ -2,7 +2,7 @@
 import { withNotebookArtifactHealth } from "./notebook-artifacts.ts";
 import { loadMemoryCorpus, type MemoryCorpus, type MemoryDocument } from "./notebook-memory-loader.ts";
 import { deriveEvidenceThreads, evidenceLinks, notebookEntryKey, notebookTargetKey } from "../../../web/src/lib/notebook-evidence-core.ts";
-import { normalizeMemoryQuery, normalizeMemorySource, memorySourceKey, memorySearchFields, memoryExcerpt, rankMemory, MEMORY_RULES,
+import { normalizeMemoryQuery, normalizeMemorySource, memorySourceKey, memorySearchFields, memoryExcerpt, rankMemory,
   type MemoryCoverage, type MemoryHit, type MemoryRecordResponse, type MemorySearchResponse, type MemorySource } from "../../../web/src/lib/notebook-memory.ts";
 import type { NotebookEntry } from "./notebook-store.ts";
 import { normalizeNotebookExecution } from "../../../web/src/lib/notebook-execution.ts";
@@ -102,49 +102,4 @@ export async function readNotebookMemory(projectId: string, raw: unknown, expect
   if (!document) throw new NotebookMemoryError(corpus.coverage.complete ? 404 : 413, corpus.coverage.complete ? "SOURCE_MISSING" : "SOURCE_UNVERIFIED", corpus.coverage.complete ? "Source record is no longer present" : "Source could not be resolved uniquely within the bounded scan; inspect the original notebook. Absence is not verified.");
   const [hit] = await hitsFor(projectId, corpus, [{ document, matchedFields: [] }], "");
   return { projectId, hit, entry: document.entry as NotebookEntry, truncated: document.qualifiers.some((q) => /bounded|exceeds/.test(q)), changedSinceSearch: expectedDigest !== undefined && expectedDigest !== document.digest, coverage: corpus.coverage };
-}
-
-export const MEMORY_TOOL_BYTES = 24 * 1024;
-function compactHit(h: MemoryHit) {
-  return { ...h, sourceUri: h.sourceUri.length <= 2000 ? h.sourceUri : undefined, title: h.title.slice(0, 300), scope: h.scope?.slice(0, 400), revisitWhen: h.revisitWhen?.slice(0, 400),
-    excerpt: h.excerpt.slice(0, 500), excerptTruncated: h.excerptTruncated || h.excerpt.length > 500,
-    limitations: h.limitations.slice(0, 3).map((s) => s.slice(0, 300)), tags: h.tags.slice(0, 12),
-    related: h.related.slice(0, 2).map((r) => ({ ...r, title: r.title.slice(0, 150) })), relatedOmitted: Math.max(0, h.related.length - 2),
-    artifactHealth: h.artifactHealth.slice(0, 2), artifactChecksOmitted: Math.max(0, h.artifactHealth.length - 2),
-    limitationsOmitted: Math.max(0, h.limitations.length - 3), limitationTextTruncated: h.limitations.some((s) => s.length > 300),
-    scopeTruncated: (h.scope?.length ?? 0) > 400, revisitWhenTruncated: (h.revisitWhen?.length ?? 0) > 400,
-    recallFieldsBounded: true,
-  };
-}
-/** This same bounded envelope reaches lead tools and child localhost bridges. */
-export async function executeMemoryRecall(projectId: string, input: unknown) {
-  const raw = input as Record<string, unknown> | null;
-  const action = raw?.action ?? "search";
-  let payload: Record<string, unknown>;
-  let sources: MemorySource[];
-  if (action === "search") {
-    const result = await searchNotebookMemory(projectId, raw);
-    const hits = result.hits.map(compactHit);
-    payload = { rules: MEMORY_RULES, ...result, hits, omittedHits: 0 };
-    while (Buffer.byteLength(JSON.stringify(payload)) > MEMORY_TOOL_BYTES && hits.length) { hits.pop(); payload.omittedHits = Number(payload.omittedHits) + 1; }
-    sources = hits.map((h) => h.source);
-  } else if (action === "read") {
-    const result = await readNotebookMemory(projectId, raw?.source, raw?.expectedDigest as string | undefined);
-    let body = result.entry.body?.slice(0, 10000) ?? "";
-    let code = result.entry.code?.source.slice(0, 4000) ?? "";
-    // The authored execution report (status + evidence) is what the search
-    // qualifier tells the model to read before claiming completion.
-    const execution = normalizeNotebookExecution(result.entry.execution);
-    const base = { rules: MEMORY_RULES, projectId, hit: compactHit(result.hit), ...(execution ? { execution } : {}), changedSinceSearch: result.changedSinceSearch, coverage: result.coverage, truncated: result.truncated };
-    payload = { ...base, body, code, bodyTruncated: body.length < (result.entry.body?.length ?? 0), codeTruncated: code.length < (result.entry.code?.source.length ?? 0) };
-    while (Buffer.byteLength(JSON.stringify(payload)) > MEMORY_TOOL_BYTES && (body.length || code.length)) {
-      if (body.length >= code.length) body = body.slice(0, Math.floor(body.length / 2)); else code = code.slice(0, Math.floor(code.length / 2));
-      payload = { ...base, body, code, bodyTruncated: true, codeTruncated: true };
-    }
-    sources = [result.hit.source];
-  } else throw new NotebookMemoryError(400, "INVALID_ACTION", "action must be search or read");
-  if (Buffer.byteLength(JSON.stringify(payload)) > MEMORY_TOOL_BYTES) {
-    payload = { rules: MEMORY_RULES, warning: "Recall metadata exceeded the response budget; use a narrower query/source.", sources, truncated: true };
-  }
-  return { content: [{ type: "text" as const, text: JSON.stringify(payload) }], details: { memory: true, sources } };
 }

@@ -9,7 +9,7 @@ running your browser.
 1. Create or open a project and connect a model in **Settings → Providers**.
 2. Select the model, thinking level and compute beside the composer.
 3. Supply data and describe the question, study design and expected outputs.
-4. Review tool activity, generated files and the notebook as work proceeds.
+4. Review tool activity and generated files as work proceeds.
 
 For example: “Compare treated and control samples in `counts.csv`; genes are
 rows. Check the design and QC, save the analysis script, and plot the results.”
@@ -79,7 +79,7 @@ covered by the [raw-data guard](data-guard.md).
 
 ## Records, compute and cost
 
-- **Lab Notebook** records authored hypotheses, methods, observations and decisions; see [the notebook guide](lab-notebook.md).
+- **Notes** holds project note pages. Create a page from the Notes panel or from a reply, result card or file preview.
 - **Provenance** in a file's preview shows observed execution and file lineage; see [Provenance](provenance.md).
 - **Compute** lists durable [Modal jobs](modal-compute.md), their logs, outputs and controls. Background jobs require explicit cancellation and can survive a stopped chat or backend restart.
 - **Automation** provides [schedules, missions and specialist controls](automation.md).

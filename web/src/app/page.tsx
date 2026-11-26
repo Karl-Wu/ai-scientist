@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCAL_PREVIEW_EVENT, type LocalPreviewRef } from "@/lib/local-preview";
 import { useT } from "@/components/i18n-provider";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -7,6 +8,9 @@ import { FileTreePanel } from "@/components/sandbox-panel";
 import { FilePreviewPanel, SettingsDialog, WorkflowsPanel } from "@/components/lazy-surfaces";
 import type { Model } from "@/components/model-selector";
 import { ChatTab, type ChatTabHandle, type ChatTabMeta } from "@/components/chat-tab";
+import type { NoteCreationSource, NoteSourceLink } from "@/lib/note-pages";
+import type { PdfAnnotationFocus } from "@/lib/pdf-annotations";
+import type { FileSourceFocus, FileSourceStep, SourceStepReference } from "@/lib/provenance";
 import { ChatTabsBar, type ChatTabDescriptor } from "@/components/chat-tabs-bar";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { ProjectView } from "@/components/project-view";
@@ -18,7 +22,7 @@ import { useProjectActivities } from "@/lib/use-project-activities";
 import { useModalJobs } from "@/lib/use-modal-jobs";
 import { useProjects } from "@/lib/use-projects";
 import { useSkills } from "@/lib/use-skills";
-import { flattenFiles, flattenFolders, useSandbox } from "@/lib/use-sandbox";
+import { flattenFiles, flattenFolders, useSandbox, type FileOpenMode } from "@/lib/use-sandbox";
 import { ProjectScopeProvider } from "@/lib/projects";
 import {
   hasProjectActivity,
@@ -101,7 +105,7 @@ function ProjectNavigation({
   const items: { id: ProjectDestination; label: string; hint: string; Icon: LucideIcon; color: string }[] = [
     { id: "files", label: t("Files"), hint: t("Browse and manage project files"), Icon: FilesIcon, color: "text-blue-500" },
     { id: "workflows", label: t("Workflows"), hint: t("Browse and launch scientific workflows"), Icon: WorkflowIcon, color: "text-violet-500" },
-    { id: "notebook", label: t("Journal"), hint: t("One shared research journal for this project"), Icon: BookOpenIcon, color: "text-amber-500" },
+    { id: "notebook", label: t("Notes"), hint: t("Browse this project’s note pages"), Icon: BookOpenIcon, color: "text-amber-500" },
     { id: "automation", label: t("Automated runs"), hint: t("Manage scheduled tasks and ongoing missions"), Icon: AlarmClockIcon, color: "text-emerald-500" },
   ];
 
@@ -394,6 +398,7 @@ function WorkspacePage({
   const handleSandboxWorkspaceChange = useCallback((next: SandboxWorkspaceState) => {
     setSandboxWorkspace((current) =>
       current.activePath === next.activePath &&
+      current.previewPath === next.previewPath &&
       current.openPaths.length === next.openPaths.length &&
       current.openPaths.every((path, index) => path === next.openPaths[index])
         ? current
@@ -481,6 +486,27 @@ function WorkspacePage({
     setShowNotebook(destination === "notebook");
     setShowCompute(destination === "compute");
     setShowAutomation(destination === "automation");
+  }, []);
+  const [livePreview, setLivePreview] = useState<LocalPreviewRef>();
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<LocalPreviewRef>).detail;
+      if (!isActive || detail?.projectId !== projectId) return;
+      setLivePreview(detail);
+      setRightPanelOpen(true);
+      selectProjectDestination("files");
+    };
+    window.addEventListener(LOCAL_PREVIEW_EVENT, open);
+    return () => window.removeEventListener(LOCAL_PREVIEW_EVENT, open);
+  }, [isActive, projectId, selectProjectDestination]);
+  const [noteCreation, setNoteCreation] = useState<NoteCreationSource>();
+  const handleCreateNote = useCallback((source: NoteCreationSource) => {
+    setNoteCreation(source);
+    setRightPanelOpen(true);
+    selectProjectDestination("notebook");
+  }, [selectProjectDestination]);
+  const handleNoteCreationHandled = useCallback((source: NoteCreationSource) => {
+    setNoteCreation((pending) => pending === source ? undefined : pending);
   }, []);
   const [computeScope, setComputeScope] = useState<ModalComputeScope>(
     () => initialState?.computeScope ?? "project",
@@ -575,7 +601,7 @@ function WorkspacePage({
       setTabsMeta((prev) => {
         const existing = prev[tabId];
         // Token deltas stay local to ChatTab. Only workspace-visible state
-        // crosses this boundary; notebook-only updates must still propagate.
+        // crosses this boundary.
         if (
           existing &&
           existing.sessionId === meta.sessionId &&
@@ -585,7 +611,6 @@ function WorkspacePage({
           existing.userMessageCount === meta.userMessageCount &&
           existing.hasCompletedTurn === meta.hasCompletedTurn &&
           existing.needsInput === meta.needsInput &&
-          existing.notebookEntries === meta.notebookEntries &&
           existing.subagentCompletions === meta.subagentCompletions
         ) {
           return prev;
@@ -628,9 +653,6 @@ function WorkspacePage({
   // Drive sandbox polling cadence off the active tab's streaming state
   // (the live-poll mode used to be hard-wired to the single chat).
   const activeMeta = tabsMeta[activeTabId];
-  const notebookEntries = activeMeta?.notebookEntries ?? [];
-  const notebookStreaming = activeMeta?.isStreaming ?? false;
-  const subagentCompletions = activeMeta?.subagentCompletions ?? 0;
   const anyStreaming = useMemo(
     () => Object.values(tabsMeta).some((m) => m.isStreaming),
     [tabsMeta],
@@ -957,18 +979,28 @@ function WorkspacePage({
   );
 
   const [responseFocus, setResponseFocus] = useState<{ sessionId: string; entryId: string; nonce: number } | null>(null);
+  const [fileSourceFocus, setFileSourceFocus] = useState<FileSourceFocus>();
+  const [fileSourceInput, setFileSourceInput] = useState<{ path: string; consumer: SourceStepReference; nonce: number }>();
+  const [pdfAnnotationFocus, setPdfAnnotationFocus] = useState<PdfAnnotationFocus>();
+  const sourceNonce = useRef(0);
   const openTask = useCallback((sessionId: string, title: string, entryId?: string) => {
     const alreadyOpen = tabsRef.current.some((tab) => tab.sessionId === sessionId) ||
       Object.values(tabsMeta).some((meta) => meta.sessionId === sessionId);
     if (!alreadyOpen && tabsRef.current.length >= MAX_CHAT_TABS) {
       toast.error(t("Close a task before opening another one. The new task is saved in the task list."));
-      return;
+      return false;
     }
     setChatNavigationOpen(true);
     setView("chat");
     openSession(sessionId, title);
     if (entryId) setResponseFocus({ sessionId, entryId, nonce: Date.now() });
+    return true;
   }, [openSession, tabsMeta, t]);
+
+  const jumpToFileSource = useCallback((step: FileSourceStep) => {
+    if (!openTask(step.sessionId, t("Source task"))) return;
+    setFileSourceFocus({ step, nonce: ++sourceNonce.current });
+  }, [openTask, t]);
 
   // ------------------------------------------------------------------
   // Workflow launch — routes to the active chat tab via its imperative
@@ -984,30 +1016,40 @@ function WorkspacePage({
     [activeTabId, activeMeta?.isStreaming],
   );
 
-  const handleFileSelect = useCallback((path: string) => {
-    sandboxSelectFile(path);
+  const handleFileSelect = useCallback((path: string, mode: FileOpenMode = "open") => {
+    setFileSourceInput(undefined);
+    setPdfAnnotationFocus(undefined);
+    setLivePreview(undefined);
+    void sandboxSelectFile(path, mode);
     setView("chat");
     setShowNotebook(false);
     setShowCompute(false);
     setShowAutomation(false);
   }, [sandboxSelectFile]);
+  const handleOpenSourceInput = useCallback((path: string, consumer: SourceStepReference) => {
+    handleFileSelect(path);
+    setFileSourceInput({ path, consumer, nonce: ++sourceNonce.current });
+  }, [handleFileSelect]);
   const handleOrganizeFiles = useCallback(() => {
     const handle = tabHandles.current.get(activeTabId);
     if (!handle) return;
     void handle.sendQuick(ORGANIZE_FILES_PROMPT);
   }, [activeTabId]);
 
-  // ------------------------------------------------------------------
-  // Chat ↔ notebook deep links (join key: tool-call id === entry id).
-  // ------------------------------------------------------------------
-  const [notebookFocus, setNotebookFocus] = useState<{ id: string; token: number } | null>(null);
-  const handleViewInNotebook = useCallback((entryId: string) => {
-    setView("chat");
-    setShowCompute(false);
-    setShowAutomation(false);
-    setShowNotebook(true);
-    setNotebookFocus({ id: entryId, token: Date.now() });
-  }, []);
+  const handleOpenNoteSource = useCallback((source: NoteSourceLink) => {
+    if (source.kind === "file" || source.kind === "pdfAnnotation") {
+      handleFileSelect(source.path);
+      if (source.kind === "pdfAnnotation") {
+        const { path, page, annotationId } = source;
+        setPdfAnnotationFocus({ path, page, annotationId, token: ++sourceNonce.current });
+      }
+      return;
+    }
+    if (!openTask(source.sessionId, t("Source task"), source.kind === "message" ? source.entryId : undefined)) return;
+    if (source.kind === "tool" || source.kind === "result") {
+      setFileSourceFocus({ step: { sessionId: source.sessionId, stepId: source.toolCallId }, nonce: ++sourceNonce.current, fromNote: true });
+    }
+  }, [handleFileSelect, openTask, t]);
   const [computeFocus, setComputeFocus] = useState<{ id: string; token: number } | null>(null);
   const handleViewCompute = useCallback((jobId?: string) => {
     setView("chat");
@@ -1027,27 +1069,12 @@ function WorkspacePage({
     window.addEventListener(OPEN_MODAL_JOB_EVENT, onOpenJob);
     return () => window.removeEventListener(OPEN_MODAL_JOB_EVENT, onOpenJob);
   }, [handleViewCompute, isActive]);
-  const handleNotebookJumpToChat = useCallback(
-    (entryId: string) => {
-      // Un-hide the chat column without toggling it closed, then scroll once
-      // display:none has lifted (scrollIntoView no-ops on hidden elements).
-      setChatNavigationOpen(true);
-      setTimeout(() => {
-        const ok = tabHandles.current.get(activeTabId)?.scrollToToolCall(entryId) ?? false;
-        if (!ok) toast.error("Couldn't find this entry in the chat transcript.");
-      }, 50);
-    },
-    [activeTabId],
-  );
 
   // ------------------------------------------------------------------
   // Header pieces — cost pill — read from the active tab.
   // ------------------------------------------------------------------
 
   const activeSessionId = activeMeta?.sessionId ?? null;
-  // A jump targets the chat it came from; a notebook view remounting under
-  // another chat must not replay it ("That notebook entry isn't in this chat").
-  useEffect(() => { setNotebookFocus(null); }, [activeSessionId]);
   const {
     activeCount: activeModalJobCount,
     loading: modalJobsLoading,
@@ -1124,8 +1151,8 @@ function WorkspacePage({
       tree={sandbox.tree}
       selectedPath={sandbox.activeTabPath}
       uploading={sandbox.uploading}
-      onSelect={(path) => {
-        handleFileSelect(path);
+      onSelect={(path, mode) => {
+        handleFileSelect(path, mode);
         if (narrowProjectLayout) setFileDrawerOpen(false);
       }}
       onDownload={sandbox.downloadFile}
@@ -1319,6 +1346,7 @@ function WorkspacePage({
               )}
               <div className={cn("min-h-0 min-w-0 flex-1 overflow-hidden", view === "workflows" && "hidden")}>
               <FilePreviewPanel
+                livePreview={livePreview} onCloseLivePreview={() => setLivePreview(undefined)}
                 projectId={projectId}
                 isActive={isActive}
                 activeModelRef={tabWorkspaceStates[activeTabId]?.selectedModel.id}
@@ -1326,8 +1354,10 @@ function WorkspacePage({
                 activeTabPath={sandbox.activeTabPath}
                 onTabSelect={handleFileSelect}
                 onTabClose={sandbox.closeTab}
+                onKeepOpen={sandbox.keepOpen}
                 onDownload={sandbox.downloadFile}
                 onSaveText={sandbox.saveFile}
+                onSaveTable={sandbox.saveTableFile}
                 onSaveImageBlob={sandbox.saveImageBlob}
                 onRetry={sandbox.retryFile}
                 onCompileLatex={sandbox.compileLatex}
@@ -1344,14 +1374,17 @@ function WorkspacePage({
                 onComputeScopeChange={setComputeScope}
                 computeFocus={computeFocus}
                 onOpenComputeOutput={handleFileSelect}
-                notebookSessionId={activeSessionId}
-                notebookEntries={notebookEntries}
-                notebookStreaming={notebookStreaming}
-                notebookSubagentCompletions={subagentCompletions}
-                onOpenNotebookFile={handleFileSelect}
-                notebookFocus={notebookFocus}
-                onNotebookJumpToChat={handleNotebookJumpToChat}
-                onOpenNotebookEntry={handleViewInNotebook}
+                noteTask={activeSessionId && activeMeta?.userMessageCount ? {
+                  id: activeSessionId,
+                  title: tabs.find((tab) => tab.id === activeTabId)?.title || t("Source task"),
+                } : undefined}
+                noteCreation={noteCreation}
+                onNoteCreationHandled={handleNoteCreationHandled}
+                onOpenNoteSource={handleOpenNoteSource}
+                pdfAnnotationFocus={pdfAnnotationFocus}
+                fileSourceInput={fileSourceInput}
+                onJumpToFileSource={jumpToFileSource}
+                onOpenSourceInput={handleOpenSourceInput}
               />
               </div>
             </div>
@@ -1444,6 +1477,7 @@ function WorkspacePage({
               onNew={newTab}
               onRename={renameTab}
               onOpenSession={openSession}
+              onCreateNoteFromTask={(id, title) => handleCreateNote({ title, task: { id, title: title.slice(0, 300) } })}
               activeSessionId={activeSessionId}
               canExport={(activeMeta?.userMessageCount ?? 0) > 0}
             />
@@ -1465,7 +1499,9 @@ function WorkspacePage({
                 tabId={t.id}
                 initialSessionId={t.sessionId ?? null}
                 onOpenTask={openTask}
+                onCreateNote={handleCreateNote}
                 focusResponse={responseFocus && responseFocus.sessionId === t.sessionId ? responseFocus : undefined}
+                fileSourceFocus={fileSourceFocus?.step.sessionId === t.sessionId ? fileSourceFocus : undefined}
                 initialWorkspaceState={tabWorkspaceStates[t.id]}
                 isActive={isActive && t.id === activeTabId}
                 isActiveTab={isActive && t.id === activeTabId}
@@ -1482,7 +1518,6 @@ function WorkspacePage({
                 onMetaChange={handleMetaChange}
                 onWorkspaceStateChange={handleTabWorkspaceStateChange}
                 onSessionUnavailable={forgetTabSession}
-                onViewInNotebook={handleViewInNotebook}
                 onViewCompute={handleViewCompute}
                 onOpenFile={handleFileSelect}
               />

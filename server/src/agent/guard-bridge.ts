@@ -3,7 +3,6 @@
  * `kady-guard` Pi package from `sandbox/.pi/settings.json` so pi-subagents'
  * background children load it (the lead session ignores it — the package
  * self-gates on PI_SUBAGENT_CHILD and the lead runs data-guard.ts instead).
- * Same shape as seedNotebookPackage (notebook-bridge.ts).
  */
 import fs from "node:fs";
 import path from "node:path";

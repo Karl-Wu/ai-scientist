@@ -3,12 +3,13 @@
  *
  * User-visible sandbox files keep their existing paths at the archive root.
  * Hidden application state stays hidden, except for explicit, portable exports
- * of user-facing chat sessions and Living Lab Notebook data.
+ * of user-facing chat sessions, project note pages and legacy notebooks.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import type { ProjectPaths } from "./projects.ts";
+import { exportNotePages } from "./notes/store.ts";
 import { apiRelative, isUserVisible, isWithin } from "./sandbox-fs.ts";
 import { readNotebookAnnotations } from "./agent/notebook-annotations.ts";
 import { notebookToMarkdown } from "./agent/notebook-export.ts";
@@ -70,7 +71,7 @@ function addVisibleSandboxFiles(
   return count;
 }
 
-/** Avoid replacing a user's own top-level chat-history/ or notebook/ folder. */
+/** Avoid replacing a user's own top-level folder. */
 function availableRoot(preferred: string, occupied: Set<string>): string {
   if (!occupied.has(preferred)) {
     occupied.add(preferred);
@@ -279,6 +280,20 @@ function addNotebooks(
   return count + 1;
 }
 
+function addNotePages(zip: ZipArchive, paths: ProjectPaths, occupiedRoots: Set<string>): number {
+  const { pages, unavailablePageIds } = exportNotePages(paths);
+  if (!pages.length && !unavailablePageIds.length) return 0;
+  const root = availableRoot("note-pages", occupiedRoots);
+  pages.sort((a, b) => a.id.localeCompare(b.id));
+  for (const page of pages) {
+    zip.append(jsonBuffer(page), { name: `${root}/${page.id}.json` });
+  }
+  zip.append(jsonBuffer({ version: 1, projectId: paths.id, pageIds: pages.map(({ id }) => id), unavailablePageIds }), {
+    name: `${root}/manifest.json`,
+  });
+  return pages.length + 1;
+}
+
 export async function buildProjectArchive(
   opts: ProjectArchiveOptions,
 ): Promise<ProjectArchiveResult> {
@@ -301,5 +316,6 @@ export async function buildProjectArchive(
   );
   entryCount += addChatHistory(archive, completeOpts, occupiedRoots);
   entryCount += addNotebooks(archive, completeOpts, occupiedRoots);
+  entryCount += addNotePages(archive, opts.paths, occupiedRoots);
   return { archive, entryCount };
 }

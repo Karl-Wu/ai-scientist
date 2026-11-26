@@ -98,6 +98,7 @@ export class RunHandle {
   private completed = false;
   private abortRequested = false;
   private failure: "error" | "blocked" | null = null;
+  private publicationObserver?: (frame: ClientFrame) => void;
   private dispatching = false;
   private readonly completion: Promise<void>;
   private resolveCompletion!: () => void;
@@ -157,6 +158,10 @@ export class RunHandle {
     return this.completion;
   }
 
+  setPublicationObserver(observer?: (frame: ClientFrame) => void): void {
+    this.publicationObserver = observer;
+  }
+
   publish(frame: ClientFrame): SequencedClientFrame {
     if (this.completed) {
       throw new Error(`Cannot publish to completed run ${this.runId}`);
@@ -165,6 +170,7 @@ export class RunHandle {
       this.failure = frame.kind === "budget" ? "blocked" : "error";
     }
     const sequenced = { ...frame, seq: this.nextSeq++ } as SequencedClientFrame;
+    this.publicationObserver?.(sequenced);
     this.frames.push(sequenced);
     this.dispatchQueue.push(sequenced);
     if (!this.dispatching) {
@@ -231,6 +237,7 @@ export class RunHandle {
   complete(): void {
     if (this.completed) return;
     this.completed = true;
+    this.publicationObserver = undefined;
     for (const subscriber of this.subscribers) {
       subscriber.closed = true;
       this.notifyComplete(subscriber);

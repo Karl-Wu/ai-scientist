@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { ModalJobChip, NotebookEntryChip, ToolActivityList } from "./tool-activity";
+import { render, screen, fireEvent, within } from "@testing-library/react";
+import { ModalJobChip, ToolActivityList, ToolTiming } from "./tool-activity";
 import type { ActivityItem } from "@/lib/use-agent";
 
 const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({
@@ -12,18 +12,112 @@ const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({
 });
 
 describe("ToolActivityList", () => {
-  it("stamps each tool card with its tool-call id", () => {
+  it("shows multiline file content as a field and lets the user view the raw JSON", () => {
+    const path = "scripts/export.py";
+    const content = 'def export():\n    return "ready"\n';
+    const args = { path, content, overwrite: false, mode: null };
+    const { container } = render(<ToolActivityList activities={[
+      item({ toolName: "write", args, result: "Saved export.py" }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ran 1 tool call" }));
+    fireEvent.click(screen.getByRole("button", { name: /^write/i }));
+
+    const fields = container.querySelector("dl")!;
+    expect(within(fields).getByText(path)).toBeVisible();
+    expect(within(fields).getByText("false")).toBeVisible();
+    expect(within(fields).getByText("null")).toBeVisible();
+    expect(fields.querySelectorAll("code")[1].textContent).toBe(content);
+
+    fireEvent.click(screen.getByRole("button", { name: "View raw JSON" }));
+    expect(container.querySelector("dl")).not.toBeInTheDocument();
+    expect(container.querySelector("pre")?.textContent).toBe(JSON.stringify(args, null, 2));
+    fireEvent.click(screen.getByRole("button", { name: "View fields" }));
+    expect(container.querySelectorAll("dl code")[1].textContent).toBe(content);
+  });
+
+  it("separates the shell command from its parameters and formats JSON in output without changing values", () => {
+    const command = "python example.py <<'PY'\nprint(42)\nPY";
+    const output = 'exit=0\nsummary {"id":9007199254740993,"values":[1,"line\\n2"]}\ncut {"unfinished":…';
+    const { container } = render(<ToolActivityList activities={[
+      item({ toolName: "bash", args: { command, timeout: 120 }, result: output }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ran 1 tool call" }));
+    fireEvent.click(screen.getByRole("button", { name: /^bash/i }));
+    expect(screen.getByText("Command")).toBeVisible();
+    expect(screen.getByText("Parameters")).toBeVisible();
+    const [commandBlock, parametersBlock, outputBlock] = container.querySelectorAll("pre");
+    expect(commandBlock.textContent).toBe(command);
+    expect(parametersBlock.textContent).toBe('{\n  "timeout": 120\n}');
+    expect(outputBlock.textContent).toBe(
+      'exit=0\nsummary {\n  "id": 9007199254740993,\n  "values": [\n    1,\n    "line\\n2"\n  ]\n}\ncut {"unfinished":…',
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View raw output" }));
+    expect(outputBlock.textContent).toBe(output);
+    fireEvent.click(screen.getByRole("button", { name: "View formatted output" }));
+    expect(outputBlock.textContent).toContain('\n  "id": 9007199254740993,');
+  });
+
+  it("shows elapsed time and status on each row, with start time and results inside", () => {
+    render(<ToolActivityList activities={[
+      item({ id: "finished", toolName: "read", startedAt: 1000, durationMs: 1240, result: "file content" }),
+      item({ id: "failed", toolName: "write", status: "error", durationMs: 116, result: "Write failed" }),
+      item({ id: "interrupted", toolName: "bash", status: "unknown" }),
+    ]} />);
+    const group = screen.getByRole("button", { name: /Ran 3 tool calls/ });
+    expect(group).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByRole("img", { name: "Status unknown" })).not.toBeInTheDocument();
+    fireEvent.click(group);
+    const read = screen.getByRole("button", { name: /^read/i });
+    expect(within(read).getByTitle("Duration")).toHaveTextContent("1.2");
+    expect(within(read).getByRole("img", { name: "Completed" })).toBeInTheDocument();
+    const failed = screen.getByRole("button", { name: /^write/i });
+    expect(within(failed).getByTitle("Duration")).toHaveTextContent("116 ms");
+    expect(within(failed).getByRole("img", { name: "Failed" })).toBeInTheDocument();
+    const interrupted = screen.getByRole("button", { name: /^bash/i });
+    expect(within(interrupted).getByRole("img", { name: "Status unknown" })).toBeInTheDocument();
+    expect(within(interrupted).queryByTitle("Duration")).not.toBeInTheDocument();
+    expect(screen.queryByText("Start time unknown")).not.toBeInTheDocument();
+    expect(screen.queryByText("Duration unknown")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Started /)).not.toBeInTheDocument();
+    fireEvent.click(read);
+    expect(screen.getByText(/^Started /)).toBeInTheDocument();
+    expect(screen.getByText("file content")).toBeInTheDocument();
+  });
+
+  it("renders each timing value independently and omits the row when both are missing", () => {
+    const { container, rerender } = render(<ToolTiming item={item()} />);
+    expect(container).toBeEmptyDOMElement();
+
+    rerender(<ToolTiming item={item({ startedAt: 1000 })} />);
+    expect(screen.getByText(/^Started /)).toBeInTheDocument();
+    expect(screen.queryByText("Duration unknown")).not.toBeInTheDocument();
+
+    rerender(<ToolTiming item={item({ durationMs: 0 })} />);
+    expect(screen.getByText("0 ms")).toBeInTheDocument();
+    expect(screen.queryByText(/^Started /)).not.toBeInTheDocument();
+    expect(screen.queryByText("Start time unknown")).not.toBeInTheDocument();
+  });
+
+  it("previews only the latest live call and expands earlier calls in the same group", () => {
     const { container } = render(
       <ToolActivityList
+        current
         activities={[
           item({ id: "tc_a", toolName: "bash", args: { command: "ls" } }),
-          item({ id: "tc_b", toolName: "read", args: { path: "notes.md" } }),
+          item({ id: "tc_b", toolName: "read", args: { path: "notes.md" }, status: "running" }),
         ]}
       />,
     );
-    expect(container.querySelector('[data-tool-call-id="tc_b"]')).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Earlier activity/ }));
-    expect(container.querySelector('[data-tool-call-id="tc_a"]')).not.toBeNull();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveTextContent("notes.md");
+    expect(buttons[0]).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("status", { name: "Tool calls running" })).toBeInTheDocument();
+    expect(container.querySelector("[data-tool-call-id]")).toBeNull();
+    fireEvent.click(buttons[0]);
+    expect([...container.querySelectorAll("[data-tool-call-id]")].map((card) => card.getAttribute("data-tool-call-id")))
+      .toEqual(["tc_a", "tc_b"]);
   });
 
   it("renders nothing for an empty activity list", () => {
@@ -33,7 +127,7 @@ describe("ToolActivityList", () => {
 
   it("shows the specialist name from a single-task subagent call", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "subagent",
@@ -57,7 +151,7 @@ describe("ToolActivityList", () => {
 
   it("reads specialist names out of a workflowScript launch", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "subagent",
@@ -77,7 +171,7 @@ describe("ToolActivityList", () => {
 
   it("names the specialists of a workflow: true launch from its reply block", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "subagent",
@@ -99,7 +193,7 @@ describe("ToolActivityList", () => {
     [{ workflow: "./ci/sweep.js" }, "workflow ./ci/sweep.js"],
     [{ workflow: "lab-sweep" }, "workflow “lab-sweep”"],
   ])("summarizes an unnamed %j launch by its workflow source", (args, text) => {
-    render(<ToolActivityList activities={[item({ toolName: "subagent", args })]} />);
+    render(<ToolActivityList current activities={[item({ toolName: "subagent", args })]} />);
     expect(screen.getByText(text)).toBeInTheDocument();
     expect(screen.queryByText("subtask")).not.toBeInTheDocument();
   });
@@ -108,13 +202,13 @@ describe("ToolActivityList", () => {
     [{ workflow: "review", args: { task: "check" } }, ["reviewer"]],
     [{ workflow: "parallel", args: { tasks: [{ agent: "scout", task: "a" }, { agent: "worker", task: "b" }] } }, ["scout", "worker"]],
   ])("names the children of pi-subagents' own %j workflow", (args, names) => {
-    render(<ToolActivityList activities={[item({ toolName: "subagent", args })]} />);
+    render(<ToolActivityList current activities={[item({ toolName: "subagent", args })]} />);
     for (const name of names) expect(screen.getByText(name, { exact: false })).toBeInTheDocument();
   });
 
   it("summarizes generate_image by its prompt and shows the image without expanding", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "generate_image",
@@ -137,7 +231,7 @@ describe("ToolActivityList", () => {
 
   it("labels the pi-subagents wait tool", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[item({ toolName: "bg_wait", args: { id: "run-1" } })]}
       />,
     );
@@ -146,7 +240,7 @@ describe("ToolActivityList", () => {
 
   it("shows every specialist name from a parallel subagent call", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "subagent",
@@ -167,7 +261,7 @@ describe("ToolActivityList", () => {
 
   it("recovers the specialist name from a completed status result", () => {
     render(
-      <ToolActivityList
+      <ToolActivityList current
         activities={[
           item({
             toolName: "subagent",
@@ -192,47 +286,10 @@ describe("ToolActivityList", () => {
         ]}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Ran 1 tool call" }));
     fireEvent.click(screen.getByRole("button", { name: /mcp__microscope__capture/i }));
     expect(screen.getByAltText("Tool result image 1")).toBeInTheDocument();
     expect(screen.getByText(/1 image omitted/)).toBeInTheDocument();
-  });
-});
-
-describe("NotebookEntryChip", () => {
-  it("renders the capitalized entry type and title from the tool args", () => {
-    render(
-      <NotebookEntryChip
-        item={item({ toolName: "notebook", args: { type: "hypothesis", title: "Six cell types" } })}
-      />,
-    );
-    expect(screen.getByText("Journal · Hypothesis")).toBeInTheDocument();
-    expect(screen.getByText("Six cell types")).toBeInTheDocument();
-  });
-
-  it("falls back to 'Entry' when the args carry no type", () => {
-    render(<NotebookEntryChip item={item({ toolName: "notebook", args: {} })} />);
-    expect(screen.getByText("Journal · Entry")).toBeInTheDocument();
-  });
-
-  it("carries the tool-call id on its root element", () => {
-    const { container } = render(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} />,
-    );
-    expect(container.querySelector('[data-tool-call-id="tc_9"]')).not.toBeNull();
-  });
-
-  it("shows 'View in journal' only when onView is given, and fires it with the entry id", () => {
-    const onView = vi.fn();
-    const { rerender } = render(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} />,
-    );
-    expect(screen.queryByRole("button", { name: /view in journal/i })).not.toBeInTheDocument();
-
-    rerender(
-      <NotebookEntryChip item={item({ args: { type: "note", title: "x" } })} onView={onView} />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /view in journal/i }));
-    expect(onView).toHaveBeenCalledWith("tc_9");
   });
 });
 

@@ -4,9 +4,8 @@
  *
  * Builtins pin a `tools:` allowlist in their frontmatter, and Pi applies it to
  * extension/package tools too — so a child would load our packages and then
- * have `notebook`, the Modal family, and the PDF annotation tools filtered
- * straight back out. Three bridges (notebook, modal, pdf-annotation) each
- * extend the allowlist for their own group, in that order.
+ * have the Modal family and PDF annotation tools filtered out. Each bridge
+ * extends the allowlist for its own group.
  *
  * Each of them writes `<declared frontmatter tools> + <its group>`, so the
  * declared list gets *copied* into project settings. That copy goes stale when

@@ -11,6 +11,7 @@ import {
   useProjectScopeId,
 } from "@/lib/projects";
 import { getViewerDef } from "@/lib/viewers/registry";
+import { tableDelimiter } from "@/lib/table-explorer";
 
 export interface TreeNode {
   name: string;
@@ -24,6 +25,7 @@ export type FileCategory =
   | "image"
   | "pdf"
   | "markdown"
+  | "html"
   | "csv"
   | "notebook"
   | "fasta"
@@ -79,6 +81,7 @@ export function fileCategory(name: string): FileCategory {
   if (["docx", "pptx", "xlsx"].includes(ext)) return "office";
   if (ext === "pdf") return "pdf";
   if (ext === "md" || ext === "mdx") return "markdown";
+  if (ext === "html" || ext === "htm") return "html";
   if (["csv", "tsv", "jsonl", "ndjson"].includes(ext)) return "csv";
   if (ext === "ipynb") return "notebook";
   if (FASTA_EXTS.has(ext)) return "fasta";
@@ -178,11 +181,17 @@ export interface Tab {
   path: string;
   content: string | null;
   loading: boolean;
+  preview?: boolean;
+  tableRevision?: string;
 }
+
+export type FileOpenMode = "preview" | "open";
+export type TableSaveResult = "saved" | "conflict" | "too-large" | "error";
 
 export interface SandboxPersistenceState {
   openPaths: string[];
   activePath: string | null;
+  previewPath?: string;
 }
 
 export interface LatexCompileResult {
@@ -302,13 +311,19 @@ export function useSandbox(
       ? initialState.activePath
       : initialOpenPaths.current[0] ?? null;
   const [tabs, setTabs] = useState<Tab[]>(() =>
-    initialOpenPaths.current.map((path) => ({ path, content: null, loading: true })),
+    initialOpenPaths.current.map((path) => ({
+      path, content: null, loading: true, preview: path === initialState?.previewPath,
+    })),
   );
   const [activeTabPath, setActiveTabPath] = useState<string | null>(initialActivePath);
   const [uploading, setUploading] = useState(false);
 
   // Refs for synchronous reads inside callbacks (avoids stale closures)
   const tabsRef = useRef<Tab[]>(tabs);
+  const updateTabs = useCallback((next: Tab[]) => {
+    tabsRef.current = next;
+    setTabs(next);
+  }, []);
   const openPathsRef = useRef<Set<string>>(new Set(initialOpenPaths.current));
   const treeRequestRef = useRef<Promise<void> | null>(null);
   const treeEtagRef = useRef<string | null>(null);
@@ -333,12 +348,11 @@ export function useSandbox(
     refreshRequest.current = null;
   }, [scopedProjectId]);
 
-  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
-
   useEffect(() => {
     onStateChange?.({
       openPaths: tabs.map((tab) => tab.path),
       activePath: activeTabPath,
+      previewPath: tabs.find((tab) => tab.preview)?.path,
     });
   }, [activeTabPath, onStateChange, tabs]);
 
@@ -371,9 +385,8 @@ export function useSandbox(
           return false;
         });
         if (next.length !== current.length) {
-          tabsRef.current = next;
           openPathsRef.current = new Set(next.map((tab) => tab.path));
-          setTabs(next);
+          updateTabs(next);
           setActiveTabPath((active) =>
             active && existingPaths.has(active) ? active : next[0]?.path ?? null,
           );
@@ -390,7 +403,7 @@ export function useSandbox(
       if (treeRequestRef.current === request) treeRequestRef.current = null;
     });
     return request;
-  }, [invalidateFile, scopedFetch]);
+  }, [invalidateFile, scopedFetch, updateTabs]);
 
   const closeTab = useCallback((path: string) => {
     invalidateFile(path);
@@ -398,13 +411,19 @@ export function useSandbox(
     const current = tabsRef.current;
     const idx = current.findIndex((t) => t.path === path);
     const newTabs = current.filter((t) => t.path !== path);
-    tabsRef.current = newTabs;
-    setTabs(newTabs);
+    updateTabs(newTabs);
     setActiveTabPath((prev) => {
       if (prev !== path) return prev;
       return newTabs[Math.min(idx, newTabs.length - 1)]?.path ?? null;
     });
-  }, [invalidateFile]);
+  }, [invalidateFile, updateTabs]);
+
+  const keepOpen = useCallback((path: string) => {
+    const current = tabsRef.current;
+    if (current.some((tab) => tab.path === path && tab.preview)) {
+      updateTabs(current.map((tab) => tab.path === path ? { ...tab, preview: false } : tab));
+    }
+  }, [updateTabs]);
 
   // Fetch file body into an open tab, handling timeout/error bookkeeping.
   // Kept as its own callback so retryFile can reuse it without re-adding
@@ -419,19 +438,15 @@ export function useSandbox(
     const generation = fileGenerations.current.get(path) ?? {};
     fileGenerations.current.set(path, generation);
     const isCurrent = () => fileGenerations.current.get(path) === generation;
-    const update = (content: string) => {
-      setTabs((prev) => {
-        if (!isCurrent()) return prev;
-        let changed = false;
-        const next = prev.map((tab) => {
-          if (tab.path !== path || (tab.content === content && !tab.loading)) return tab;
-          changed = true;
-          return { ...tab, content, loading: false };
-        });
-        if (!changed) return prev;
-        tabsRef.current = next;
-        return next;
+    const update = (content: string, tableRevision?: string) => {
+      if (!isCurrent()) return;
+      let changed = false;
+      const next = tabsRef.current.map((tab) => {
+        if (tab.path !== path || (tab.content === content && tab.tableRevision === tableRevision && !tab.loading)) return tab;
+        changed = true;
+        return { ...tab, content, loading: false, tableRevision };
       });
+      if (changed) updateTabs(next);
     };
     request.promise = (async () => {
       const timeout = setTimeout(() => controller.abort(), refresh ? 5000 : 20000);
@@ -442,14 +457,19 @@ export function useSandbox(
           headers: etag ? { "If-None-Match": etag } : undefined,
         });
         if (!isCurrent() || controller.signal.aborted || res.status === 304) return;
-        const content = res.ok ? await res.text() : res.status === 413
-          ? "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
+        const delimited = Boolean(tableDelimiter(path));
+        const content = res.ok ? (delimited
+          ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer())
+          : await res.text()) : res.status === 413
+          ? fileCategory(path) === "html"
+            ? "[Error: HTML previews are limited to 8 MB. Use Download to access the complete file.]"
+            : "[Error: This file exceeds the preview size limit (8 MB for CSV/TSV/JSON/JSONL/NDJSON, 512 KB for other text). Use Download to access the complete file.]"
           : `[Error: ${res.status} ${res.statusText}]`;
         if (!isCurrent() || controller.signal.aborted) return;
         const nextEtag = res.ok ? res.headers.get("etag") : null;
         if (nextEtag) fileEtags.current.set(path, nextEtag);
         else fileEtags.current.delete(path);
-        update(content);
+        update(content, res.ok && delimited ? res.headers.get("X-Content-SHA256") ?? undefined : undefined);
       } catch {
         if (!refresh && isCurrent()) {
           fileEtags.current.delete(path);
@@ -461,12 +481,11 @@ export function useSandbox(
       }
     })();
     void request.promise.finally(() => {
-      // Mutation generations outlive requests so deferred React updaters
-      // remain valid after completion, but never after close/save/rename.
+      // A superseded request must not clear a newer request for the same file.
       if (fileRequests.current.get(path) === request) fileRequests.current.delete(path);
     });
     return request.promise;
-  }, [scopedFetch]);
+  }, [scopedFetch, updateTabs]);
 
   useEffect(() => {
     for (const path of initialOpenPaths.current) {
@@ -481,62 +500,45 @@ export function useSandbox(
       if (loadMode === "text") {
         void fetchFileContent(path);
       } else {
-        setTabs((current) => {
-          const next = current.map((tab) =>
-            tab.path === path ? { ...tab, loading: false } : tab,
-          );
-          tabsRef.current = next;
-          return next;
-        });
+        updateTabs(tabsRef.current.map((tab) => tab.path === path ? { ...tab, loading: false } : tab));
       }
     }
-  }, [fetchFileContent]);
+  }, [fetchFileContent, updateTabs]);
 
-  const selectFile = useCallback(async (path: string) => {
+  const selectFile = useCallback(async (path: string, mode: FileOpenMode = "open") => {
     setActiveTabPath(path);
-
-    // Tab already open — just switch to it
+    if (mode === "open") keepOpen(path);
     if (openPathsRef.current.has(path)) return;
-    openPathsRef.current.add(path);
 
-    const newTab: Tab = { path, content: null, loading: true };
-    setTabs((prev) => {
-      if (prev.some((t) => t.path === path)) return prev;
-      const next = [...prev, newTab];
-      tabsRef.current = next;
-      return next;
-    });
+    const current = tabsRef.current;
+    const existing = current.find((tab) => tab.path === path);
+    const replaced = mode === "preview" && !existing ? current.find((tab) => tab.preview) : undefined;
+    if (replaced) {
+      invalidateFile(replaced.path);
+      openPathsRef.current.delete(replaced.path);
+    }
+    openPathsRef.current.add(path);
 
     const name = path.split("/").pop() ?? "";
     const cat = fileCategory(name);
-
     const def = getViewerDef(cat);
     const loadMode = def
       ? def.loadMode
       : cat === "image" || cat === "pdf" || cat === "anndata" ? "none" : "text";
-    if (loadMode !== "text") {
-      setTabs((prev) => {
-        const next = prev.map((t) => (t.path === path ? { ...t, loading: false } : t));
-        tabsRef.current = next;
-        return next;
-      });
-      return;
-    }
-    await fetchFileContent(path);
-  }, [fetchFileContent]);
+    const newTab: Tab = {
+      path, content: null, loading: loadMode === "text", preview: existing ? existing.preview : mode === "preview",
+    };
+    const replacedPath = existing?.path ?? replaced?.path;
+    updateTabs(replacedPath ? current.map((tab) => tab.path === replacedPath ? newTab : tab) : [...current, newTab]);
+    if (loadMode === "text") await fetchFileContent(path);
+  }, [fetchFileContent, invalidateFile, keepOpen, updateTabs]);
 
   const retryFile = useCallback(async (path: string) => {
     invalidateFile(path);
     openPathsRef.current.add(path);
-    setTabs((prev) => {
-      const next = prev.map((t) =>
-        t.path === path ? { ...t, content: null, loading: true } : t,
-      );
-      tabsRef.current = next;
-      return next;
-    });
+    updateTabs(tabsRef.current.map((tab) => tab.path === path ? { ...tab, content: null, loading: true } : tab));
     await fetchFileContent(path);
-  }, [fetchFileContent, invalidateFile]);
+  }, [fetchFileContent, invalidateFile, updateTabs]);
 
   const uploadFiles = useCallback(
     async (files: FileList | File[], paths?: string[]): Promise<string[]> => {
@@ -620,29 +622,44 @@ export function useSandbox(
     [fetchTree, scopedFetch],
   );
 
-  const saveFile = useCallback(async (path: string, content: string): Promise<boolean> => {
+  const saveText = useCallback(async (path: string, content: string, revision?: string): Promise<TableSaveResult> => {
+    if (savingPaths.current.has(path)) return "error";
     savingPaths.current.add(path);
     invalidateFile(path);
     try {
       const res = await scopedFetch(
         `/sandbox/file?path=${encodeURIComponent(path)}`,
-        { method: "PUT", body: content, headers: { "Content-Type": "text/plain; charset=utf-8" } }
+        { method: "PUT", body: content, headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          ...(revision ? { "If-Match": revision } : {}),
+        } }
       );
       if (res.ok) {
-        setTabs((prev) => {
-          const next = prev.map((t) => (t.path === path ? { ...t, content } : t));
-          tabsRef.current = next;
-          return next;
-        });
+        const tableRevision = res.headers.get("X-Content-SHA256") ?? undefined;
+        updateTabs(tabsRef.current.map((tab) => tab.path === path ? { ...tab, content, tableRevision } : tab));
       }
-      return res.ok;
+      if (res.ok) return "saved";
+      if (res.status === 412) return "conflict";
+      return res.status === 413 ? "too-large" : "error";
     } catch {
-      return false;
+      return "error";
     } finally {
       invalidateFile(path);
       savingPaths.current.delete(path);
     }
-  }, [invalidateFile, scopedFetch]);
+  }, [invalidateFile, scopedFetch, updateTabs]);
+
+  const saveFile = useCallback(async (path: string, content: string): Promise<boolean> => {
+    const saved = await saveText(path, content) === "saved";
+    if (saved && tableDelimiter(path)) void fetchFileContent(path, true);
+    return saved;
+  }, [fetchFileContent, saveText]);
+
+  const saveTableFile = useCallback(async (path: string, content: string, revision: string) => {
+    const result = await saveText(path, content, revision);
+    if (result === "conflict") void fetchFileContent(path, true);
+    return result;
+  }, [fetchFileContent, saveText]);
 
   const saveImageBlob = useCallback(async (path: string, blob: Blob): Promise<boolean> => {
     try {
@@ -745,9 +762,8 @@ export function useSandbox(
         });
         const pathsChanged = updated.some((t, i) => t.path !== current[i].path);
         if (pathsChanged) {
-          tabsRef.current = updated;
           openPathsRef.current = new Set(updated.map((t) => t.path));
-          setTabs(updated);
+          updateTabs(updated);
           setActiveTabPath((prev) => {
             if (prev === src) return dest;
             if (prev && prev.startsWith(src + "/"))
@@ -762,7 +778,7 @@ export function useSandbox(
         return false;
       }
     },
-    [fetchTree, invalidateFile, scopedFetch]
+    [fetchTree, invalidateFile, scopedFetch, updateTabs]
   );
 
   const renameItem = useCallback(
@@ -891,9 +907,11 @@ export function useSandbox(
     uploading,
     fetchTree,
     selectFile,
+    keepOpen,
     retryFile,
     closeTab,
     saveFile,
+    saveTableFile,
     saveImageBlob,
     uploadFiles,
     deleteFile,

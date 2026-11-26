@@ -386,10 +386,11 @@ const SafeParagraph = memo(
       (c) => c != null && c !== ""
     ) as ReactNode[];
 
-    if (kids.length === 1 && isValidElement(kids[0])) {
-      const tag = (kids[0].props as Record<string, unknown>)?.node as { tagName?: string } | undefined;
-      if (tag?.tagName === "img") return <>{children}</>;
-      if (tag?.tagName === "code" && "data-block" in (kids[0].props as Record<string, unknown>))
+    const onlyChild = kids.length === 1 && isValidElement(kids[0]) ? kids[0].props as Record<string, unknown> : null;
+    const tag = (onlyChild?.node as { tagName?: string } | undefined)?.tagName;
+    if (onlyChild) {
+      if (tag === "img") return <>{children}</>;
+      if (tag === "code" && "data-block" in onlyChild)
         return <>{children}</>;
     }
 
@@ -397,7 +398,11 @@ const SafeParagraph = memo(
       return <div {...(rest as React.HTMLAttributes<HTMLDivElement>)}>{children}</div>;
     }
 
-    return <p {...(rest as React.HTMLAttributes<HTMLParagraphElement>)}>{children}</p>;
+    return (
+      <p {...(rest as React.HTMLAttributes<HTMLParagraphElement>)} data-standalone-strong={tag === "strong" ? "" : undefined}>
+        {children}
+      </p>
+    );
   }
 );
 SafeParagraph.displayName = "SafeParagraph";
@@ -408,16 +413,16 @@ SafeParagraph.displayName = "SafeParagraph";
  * writes render inline. Absolute URLs (http/data/blob) and root-absolute paths
  * pass through untouched.
  */
-function resolveImageSrc(src: unknown): string | undefined {
+function resolveImageSrc(src: unknown, projectId: string): string | undefined {
   if (typeof src !== "string" || !src) return undefined;
   if (/^(https?:|data:|blob:|\/\/)/i.test(src) || src.startsWith("/")) return src;
   const clean = src.replace(/^\.\//, "");
-  return withApiToken(`${API_BASE}/sandbox/raw?path=${encodeURIComponent(clean)}`);
+  return withApiToken(`${API_BASE}/sandbox/raw?path=${encodeURIComponent(clean)}&project=${encodeURIComponent(projectId)}`);
 }
 
 const SandboxImage = memo(
   ({ src, alt, node: _node, ...rest }: Record<string, unknown> & { src?: unknown; alt?: string; node?: unknown }) => {
-    const resolved = resolveImageSrc(src);
+    const resolved = resolveImageSrc(src, useProjectScopeId());
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img

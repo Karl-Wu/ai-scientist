@@ -1,10 +1,6 @@
 /**
  * Child-side project resolution for the kady-modal package.
  *
- * Vendored copy of `memoryProjectId` from kady-notebook/memory-client.ts. The
- * two packages are deliberately independent (no cross-package imports), so a
- * change to one must be mirrored by hand in the other.
- *
  * The pi-subagents runner hosts children with cwd inside the project sandbox,
  * but not necessarily *at* its root (a child may `cd` into a subdirectory), so
  * `basename(dirname(cwd))` is not a project id. Walk up to the nearest

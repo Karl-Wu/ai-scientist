@@ -9,7 +9,7 @@ import { modalJobFiles } from "../src/modal/store.ts";
 
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject } from "../src/projects.ts";
-import { appendNotebookEntry } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { appendStep, PROVENANCE_SCHEMA_VERSION } from "../src/provenance/store.ts";
 import {
   buildCompactionPreamble,

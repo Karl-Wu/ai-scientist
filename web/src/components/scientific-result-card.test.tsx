@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ScientificResultCard } from "./scientific-result-card";
 import type { ScientificResultCard as Card } from "@/lib/scientific-results";
@@ -18,17 +19,25 @@ function item(card: Card, extra: Partial<ActivityItem> = {}): ActivityItem {
 
 const renderCard = (
   card: Card,
-  props: { onOpenFile?: (path: string) => void; extra?: Partial<ActivityItem> } = {},
+  props: { onOpenFile?: (path: string) => void; onRecordResult?: () => void; extra?: Partial<ActivityItem> } = {},
 ) =>
   render(
     <ScientificResultCard
       item={item(card, props.extra)}
       projectId="default"
       onOpenFile={props.onOpenFile}
+      onRecordResult={props.onRecordResult}
     />,
   );
 
 describe("ScientificResultCard", () => {
+  it("starts a note from the card action menu", async () => {
+    const onRecordResult = vi.fn();
+    renderCard({ schemaVersion: 1, kind: "table", title: "Run comparison", columns: [{ key: "id", label: "ID" }], rows: [[1]] }, { onRecordResult });
+    await userEvent.click(screen.getByRole("button", { name: "Scientific result actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Record this result" }));
+    expect(onRecordResult).toHaveBeenCalledOnce();
+  });
   it("renders bounded table previews", () => {
     renderCard({
       schemaVersion: 1,

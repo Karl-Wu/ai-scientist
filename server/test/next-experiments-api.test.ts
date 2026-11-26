@@ -4,7 +4,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/index.ts";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject } from "../src/projects.ts";
-import { appendNotebookEntry, readNotebookEntries } from "../src/agent/notebook-store.ts";
+import { readNotebookEntries } from "../src/agent/notebook-store.ts";
+import { chooseNextExperiment } from "../src/agent/next-experiments.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { experimentPlan, experimentSource as source } from "../../web/src/test/next-experiments-fixture.ts";
 const app = await buildApp();
 const base = `/sessions/${source.sessionId}/notebook/${source.entryId}/next-experiments`;
@@ -17,21 +19,23 @@ beforeEach(() => {
 });
 afterAll(async () => { await app.close(); });
 describe("next-experiment API", () => {
-  it("reads without a model call, records only an explicitly acknowledged preference, and exports it", async () => {
+  it("reads and exports historical proposals and preferences", async () => {
     const res = await app.inject({ method: "GET", url: base, headers }); expect(res.statusCode, res.body).toBe(200); expect(res.headers["cache-control"]).toBe("no-store");
     const view = res.json(), p = view.proposals[0];
     const payload = { proposal: p.source, candidateId: "adjust_batch", disposition: "defer", reason: "Need usable batch labels", requestId: crypto.randomUUID(), expectedContextDigest: view.context.digest, expectedProposalDigest: p.digest };
-    const malformed = await app.inject({ method: "POST", url: `${base}/decision`, headers, payload: { ...payload, disposition: ["defer"], acknowledgeUnverifiedContext: true } }); expect(malformed.statusCode).toBe(400);
-    const noAck = await app.inject({ method: "POST", url: `${base}/decision`, headers, payload }); expect(noAck.statusCode).toBe(400);
-    const saved = await app.inject({ method: "POST", url: `${base}/decision`, headers, payload: { ...payload, acknowledgeUnverifiedContext: true, execute: true, approvedBudgetUsd: 1000 } });
-    expect(saved.statusCode, saved.body).toBe(200); expect(saved.json().entry).toMatchObject({ role: "you", proposalOnly: true }); expect(saved.json().entry.approvedBudgetUsd).toBeUndefined();
+    const saved = await chooseNextExperiment("project-a", source, { ...payload, acknowledgeUnverifiedContext: true });
+    const history = await app.inject({ method: "GET", url: base, headers });
+    expect(history.json().proposals[0].decisions).toMatchObject([{ id: saved.entry.id, choice: { disposition: "defer" } }]);
     expect(readNotebookEntries(source.sessionId, "project-b")).toHaveLength(0);
     const exported = await app.inject({ method: "GET", url: `/sessions/${source.sessionId}/notebook/export?format=md`, headers });
     expect(exported.statusCode).toBe(200); expect(exported.body).toContain("not execution/spending approval"); expect(exported.body).toContain("PREDICTED under treatment");
   });
-  it("rejects implicit generation, stale approval context and missing-project fallback", async () => {
-    const res = await app.inject({ method: "POST", url: `${base}/generate`, headers, payload: { model: "openrouter/openai/gpt-4o" } }); expect(res.statusCode).toBe(400);
-    const stale = await app.inject({ method: "POST", url: `${base}/generate`, headers, payload: { approveModelCall: true, requestId: crypto.randomUUID(), expectedContextDigest: "fake" } }); expect(stale.statusCode).toBe(409);
+  it("retires generation and decisions and rejects missing-project fallback on reads", async () => {
+    for (const action of ["generate", "decision"]) {
+      const response = await app.inject({ method: "POST", url: `${base}/${action}`, headers, payload: {} });
+      expect(response.statusCode).toBe(404);
+    }
+    expect(readNotebookEntries(source.sessionId, "project-a")).toHaveLength(2);
     for (const project of ["project-b", "not-found"]) {
       const response = await app.inject({ method: "GET", url: base, headers: { "x-project-id": project } }); expect(response.statusCode).toBe(404);
     }

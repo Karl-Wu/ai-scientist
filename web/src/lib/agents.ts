@@ -22,6 +22,10 @@ export interface AgentFile {
   systemPromptMode?: "append" | "replace";
   inheritProjectContext?: boolean;
   inheritSkills?: boolean;
+  /** Provided by the roster for specialists that can run in the note editor. */
+  canDraftNotes?: boolean;
+  /** Configured model for note drafting, absent when the expert inherits the task model. */
+  noteDraftModel?: string;
   /** pi-subagents per-agent persistent memory (`MEMORY.md` injected each run). */
   memory?: AgentMemory;
   /** Frontmatter keys the UI doesn't model; preserved on save. */
@@ -38,7 +42,7 @@ export interface AgentMemory {
   path: string;
 }
 
-export type AgentPatch = Omit<AgentFile, "name" | "source">;
+export type AgentPatch = Omit<AgentFile, "name" | "source" | "canDraftNotes" | "noteDraftModel">;
 
 export interface AgentMemoryFile {
   memory: AgentMemory;
@@ -74,11 +78,25 @@ export async function clearAgentMemory(name: string): Promise<void> {
   }
 }
 
-export async function getAgents(): Promise<AgentFile[]> {
-  const res = await apiFetch("/agents");
+export async function getAgentRoster(projectId?: string, signal?: AbortSignal) {
+  const res = await apiFetch("/agents", { signal }, projectId);
   if (!res.ok) throw new Error(`getAgents ${res.status}`);
-  const data = (await res.json()) as { agents?: AgentFile[] };
-  return data.agents ?? [];
+  const data = (await res.json()) as { agents?: AgentFile[]; noteDefaultExpert?: string | null };
+  return { agents: data.agents ?? [], noteDefaultExpert: data.noteDefaultExpert ?? null };
+}
+
+export async function getAgents(): Promise<AgentFile[]> {
+  return (await getAgentRoster()).agents;
+}
+
+export async function saveNoteDefaultExpert(projectId: string, expert: string | null): Promise<string | null> {
+  const res = await apiFetch("/agents/note-default", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expert }),
+  }, projectId);
+  if (!res.ok) throw new Error("Could not save the default note expert.");
+  return (await res.json() as { noteDefaultExpert: string | null }).noteDefaultExpert;
 }
 
 export async function saveAgent(name: string, patch: AgentPatch): Promise<AgentFile> {

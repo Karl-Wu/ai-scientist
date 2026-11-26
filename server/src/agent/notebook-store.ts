@@ -90,23 +90,8 @@ export function notebookPath(sessionId: string, projectId?: string): string {
   return path.join(paths.notebookDir, `${sessionId}.jsonl`);
 }
 
-export function appendNotebookEntry(
-  sessionId: string,
-  entry: NotebookEntry,
-  projectId?: string,
-): void {
-  const file = notebookPath(sessionId, projectId);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(entry) + "\n", "utf-8");
-}
-
 /**
  * Append only entries whose ids are not already in the session notebook.
- *
- * Harvest re-reads a child's whole session file on every completion and
- * relies on stable namespaced entry ids, so an in-memory guard alone loses
- * its state on restart and re-appends the child's entire history. The parent
- * notebook is the durable record of what has already been harvested.
  *
  * Returns the entries actually written.
  */

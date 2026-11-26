@@ -7,6 +7,7 @@ import { keymap } from "@codemirror/view";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
+import { jsonFolding } from "@/lib/json-folding";
 import { cn } from "@/lib/utils";
 
 const EXT_ALIAS: Record<string, LanguageName> = {
@@ -70,6 +71,7 @@ export function ReadOnlyCodeView({
     const lang = langExtension(name);
     return [
       ...(lang ? [lang] : []),
+      ...(/\.json$/i.test(name) ? jsonFolding : []),
       EditorView.lineWrapping,
       EditorView.editable.of(false),
     ];

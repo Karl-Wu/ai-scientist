@@ -5,19 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
-import { appendNotebookEntry, readNotebookEntries } from "../src/agent/notebook-store.ts";
+import { readNotebookEntries } from "../src/agent/notebook-store.ts";
+import { appendNotebookEntry } from "./helpers/notebook-fixtures.ts";
 import { buildNextExperimentContext } from "../src/agent/next-experiment-context.ts";
 import { generateNextExperiments, nextExperimentView, chooseNextExperiment, proposalGenerationContext, NEXT_EXPERIMENTS_SESSION_ID } from "../src/agent/next-experiments.ts";
 import { generationDirectory, inspectGeneration } from "../src/agent/next-experiment-receipts.ts";
-import { notebookEntriesFromSessionFile } from "../src/agent/notebook-harvest.ts";
-import { makeNotebookTool } from "../src/agent/notebook.ts";
 import { packageRecordGraph } from "../src/evidence/source-graph.ts";
 import { methodsScaffold } from "../src/evidence/report.ts";
 import { previewAnalysisPlan, freezeAnalysisPlan, recordPlanDeviation } from "../src/agent/notebook-plans.ts";
 import { notebookToMarkdown } from "../src/agent/notebook-export.ts";
 import { buildMethodsDraftContext, runMethodsDraft } from "../src/agent/methods-draft.ts";
 import { searchNotebookMemory } from "../src/agent/notebook-memory.ts";
-import { deriveEvidenceThreads, notebookEntryKey } from "../../web/src/lib/notebook-evidence-core.ts";
+import { deriveEvidenceThreads } from "../../web/src/lib/notebook-evidence-core.ts";
 import { sessionCostSummary, emptySnapshot, recordRun } from "../src/cost/ledger.ts";
 import { experimentPlan, experimentSource as source } from "../../web/src/test/next-experiments-fixture.ts";
 import { ONE_SHOT_REASONING } from "../src/agent/one-shot-reasoning.ts";
@@ -146,27 +145,25 @@ describe("source-linked next investigations", () => {
     expect((await nextExperimentView(project, source)).context.targetStatus).toBe("superseded");
     await expect(generateNextExperiments(project, source, body, good)).rejects.toMatchObject({ statusCode: 409 });
   });
-  it("allows native authored proposals but never accepts authored verification/approval metadata", async () => {
-    setup(); const tool = makeNotebookTool(project, () => source.sessionId);
-    await expect(tool.execute("p-invalid", { type: "observation", title: "Predictions", nextExperiments: experimentPlan } as never, undefined as never)).rejects.toThrow(/note/);
-    await tool.execute("p", { type: "note", title: "Next investigation", nextExperiments: experimentPlan, nextExperimentBinding: { origin: "model-generated", contextDigest: "fake" }, nextExperimentDecision: { disposition: "prioritize" }, evidence: [{ entryId: source.entryId, relation: "supports" }] } as never, undefined as never);
-    const entry = readNotebookEntries(source.sessionId, project).at(-1)!;
-    expect(entry.nextExperimentBinding?.origin).toBe("agent-authored"); expect(entry.nextExperimentDecision).toBeUndefined(); expect(entry.proposalOnly).toBe(true);
+  it("keeps historical agent-authored proposals searchable without counting them as evidence", async () => {
+    setup();
+    const entry = {
+      id: "p",
+      type: "note" as const,
+      title: "Next investigation",
+      role: "agent" as const,
+      timestamp: 2,
+      nextExperiments: experimentPlan,
+      nextExperimentBinding: { origin: "agent-authored" as const, sourceDigests: [] },
+      evidence: [{ entryId: source.entryId, relation: "supports" as const }],
+      proposalOnly: true,
+    };
+    appendNotebookEntry(source.sessionId, entry, project);
     expect(deriveEvidenceThreads(readNotebookEntries(source.sessionId, project)).get(source.entryId)?.status).toBe("open");
     expect((await nextExperimentView(project, source)).proposals[0].contextStatus).toBe("unverified");
     const memory = await searchNotebookMemory(project, { query: "within-batch contrasts" }); expect(memory.hits.some((h) => h.source.entryId === "p" && h.qualifiers.some((q) => q.includes("not an observation")))).toBe(true);
     const markdown = notebookToMarkdown([entry], { sessionId: source.sessionId }); expect(markdown).toContain("PREDICTED under treatment"); expect(markdown).toContain("THEN reconsider decision");
     expect(String(buildMethodsDraftContext([entry], { sessionId: source.sessionId }).messages[0].content)).not.toContain("Next investigation");
-  });
-  it("namespaces child-local proposal refs and ignores forged metadata; invalid proposals never become evidence", () => {
-    setup(); const file = path.join(resolvePaths(project).sandbox, "child.jsonl"); const plan = structuredClone(experimentPlan); delete plan.target.sessionId; for (const e of [...plan.explanations, ...plan.experiments]) for (const r of e.sources) delete r.sessionId;
-    fs.writeFileSync(file, JSON.stringify({ timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "toolCall", name: "notebook", id: "p", arguments: { type: "note", title: "Child ideas", nextExperiments: plan, nextExperimentBinding: { contextDigest: "fake" }, evidence: [{ entryId: source.entryId, relation: "supports" }] } }] } }) + "\n");
-    const rows = notebookEntriesFromSessionFile(file, "reviewer"); expect(rows[0].nextExperiments?.target.entryId).toBe(`reviewer:${source.entryId}`); expect(rows[0].nextExperiments?.experiments[0].sources[0].entryId).toBe(`reviewer:${source.entryId}`); expect(rows[0].nextExperimentBinding).toMatchObject({ origin: "harvested", sourceDigests: [] });
-    plan.experiments[0].predictions = [];
-    fs.writeFileSync(file, JSON.stringify({ message: { role: "assistant", content: [{ type: "toolCall", name: "notebook", id: "bad", arguments: { type: "note", title: "Invalid prediction", nextExperiments: plan, evidence: [{ entryId: source.entryId, relation: "supports" }] } }] } }));
-    const invalid = notebookEntriesFromSessionFile(file, "reviewer")[0]; expect(invalid.proposalOnly).toBe(true); expect(invalid.nextExperiments).toBeUndefined();
-    const h = { id: `reviewer:${source.entryId}`, title: "Hypothesis", type: "hypothesis" as const, timestamp: 0 };
-    expect(deriveEvidenceThreads([h, invalid]).get(notebookEntryKey(h))?.status).toBe("open");
   });
   it("keeps the current frozen plan alongside recent deviations in bounded proposal context", async () => {
     setup(); const plan = { hypothesis: "Treatment effect", primaryOutcome: "Marker X contrast", exclusions: "QC only", model: "Batch-adjusted model", multiplicity: "One primary test", qc: "Review labels", stopping: "Fixed existing cohort", exposureNotes: "Exploratory analysis", datasets: ["data.csv"], intent: "exploratory", priorExposure: "outcomes-inspected" };

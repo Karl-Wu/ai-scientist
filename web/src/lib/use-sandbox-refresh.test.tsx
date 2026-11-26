@@ -7,6 +7,43 @@ vi.mock("./projects", () => ({ apiFetch: fetchMock, useProjectScopeId: () => "te
 const text = (body: string, etag = 'W/"one"') => new Response(body, { headers: { ETag: etag } });
 beforeEach(() => fetchMock.mockReset());
 
+describe("file preview tabs", () => {
+  it("reuses one preview and preserves files explicitly opened or kept", async () => {
+    fetchMock.mockImplementation(async (path: string) => text(path));
+    const onStateChange = vi.fn();
+    const { result } = renderHook(() => useSandbox(false, "test", undefined, onStateChange));
+    await act(() => result.current.selectFile("pinned.txt"));
+    await act(() => result.current.selectFile("first.txt", "preview"));
+    await act(() => result.current.selectFile("second.txt", "preview"));
+    expect(result.current.tabs.map((tab) => tab.path)).toEqual(["pinned.txt", "second.txt"]);
+    expect(onStateChange).toHaveBeenLastCalledWith({
+      openPaths: ["pinned.txt", "second.txt"], activePath: "second.txt", previewPath: "second.txt",
+    });
+    act(() => result.current.keepOpen("second.txt"));
+    await act(() => result.current.selectFile("third.txt", "preview"));
+    await act(() => result.current.selectFile("third.txt", "open"));
+    expect(result.current.tabs.map((tab) => tab.path)).toEqual(["pinned.txt", "second.txt", "third.txt"]);
+    expect(result.current.tabs.some((tab) => tab.preview)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("cancels the previous preview without letting its delayed result replace the current file", async () => {
+    let finish!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    fetchMock.mockResolvedValueOnce(text("current file"));
+    const { result } = renderHook(() => useSandbox(false, "test"));
+    await act(async () => {
+      const previous = result.current.selectFile("first.txt", "preview");
+      await result.current.selectFile("second.txt", "preview");
+      finish(text("delayed file"));
+      await previous;
+    });
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(result.current.activeTabPath).toBe("second.txt");
+    expect(result.current.tabs).toMatchObject([{ path: "second.txt", content: "current file", preview: true }]);
+  });
+});
+
 describe("conditional sandbox refresh", () => {
   it("uses validators and preserves tab identity for 304 and equal content", async () => {
     fetchMock.mockResolvedValueOnce(text("original"));

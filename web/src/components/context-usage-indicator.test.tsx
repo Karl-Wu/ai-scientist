@@ -1,8 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { I18nProvider } from "@/components/i18n-provider";
 import { ContextUsageIndicator } from "./context-usage-indicator";
+
+vi.mock("@/lib/ui-locale-settings", () => ({ readSavedLocale: async () => "zh-CN" }));
 
 describe("ContextUsageIndicator", () => {
   it("shows Pi context utilization accessibly", () => {
@@ -69,5 +73,20 @@ describe("ContextUsageIndicator compact action", () => {
       </TooltipProvider>,
     );
     expect(screen.getByRole("button", { name: "Compact context now" })).toBeDisabled();
+  });
+
+  it("localizes the context usage label and compaction settings tooltip", async () => {
+    render(
+      <I18nProvider>
+        <TooltipProvider delayDuration={0}>
+          <ContextUsageIndicator usage={usage} onCompact={vi.fn()} />
+        </TooltipProvider>
+      </I18nProvider>,
+    );
+
+    await userEvent.hover(await screen.findByRole("button", { name: "压缩设置" }));
+    expect(screen.getByRole("status")).toHaveAccessibleName("模型上下文已用 75.0%，150,000 / 200,000 个词元");
+    expect(screen.getByRole("button", { name: "立即压缩上下文" })).toBeEnabled();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("适用于此项目的所有会话。");
   });
 });

@@ -31,6 +31,9 @@ it("binds the public RPC/preflight APIs with parent tool ceilings and required c
   const contract = preview.contract;
   expect(contract.tools.requiredExtensionIds).toEqual(expect.arrayContaining(["kady-guard", "kady-modal", "kady-child-runtime", "pi-web-access"]));
   expect(contract.tools.capabilityCeiling.allowedTools).toContain("modal_submit");
+  expect(contract.tools.requiredExtensionIds).not.toContain("kady-notebook");
+  expect(session.getActiveToolNames()).not.toContain("notebook_search");
+  expect(session.getActiveToolNames()).toContain("note_read");
   expect(contract.tools.capabilityCeiling.allowedTools).not.toContain("interview");
   const prompt = await session.extensionRunner!.emitBeforeAgentStart({ messageType: "user", prompt: "Review the analysis" }, {
     cwd: paths.sandbox, selectedTools: session.getActiveToolNames(),
@@ -75,13 +78,16 @@ it("loads child MCP and mandatory tools with ambient extensions disabled, and me
   const factory = createDefaultChildSessionFactory({ loadPiCodingAgent: async () => ({ ...sdk, createAgentSession: async (args: any) => {
     const result = await sdk.createAgentSession(args); captured = result.session; captured.agent.streamFunction = provider as any; return result;
   } }) });
-  const required = ["kady-guard", "kady-notebook", "kady-modal", "kady-pdf-annotations", "kady-child-runtime"].map((id) => ({ id, path: path.resolve(import.meta.dirname, "../pi-packages", id, "index.ts") }));
+  const required = ["kady-guard", "kady-modal", "kady-pdf-annotations", "kady-child-runtime"].map((id) => ({ id, path: path.resolve(import.meta.dirname, "../pi-packages", id, "index.ts") }));
   const errors: any[] = [];
   let child: any;
   try {
     child = await factory.create({ cwd: paths.sandbox, storage: { kind: "dir", sessionDir: paths.sessionsDir }, ambientExtensions: false, extensionPaths: required.map((r) => r.path), requiredExtensions: required, hooks: [], noSkills: true, noContextFiles: true, runtime: { agent: "researcher", orchestratorSessionId: "parent", runId: "run" }, onExtensionError: (error: any) => errors.push(error) });
     await expect.poll(() => captured!.getActiveToolNames(), { timeout: 15000 }).toContain("mcp__echo__echo");
-    for (const name of ["notebook", "modal_submit", "add_pdf_annotation"]) expect(captured!.getAllTools().map((t) => t.name)).toContain(name);
+    const childTools = captured!.getAllTools().map((tool) => tool.name);
+    for (const name of ["modal_submit", "add_pdf_annotation"]) expect(childTools).toContain(name);
+    expect(childTools).not.toContain("notebook");
+    expect(childTools).not.toContain("notebook_search");
     expect(errors).toEqual([]);
     const prompt = await captured!.extensionRunner!.emitBeforeAgentStart({ messageType: "user", prompt: "Inspect the data" }, {
       cwd: paths.sandbox, customPrompt: "Keep my custom persona.",

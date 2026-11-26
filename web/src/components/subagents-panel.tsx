@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   BotIcon,
+  ChevronDownIcon,
   BrainIcon,
   LockIcon,
   PencilIcon,
@@ -39,16 +40,18 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useProjects } from "@/lib/use-projects";
+import { notifyCapabilitiesChanged } from "@/lib/capability-events";
 import {
   clearAgentMemory,
   deleteAgent,
   getAgentMemory,
-  getAgents,
+  getAgentRoster,
   getSpecialistDefaultModel,
   getWatchdogSettings,
   restoreDefaultAgents,
   saveAgent,
   saveAgentMemory,
+  saveNoteDefaultExpert,
   saveSpecialistDefaultModel,
   saveWatchdogSettings,
   setAgentEnabled,
@@ -320,6 +323,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
     setError(null);
     try {
       setValue((await saveSpecialistDefaultModel(next || null)) ?? "");
+      notifyCapabilitiesChanged();
     } catch (exc) {
       setValue(previous);
       setError(exc instanceof Error ? exc.message : "Save failed");
@@ -330,6 +334,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
 
   return (
     <SettingsCard
+      id="specialist-default-model"
       title={t("Default model for specialists")}
       description={t("Used by every specialist that does not pin its own model. Inherit keeps each specialist on the model of the task that launched it.")}
     >
@@ -355,6 +360,9 @@ export function SubagentsPanel() {
   const t = useT();
   const { activeProject, activeProjectId } = useProjects();
   const [agents, setAgents] = useState<AgentFile[]>([]);
+  const [noteDefaultExpert, setNoteDefaultExpert] = useState<string | null>(null);
+  const [savingNoteDefault, setSavingNoteDefault] = useState(false);
+  const [noteDefaultError, setNoteDefaultError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<AgentFormState | null>(null);
@@ -366,20 +374,26 @@ export function SubagentsPanel() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setAgents(await getAgents());
+      const roster = await getAgentRoster(activeProjectId ?? undefined);
+      setAgents(roster.agents);
+      setNoteDefaultExpert(roster.noteDefaultExpert);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Failed to load specialists");
     }
-  }, []);
+  }, [activeProjectId]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setForm(null);
     setViewing(null);
-    getAgents()
-      .then((a) => {
-        if (!cancelled) setAgents(a);
+    setNoteDefaultError(null);
+    getAgentRoster(activeProjectId ?? undefined)
+      .then((roster) => {
+        if (!cancelled) {
+          setAgents(roster.agents);
+          setNoteDefaultExpert(roster.noteDefaultExpert);
+        }
       })
       .catch((exc) => {
         if (!cancelled) {
@@ -393,6 +407,20 @@ export function SubagentsPanel() {
       cancelled = true;
     };
   }, [activeProjectId]);
+
+  const updateNoteDefault = async (name: string) => {
+    if (!activeProjectId || savingNoteDefault) return;
+    setSavingNoteDefault(true);
+    setNoteDefaultError(null);
+    try {
+      setNoteDefaultExpert(await saveNoteDefaultExpert(activeProjectId, name || null));
+      notifyCapabilitiesChanged();
+    } catch {
+      setNoteDefaultError("Could not save the default note expert.");
+    } finally {
+      setSavingNoteDefault(false);
+    }
+  };
 
   const toggleEnabled = useCallback(
     async (name: string, next: boolean) => {
@@ -542,9 +570,10 @@ export function SubagentsPanel() {
   }, [confirm, memoryOpen, t]);
 
   const visible = useMemo(
-    () => agents.filter((a) => matchesQuery(query, a.name, a.description, a.model)),
-    [agents, query],
+    () => agents.filter((a) => matchesQuery(query, a.name, t(a.name), a.description, a.model)),
+    [agents, query, t],
   );
+  const noteExperts = agents.filter((agent) => agent.enabled && agent.canDraftNotes);
   const project = visible.filter((a) => a.source === "project");
   const builtins = visible.filter((a) => a.source === "builtin");
 
@@ -564,6 +593,23 @@ export function SubagentsPanel() {
       />
 
       <SpecialistDefaultModelCard projectId={activeProjectId} />
+      <SettingsCard title={t("Default note expert")}
+        description={t("Preselected when creating a note in this project. You can change it before drafting.")}>
+        {loading ? <p className="text-xs text-muted-foreground">{t("Loading…")}</p> : (
+          <div className="relative">
+            <select aria-label={t("Default note expert")} disabled={savingNoteDefault} value={noteDefaultExpert ?? ""}
+              className="h-8 w-full appearance-none rounded-md border bg-background pl-2 pr-8 text-xs"
+              onChange={(event) => void updateNoteDefault(event.target.value)}>
+              <option value="">{t("No default expert")}</option>
+              {noteDefaultExpert && !noteExperts.some((agent) => agent.name === noteDefaultExpert) &&
+                <option value={noteDefaultExpert} disabled>{t(noteDefaultExpert)} · {t("Unavailable")}</option>}
+              {noteExperts.map((agent) => <option key={agent.name} value={agent.name}>{t(agent.name)}</option>)}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          </div>
+        )}
+        <SettingsError className="mt-2">{noteDefaultError}</SettingsError>
+      </SettingsCard>
       <WatchdogCard projectId={activeProjectId} />
 
       <SettingsError>{error}</SettingsError>
@@ -729,7 +775,7 @@ export function SubagentsPanel() {
               <div key={agent.name} className="flex items-center gap-2 rounded-lg border px-3 py-2">
                 <BotIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium font-mono">{agent.name}</div>
+                  <div className="truncate text-xs font-medium font-mono" title={agent.name}>{t(agent.name)}</div>
                   <div className="truncate text-[11px] text-muted-foreground">
                     {agent.description || t("(no description)")}
                   </div>
@@ -746,14 +792,14 @@ export function SubagentsPanel() {
                     variant={memoryOpen?.name === agent.name ? "secondary" : "ghost"}
                     size="sm"
                     className="h-7 gap-1 text-[11px]"
-                    aria-label={t("Memory of {v0}", { v0: agent.name })}
+                    aria-label={t("Memory of {v0}", { v0: t(agent.name) })}
                     onClick={() => void openMemory(agent)}
                   >
                     <BrainIcon className="size-3.5" />
                     {t("Memory")}{" "}</Button>
                 )}
                 <Switch
-                  aria-label={t("Toggle {v0}", { v0: agent.name })}
+                  aria-label={t("Toggle {v0}", { v0: t(agent.name) })}
                   checked={agent.enabled !== false}
                   onCheckedChange={(v) => void toggleEnabled(agent.name, v)}
                 />
@@ -761,7 +807,7 @@ export function SubagentsPanel() {
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0"
-                  aria-label={t("Edit {v0}", { v0: agent.name })}
+                  aria-label={t("Edit {v0}", { v0: t(agent.name) })}
                   onClick={() => setForm(formFromAgent(agent, false))}
                 >
                   <PencilIcon className="size-3.5" />
@@ -770,7 +816,7 @@ export function SubagentsPanel() {
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0 text-destructive hover:text-destructive"
-                  aria-label={t("Delete {v0}", { v0: agent.name })}
+                  aria-label={t("Delete {v0}", { v0: t(agent.name) })}
                   disabled={saving}
                   onClick={() => void handleDelete(agent.name)}
                 >
@@ -862,7 +908,7 @@ export function SubagentsPanel() {
                   <LockIcon className="size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-xs font-medium font-mono">
-                      {agent.name}
+                      <span className="truncate" title={agent.name}>{t(agent.name)}</span>
                       <VerifierBadge agent={agent} />
                     </div>
                     <div
@@ -880,7 +926,7 @@ export function SubagentsPanel() {
                     )}
                   </div>
                   <Switch
-                    aria-label={t("Toggle {v0}", { v0: agent.name })}
+                    aria-label={t("Toggle {v0}", { v0: t(agent.name) })}
                     checked={agent.enabled !== false}
                     onCheckedChange={(v) => void toggleEnabled(agent.name, v)}
                   />

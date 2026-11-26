@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeNextExperiments, nextExperimentsText, orderedExperiments, readExperimentBinding, readExperimentChoice } from "./next-experiments";
 import { deriveEvidenceThreads, evidenceLinks } from "./notebook-evidence-core";
-import { normalizeNotebookEntries } from "./notebook";
-import { buildNotebookPrintHtml } from "./notebook-print";
 import { experimentPlan, experimentView } from "../test/next-experiments-fixture";
 describe("next-investigation protocol", () => {
   it("normalizes qualitative proposals, strips forged approval/information-gain fields and preserves conditional predictions", () => {
@@ -54,12 +52,8 @@ describe("next-investigation protocol", () => {
     expect(evidenceLinks(proposal)[0].relation).toBe("context");
     expect(deriveEvidenceThreads([h, { ...proposal, supersedes: undefined }]).get("h")?.status).toBe("open");
   });
-  it("defensively reads metadata and preserves planning fields in normalized/print exports without active markup", () => {
+  it("reads valid saved bindings and rejects malformed proposal metadata", () => {
     expect(readExperimentBinding({ origin: "model-generated", sourceDigests: {} })).toBeUndefined(); expect(readExperimentChoice({})).toBeUndefined();
     expect(readExperimentBinding(experimentView.proposals[0].binding)).toEqual(experimentView.proposals[0].binding);
-    const p = structuredClone(experimentPlan); p.experiments[0].method = '<img src="https://should-not-load">';
-    const e = normalizeNotebookEntries([{ id: "p", type: "note", timestamp: 1000, title: "Proposed tests", nextExperiments: p, nextExperimentBinding: experimentView.proposals[0].binding }])[0];
-    expect(e.proposalOnly).toBe(true); expect(e.nextExperiments).toEqual(p);
-    const html = buildNotebookPrintHtml([e], {}); expect(html).toContain("PREDICTED under treatment"); expect(html).toContain("&lt;img"); expect(html).not.toContain('<img src="https://should-not-load">');
   });
 });

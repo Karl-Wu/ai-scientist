@@ -99,8 +99,7 @@ function unique(values: readonly string[]): string[] {
 
 
 /**
- * Notebook and Modal bridges run first. Only extend their known generated
- * shapes; any other existing override is user-owned and remains authoritative.
+ * The Modal bridge runs first. Extend the builtin and generated tool lists.
  */
 export function seedBuiltinAgentPdfAnnotationTools(
   paths: ProjectPaths,
@@ -160,17 +159,11 @@ export function seedBuiltinAgentPdfAnnotationTools(
       }
       const existingTools = override.tools as string[];
       const base = builtin.tools;
-      const notebook = unique([...base, "notebook"]);
       const modal = unique([...base, ...MODAL_TOOL_NAMES]);
-      const notebookModal = unique([...notebook, ...MODAL_TOOL_NAMES]);
-      const notebookMemory = unique([...notebook, "notebook_search"]);
-      const notebookMemoryModal = unique([...notebookMemory, ...MODAL_TOOL_NAMES]);
-      const generated = [base, notebook, notebookMemory, modal, notebookModal, notebookMemoryModal].flatMap(
-        (tools) => [
-          tools,
-          unique([...tools, ...PDF_ANNOTATION_TOOL_NAMES]),
-        ],
-      );
+      const generated = [base, modal].flatMap((tools) => [
+        tools,
+        unique([...tools, ...PDF_ANNOTATION_TOOL_NAMES]),
+      ]);
       // Reconciled, not only extended: an override seeded before an upstream
       // release narrowed this builtin still carries the tools it removed.
       const next = reconcileBuiltinTools({
