@@ -28,6 +28,33 @@ window.addEventListener('click', (event) => {
 });
 </script>`;
 
+// The host validates the sender and resolves HTML links inside the current project.
+const REPORT_NAVIGATION = `<script>
+(() => {
+const reportHost = window.parent.parent;
+const notifyHost = (kind, value) => reportHost.postMessage({kind, value}, '*');
+window.addEventListener('click', (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey ||
+      event.altKey || event.shiftKey) return;
+  const link = event.target instanceof Element && event.target.closest('a[href]');
+  if (!link || link.hasAttribute('download')) return;
+  const href = link.getAttribute('href');
+  if (!href || (!href.startsWith('#') && !/\\.html?(?:[#?]|$)/i.test(href))) return;
+  event.preventDefault();
+  if (href.startsWith('#')) location.hash = href;
+  else notifyHost('report-link', href);
+});
+window.addEventListener('message', (event) => {
+  if (event.source !== reportHost || event.data?.kind !== 'report-location') return;
+  const hash = event.data.value;
+  if (typeof hash === 'string' && (!hash || hash.startsWith('#')) && location.hash !== hash)
+    location.hash = hash;
+});
+window.addEventListener('hashchange', () => notifyHost('report-hash', location.hash));
+window.addEventListener('load', () => notifyHost('report-ready', ''));
+})();
+</script>`;
+
 // Install the fixed preview script before the report's own CSP takes effect.
 // Preserve the doctype and explicit head, including any attributes on them.
 const HTML_TRIVIA = String.raw`(?:\s|<!--[\s\S]*?-->)*`;
@@ -44,8 +71,8 @@ function attribute(value: string): string {
 }
 
 /** Keep untrusted HTML in the inner srcdoc attribute, not in the policy document. */
-export function htmlPreviewDocument(html: string, title: string): string {
-  const report = html.replace(HTML_PROLOGUE, (prologue) => prologue + FRAGMENT_NAVIGATION);
+export function htmlPreviewDocument(html: string, title: string, navigation = false): string {
+  const report = html.replace(HTML_PROLOGUE, (prologue) => prologue + (navigation ? REPORT_NAVIGATION : FRAGMENT_NAVIGATION));
   return "<!doctype html><html><head><meta charset=\"utf-8\">" +
     '<meta http-equiv="Content-Security-Policy" content="' + PREVIEW_POLICY + '">' +
     '<meta name="referrer" content="no-referrer">' +

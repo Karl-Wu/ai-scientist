@@ -184,3 +184,17 @@ it("retains annotations across navigation and treats a new stroke after saving a
   expect(confirm).toHaveBeenCalled();
   expect(props.onTabClose).not.toHaveBeenCalled();
 });
+
+it("puts HTML file actions beside the address and uses the navigated file for downloads", async () => {
+  const props = panelProps("report.html");
+  vi.mocked(apiFetch).mockResolvedValue(new Response("<p>Detail</p>"));
+  render(<FilePreviewPanel {...props} />);
+  const toolbar = within(await screen.findByRole("group", { name: "HTML preview" }));
+  const address = toolbar.getByRole("textbox", { name: "Project HTML address" });
+  fireEvent.change(address, { target: { value: "detail.html" } });
+  fireEvent.submit(address.closest("form")!);
+  const menu = await toolbar.findByRole("button", { name: "File actions for detail.html" });
+  fireEvent.keyDown(menu, { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Download" }));
+  expect(props.onDownload).toHaveBeenCalledWith("detail.html");
+});

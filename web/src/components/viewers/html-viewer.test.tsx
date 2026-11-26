@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import { apiFetch } from "@/lib/projects";
 import HtmlViewer from "./html-viewer";
+
+vi.mock("@/lib/projects", () => ({ apiFetch: vi.fn() }));
 
 vi.mock("@/components/code-views", () => ({
   ReadOnlyCodeView: ({ content, revealLine }: { content: string; revealLine?: number }) =>
@@ -86,4 +89,36 @@ it("changes scale without replacing the interactive document and links to its st
   expect(screen.getByRole("link", { name: "Open in external browser" })).toHaveAttribute(
     "href", "/html-preview?path=reports%2Fsource+%26+target.html&project=lineage",
   );
+});
+
+it("navigates project pages, reloads from disk, and discards forward history after branching", async () => {
+  vi.mocked(apiFetch).mockImplementation(async () => new Response("<p>Updated report</p>"));
+  render(<HtmlViewer {...props} path="reports/index.html" projectId="lineage" />);
+  const address = screen.getByRole("textbox", { name: "Project HTML address" });
+  function go(value: string) {
+    fireEvent.change(address, { target: { value } });
+    fireEvent.submit(address.closest("form")!);
+  }
+  const back = screen.getByRole("button", { name: "Back" });
+  const forward = screen.getByRole("button", { name: "Forward" });
+  expect(back).toBeDisabled();
+  go("details.html#table");
+  await vi.waitFor(() => expect(address).toHaveValue("/reports/details.html#table"));
+  expect(apiFetch).toHaveBeenCalledWith("/sandbox/file?path=reports%2Fdetails.html", expect.anything(), "lineage");
+  fireEvent.click(back);
+  await vi.waitFor(() => expect(address).toHaveValue("/reports/index.html"));
+  fireEvent.click(forward);
+  await vi.waitFor(() => expect(address).toHaveValue("/reports/details.html#table"));
+  const frame = screen.getByTitle("HTML preview");
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await vi.waitFor(() => expect(screen.getByTitle("HTML preview")).not.toBe(frame));
+  fireEvent.click(back);
+  await vi.waitFor(() => expect(address).toHaveValue("/reports/index.html"));
+  go("#summary");
+  expect(address).toHaveValue("/reports/index.html#summary");
+  expect(forward).toBeDisabled();
+  const calls = vi.mocked(apiFetch).mock.calls.length;
+  go("https://example.org/report.html");
+  expect(screen.getByRole("alert")).toHaveTextContent("Enter a project HTML file path.");
+  expect(apiFetch).toHaveBeenCalledTimes(calls);
 });

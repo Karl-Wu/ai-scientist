@@ -1,4 +1,4 @@
-import { lazy, type ComponentType } from "react";
+import { lazy, type ReactNode, type ComponentType } from "react";
 import type { FileCategory } from "@/lib/use-sandbox";
 
 export type LoadMode = "text" | "raw" | "none";
@@ -11,6 +11,7 @@ export interface ViewerProps {
   onRetry?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
+  renderFileActions?: (path: string) => ReactNode;
   revealLine?: number;
   revealToken?: number;
 }

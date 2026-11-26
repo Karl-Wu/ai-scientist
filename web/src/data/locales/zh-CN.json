@@ -1,4 +1,7 @@
 {
+  "Forward": "前进",
+  "Enter a project HTML file path.": "请输入当前项目中的 HTML 文件路径。",
+  "Project HTML address": "项目 HTML 文件地址",
   "Record truncated": "记录已截断",
   "Record redacted": "记录已脱敏",
   "Record details unavailable": "部分记录详情不可用",

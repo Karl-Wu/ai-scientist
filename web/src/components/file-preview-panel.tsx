@@ -23,7 +23,9 @@ import {
   sanitizeNotebookHtml,
 } from "@/lib/notebook-output-sanitize";
 import { useTheme } from "next-themes";
-import { getViewerDef } from "@/lib/viewers/registry";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { getViewerDef, type ViewerProps } from "@/lib/viewers/registry";
 import {
   fileCategory,
   rawFileUrl,
@@ -38,6 +40,7 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import {
   FilesIcon,
+  MoreHorizontalIcon,
   GitBranchIcon,
   DownloadIcon,
   PencilIcon,
@@ -344,8 +347,9 @@ function MarkdownViewer({
 }
 
 function FileViewer({
-  path, name, content, loading, projectId, onRetry, tableEditing, onDirtyChange, onSavingChange, revealLine, revealCell, revealToken, pdfAnnotationFocus, onCreateNote,
+  path, name, content, loading, projectId, onRetry, tableEditing, onDirtyChange, onSavingChange, revealLine, revealCell, revealToken, pdfAnnotationFocus, onCreateNote, renderFileActions,
 }: {
+  renderFileActions?: ViewerProps["renderFileActions"];
   path: string; name: string | null; content: string | null; loading: boolean;
   projectId: string;
   onRetry?: () => void;
@@ -392,6 +396,7 @@ function FileViewer({
           onRetry={onRetry}
           onDirtyChange={onDirtyChange}
           onSavingChange={onSavingChange}
+          renderFileActions={renderFileActions}
           revealLine={revealLine}
           revealToken={revealToken}
         />
@@ -1841,6 +1846,29 @@ export function FilePreviewPanel({
   const canEdit = regDef ? regDef.canEditSource : (cat !== "image" && cat !== "pdf" && cat !== "anndata");
   const canAnnotate = cat === "image";
 
+  const htmlToolbar = cat === "html" && !loadingFile && fileContent !== null && !fileContent.startsWith("[Error:");
+  function htmlFileActions(path: string) {
+    const label = t("File actions for {name}", { name: path });
+    function showFileMode(next: "provenance" | "edit") {
+      if (path !== selectedPath) onTabSelect(path, "open");
+      setMode(path, next);
+    }
+    return <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button ref={fileNoteButton} size="icon-xs" variant="ghost" aria-label={label} title={label}><MoreHorizontalIcon /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="max-w-64 truncate" title={path}>{path}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => showFileMode("provenance")}><GitBranchIcon />{t("Provenance")}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setFileNoteCreation({ title: path.split("/").pop() ?? path, anchor: { kind: "file", path } })}>
+          <NotebookPenIcon />{t("Write a note for this file")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => showFileMode("edit")}><PencilIcon />{t("Edit file")}</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onDownload(path)}><DownloadIcon />{t("Download")}</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>;
+  }
+
   const header = selectedPath && (
     <div className="flex shrink-0 items-center gap-1.5 border-b px-3 py-2">
       {selectedName && <KadyFileIcon name={selectedName} />}
@@ -2056,7 +2084,7 @@ export function FilePreviewPanel({
       {/* View mode */}
       {selectedPath && mode === "view" && !inlineTable && (
         <>
-          {header}
+          {!htmlToolbar && header}
           <div className={cn(
             "flex-1 min-h-0",
             // These viewers manage their own scroll internally
@@ -2065,6 +2093,7 @@ export function FilePreviewPanel({
               : "overflow-auto bg-muted/10"
           )}>
             <FileViewer
+              renderFileActions={htmlToolbar ? htmlFileActions : undefined}
               path={selectedPath}
               projectId={projectId}
               name={selectedName}
