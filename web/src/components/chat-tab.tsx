@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCAL_PREVIEW_EVENT, previewAction } from "@/lib/local-preview";
 import taskSummaryStyles from "./task-summary.module.css";
 
 import { ConversationMap } from "@/components/conversation-map";
@@ -1637,7 +1638,16 @@ export const AssistantMessageBody = memo(function AssistantMessageBody({
   };
   const appendActivity = (a: ActivityItem, current: boolean) => {
     if (hasSummary && orderedBlocks === processBlocks && !a.scientificResult && a.toolName !== "permission") processActivities.push(a);
-    if (a.toolName === "interview") {
+    const preview = a.toolName === "open_local_preview" && a.status === "complete" && previewAction(a.result);
+    if (preview && sessionId) {
+      flushExecution();
+      (hasSummary ? resultBlocks : orderedBlocks).push(
+        <button type="button" key={a.id} className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+          onClick={() => window.dispatchEvent(new CustomEvent(LOCAL_PREVIEW_EVENT, {
+            detail: { ...preview, projectId, sessionId },
+          }))}>{t("Open preview")} · {preview.title}</button>,
+      );
+    } else if (a.toolName === "interview") {
       flushExecution();
       orderedBlocks.push(
         <div key={a.id}>

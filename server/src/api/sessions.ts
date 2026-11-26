@@ -6,6 +6,7 @@
  * compact client schema from agent/events.ts, then emits a terminal `cost`
  * frame sourced from Pi's per-session usage accounting.
  */
+import { withPreviewOrigin } from "../agent/local-preview.ts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { registerTaskResponseRoutes } from "./task-responses.ts";
 import { activePaths, getProject, touchProject } from "../projects.ts";
@@ -965,11 +966,11 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
           billing: runBilling,
           budgetPolicy: "refuse",
           log: req.log,
-          run: () =>
+          run: () => withPreviewOrigin(req.headers.origin, () =>
             session.prompt(prompt, {
               expandPromptTemplates: dispatchExtensionCommand,
               ...(parsedImages.images.length > 0 ? { images: parsedImages.images } : {}),
-            }),
+            })),
         });
 
         // POST /run remains an SSE endpoint, now subscribed to the same replay

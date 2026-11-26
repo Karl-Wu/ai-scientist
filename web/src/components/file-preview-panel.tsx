@@ -1,5 +1,7 @@
 "use client";
 
+import type { LocalPreviewRef } from "@/lib/local-preview";
+import { LiveHtmlPreview } from "@/components/viewers/live-html-preview";
 import { useT } from "@/components/i18n-provider";
 
 import { TableFileViewer, type InlineTableEditing } from "./table-explorer";
@@ -1688,6 +1690,8 @@ export interface RevealTarget {
 }
 
 export interface FilePreviewPanelProps {
+  livePreview?: LocalPreviewRef;
+  onCloseLivePreview?: () => void;
   projectId: string;
   isActive?: boolean;
   activeModelRef?: string;
@@ -1727,6 +1731,7 @@ export interface FilePreviewPanelProps {
 }
 
 export function FilePreviewPanel({
+  livePreview, onCloseLivePreview,
   projectId,
   isActive = true,
   activeModelRef,
@@ -1829,7 +1834,7 @@ export function FilePreviewPanel({
   const selectedName = selectedPath?.split("/").pop() ?? null;
   const selectedWorkbook = selectedPath && /\.xlsx$/i.test(selectedPath) ? selectedPath : null;
   const inlineTable = Boolean(selectedWorkbook || (selectedPath && onSaveTable && tableDelimiter(selectedPath)));
-  const filePreviewVisible = isActive && mode === "view" && !showNotebook && !showCompute && !showAutomation;
+  const filePreviewVisible = !livePreview && isActive && mode === "view" && !showNotebook && !showCompute && !showAutomation;
   useEffect(() => {
     if (filePreviewVisible && selectedWorkbook) visitedWorkbooks.current.add(selectedWorkbook);
   }, [filePreviewVisible, selectedWorkbook]);
@@ -1939,7 +1944,7 @@ export function FilePreviewPanel({
       {/* Tab bar */}
       <TabBar
         tabs={tabs}
-        activeTabPath={activeTabPath}
+        activeTabPath={livePreview ? null : activeTabPath}
         tabModes={tabModes}
         onSelect={(path) => onTabSelect(path, "preview")}
         onClose={closeTab}
@@ -1952,7 +1957,7 @@ export function FilePreviewPanel({
       {/* Each open editor owns its draft/undo history. Keep it mounted while
           viewing another file or project panel; only an explicit close discards. */}
       {tabs.filter((tab) => tabModes[tab.path] === "edit" || tabModes[tab.path] === "annotate").map((tab) => {
-        const visible = isActive && tab.path === selectedPath && !showNotebook && !showCompute && !showAutomation;
+        const visible = !livePreview && isActive && tab.path === selectedPath && !showNotebook && !showCompute && !showAutomation;
         const name = tab.path.split("/").pop() ?? "";
         const discard = () => {
           if (!confirmDiscard(tab.path)) return;
@@ -2034,6 +2039,8 @@ export function FilePreviewPanel({
           focusJob={computeFocus}
           onOpenOutput={onOpenComputeOutput}
         />
+      ) : livePreview ? (
+        <LiveHtmlPreview key={livePreview.previewId} preview={livePreview} onClose={onCloseLivePreview} />
       ) : (
       <>
       {/* Empty state — no tabs open */}

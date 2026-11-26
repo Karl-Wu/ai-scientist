@@ -6,6 +6,8 @@ import { isCorsOriginAllowed, isLoopbackHostname } from "../cors.ts";
 import { safePath, SandboxError } from "../sandbox-fs.ts";
 import { currentProjectId } from "../scope.ts";
 
+import { resolvePreview } from "../agent/local-preview.ts";
+
 const run = promisify(execFile);
 const LOOPBACK_IPS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
@@ -21,6 +23,11 @@ async function launchBrowser(url: string): Promise<void> {
 }
 
 export function registerHtmlPreviewOpen(app: FastifyInstance, launch = launchBrowser): void {
+  app.post<{ Params: { session: string; id: string } }>("/sessions/:session/local-previews/:id", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const url = resolvePreview(req.params.id, req.headers.origin, currentProjectId(), req.params.session);
+    return url ? { url } : reply.code(404).send({ detail: "Preview unavailable. Ask the tool to open it again." });
+  });
   app.post<{ Body: { path?: unknown } }>("/sandbox/html-preview/open", async (req, reply) => {
     const origin = req.headers.origin;
     if (!origin || !isCorsOriginAllowed(origin) || !LOOPBACK_IPS.has(req.ip) ||

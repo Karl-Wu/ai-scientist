@@ -207,3 +207,31 @@ by day, month or year using the calendar date written in the source, without
 browser timezone conversion. Periods without records are omitted. More than 200
 date groups require a coarser grouping or a filter; counts are never silently
 truncated. Existing full-file versus bounded-preview scope still applies.
+
+### Local pages from trusted tools
+
+In a local chat, ask the agent to open the application's resource, then click **Open preview** in the tool result. The existing HTML Preview panel loads the page directly. Closing and reopening it loads the same address. The application owns saved data and needs to allow the platform origin as a frame ancestor. A file opened from the file list uses the isolated file viewer as before.
+
+Install the adapter outside the project workspace. Register it in `~/.config/kady/preview-adapters.json` (or set `KADY_PREVIEW_ADAPTERS` to an absolute configuration file path) and start a new chat. Each entry specifies a project and a fixed executable and arguments, for example:
+
+```json
+[{
+  "project": "example",
+  "id": "review",
+  "description": "Open an existing review using its resource ID.",
+  "executable": "/usr/bin/python3",
+  "args": ["-I", "/opt/local-tools/open-review.py"]
+}]
+```
+
+The agent calls `open_local_preview` with `adapter` and `resource`. The platform launches the registered command directly and sends one JSON object on stdin with `platform_origin`, `project_id`, `workspace`, and `resource`. The adapter uses that origin to configure its own service, starts or reuses it, then writes one JSON result on stdout:
+
+```json
+{"open_preview":{"kind":"local_url","url":"http://127.0.0.1:45123/editor?view=draft#example","title":"Review editor"}}
+```
+
+The title and resource identifier are visible in chat. Keep credentials exclusively in the private URL. Adapters should avoid logging that URL themselves. Allowed destinations are HTTP services on an explicit localhost or 127.0.0.1 port distinct from the platform UI and API. The page runs scripts on its own origin. After loading it can call `parent.postMessage({type: "local-preview-ready"}, platform_origin)`. Browsers conceal cross-origin embedding errors, so without confirmation the panel offers troubleshooting and reload. The browser and application service must be on the same machine. Match the platform's hostname when the application uses same-site cookies.
+
+Only an opaque reference and the title enter the tool result. Clicking it resolves the address in the originating project, chat and browser origin. References expire after eight hours, may be evicted at capacity, and expire on backend restart. Ask the tool to reopen the resource to obtain a fresh reference.
+
+To verify in Chrome, run the web dev service, then from `server/` run `node --import tsx scripts/local-preview-acceptance.mjs`. Set `PLAYWRIGHT_MODULE` to an installed Playwright module if needed and `CHROME_PATH` to a local browser executable. The check uses a temporary project, a separate local editor, and a recorded chat containing the real adapter result.

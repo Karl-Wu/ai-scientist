@@ -37,6 +37,7 @@ import { canonicalProviderId } from "./provider-catalog.ts";
 import { seedAgentFiles } from "./agent-files.ts";
 import { makeInterviewTool } from "./interview.ts";
 import { makeChatOpeningExtension } from "./chat-opening.ts";
+import { localPreviewTools } from "./local-preview.ts";
 import { makeNoteReadTool } from "../notes/read-tool.ts";
 import { makeScientificResultTool } from "./scientific-result.ts";
 import { clearSessionCompute, makeModalTools } from "./modal-tool.ts";
@@ -449,6 +450,7 @@ async function build(
   // Pi 1.0 image models (OpenRouter's), saved into the sandbox and billed by
   // their own provider; reachable without codemode.
   const imageTool = makeImageTool(projectId, (provider) => modelRuntime.checkAuth(provider));
+  const previewTools = localPreviewTools(projectId, () => holder.session?.sessionId ?? "", paths.sandbox);
   const { session } = await createAgentSession({
     cwd: paths.sandbox,
     // A cold-opened session starts on the model it last ran with (or the
@@ -469,10 +471,13 @@ async function build(
     // pi-subagents 0.78 that includes `contact_supervisor`: forks then declare
     // their parent's exact tool list and reuse its prompt cache; a lead call
     // just returns an error.
+    // Pi restores historical tool declarations on resume. Apply additions to that loadout too.
+    tools: previewTools.length ? previewTools.map(tool => "+" + tool.name) : undefined,
     excludeTools: LEAD_EXCLUDED_TOOLS,
     customTools: [
       interviewTool,
       makeNoteReadTool(projectId),
+      ...previewTools,
       scientificResultTool,
       ...pdfAnnotationTools,
       ...modalTools,

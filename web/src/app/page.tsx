@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCAL_PREVIEW_EVENT, type LocalPreviewRef } from "@/lib/local-preview";
 import { useT } from "@/components/i18n-provider";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -486,6 +487,18 @@ function WorkspacePage({
     setShowCompute(destination === "compute");
     setShowAutomation(destination === "automation");
   }, []);
+  const [livePreview, setLivePreview] = useState<LocalPreviewRef>();
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<LocalPreviewRef>).detail;
+      if (!isActive || detail?.projectId !== projectId) return;
+      setLivePreview(detail);
+      setRightPanelOpen(true);
+      selectProjectDestination("files");
+    };
+    window.addEventListener(LOCAL_PREVIEW_EVENT, open);
+    return () => window.removeEventListener(LOCAL_PREVIEW_EVENT, open);
+  }, [isActive, projectId, selectProjectDestination]);
   const [noteCreation, setNoteCreation] = useState<NoteCreationSource>();
   const handleCreateNote = useCallback((source: NoteCreationSource) => {
     setNoteCreation(source);
@@ -1006,6 +1019,7 @@ function WorkspacePage({
   const handleFileSelect = useCallback((path: string, mode: FileOpenMode = "open") => {
     setFileSourceInput(undefined);
     setPdfAnnotationFocus(undefined);
+    setLivePreview(undefined);
     void sandboxSelectFile(path, mode);
     setView("chat");
     setShowNotebook(false);
@@ -1332,6 +1346,7 @@ function WorkspacePage({
               )}
               <div className={cn("min-h-0 min-w-0 flex-1 overflow-hidden", view === "workflows" && "hidden")}>
               <FilePreviewPanel
+                livePreview={livePreview} onCloseLivePreview={() => setLivePreview(undefined)}
                 projectId={projectId}
                 isActive={isActive}
                 activeModelRef={tabWorkspaceStates[activeTabId]?.selectedModel.id}
