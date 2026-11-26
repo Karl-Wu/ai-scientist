@@ -1,0 +1,138 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>K-Dense 多用户部署方案：Agent Gateway</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f6f8f7;color:#20332e;font:16px/1.8 system-ui,"PingFang SC",sans-serif}main{max-width:980px;margin:auto;padding:48px clamp(18px,5vw,70px) 72px;background:white;border-top:6px solid #146554}h1{font-size:clamp(26px,4vw,40px);line-height:1.3}h2{margin:2em 0 .7em;font-size:1.4rem;border-bottom:1px solid #ceddd5;padding-bottom:.35em}a{color:#096352;text-underline-offset:3px}nav{background:#edf5f1;padding:16px 22px;border-radius:8px}nav ul{padding:0;margin:.4em 0 0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.3em}pre,.scroll{overflow-x:auto}pre{background:#18382f;color:#f3faf7;padding:18px;border-radius:8px;line-height:1.65}code{font-family:ui-monospace,monospace}p code,td code,li code{background:#eff4f1;padding:.08em .22em;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%;font-size:.95em}th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid #d7e0da}th{background:#edf5f1}td:first-child{min-width:7em}li{margin:.25em 0}@media print{main{padding:0;border:0;max-width:none}nav{display:none}h2{break-after:avoid}tr{break-inside:avoid}pre{font-size:10px;background:white;color:black}.scroll{overflow:visible}}
+</style></head><body><main><h1>K-Dense 多用户部署方案：Agent Gateway</h1>
+<p><strong>状态：架构提案。</strong> 首期面向单个 Kubernetes 集群。所有用户共用一套 Next.js 前端和一个独立部署的 Agent Gateway 服务。每位用户拥有一个私有、常驻的 Agent Server 和独立持久化空间。Gateway 可以单独发布、重启和扩容。现阶段无需再拆分 Portal 和 Core。</p>
+<nav aria-label="目录"><strong>目录</strong><ul><li><a href="#s1">1. 部署拓扑与一次请求</a></li><li><a href="#s2">2. 组件与状态归属</a></li><li><a href="#s3">3. 身份、实例注册与授权</a></li><li><a href="#s4">4. 持久化与断线恢复</a></li><li><a href="#s5">5. 分阶段实施</a></li><li><a href="#s6">6. 首期验收</a></li></ul></nav><h2 id="s1">1. 部署拓扑与一次请求</h2>
+<p><img alt="部署拓扑与请求路径" style="width:100%;max-width:760px;height:auto;display:block;margin:auto" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NjAgNTI1IiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+PHRpdGxlIGlkPSJ0aXRsZSI+6YOo572y5ouT5omR5LiO6K+35rGC6Lev5b6EPC90aXRsZT48ZGVzYyBpZD0iZGVzYyI+6aG16Z2i6K+35rGC5Yiw5YWx5LqrIE5leHQuanPvvIxBUEkg6K+35rGC57uPIEdhdGV3YXkg5Yiw5b2T5YmN55So5oi355qEIEFnZW5044CCU1NFIOayvyBBUEkg6Lev5b6E6L+U5Zue44CCPC9kZXNjPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93IiB2aWV3Qm94PSIwIDAgMTAgMTAiIHJlZlg9IjkiIHJlZlk9IjUiIG1hcmtlcldpZHRoPSI2IiBtYXJrZXJIZWlnaHQ9IjYiIG9yaWVudD0iYXV0byI+PHBhdGggZD0iTTAgMEwxMCA1TDAgMTAiIGZpbGw9IiMzNTY4NTciLz48L21hcmtlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzU2ODU3IiBzdHJva2Utd2lkdGg9IjIiIG1hcmtlci1lbmQ9InVybCgjYXJyb3cpIj48cGF0aCBkPSJNMzMwIDc4VjEwMSIvPjxwYXRoIGQ9Ik0zMTAgMTcyVjE4N0gxNDdWMjE1Ii8+PHBhdGggZD0iTTM1MCAxNzJWMTg3SDUwOFYyMTUiLz48cGF0aCBkPSJNNDM4IDI4NlYzMDhIMTQ3VjMzOSIvPjxwYXRoIGQ9Ik01MDggMjg2VjMzOSIvPjxwYXRoIGQ9Ik01MDggNDEwVjQ0MSIvPjwvZz48ZyBmb250LWZhbWlseT0ic3lzdGVtLXVpLHNhbnMtc2VyaWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMxNDNkMzAiPjxyZWN0IHg9IjE4MCIgeT0iMTIiIHdpZHRoPSIzMDAiIGhlaWdodD0iNjYiIHJ4PSI5IiBmaWxsPSIjZWVmNmYxIiBzdHJva2U9IiM4OWFjOWIiLz48dGV4dCB4PSIzMzAiIHk9IjQwIiBmb250LXNpemU9IjE4IiBmb250LXdlaWdodD0iYm9sZCI+55So5oi35rWP6KeI5ZmoPC90ZXh0Pjx0ZXh0IHg9IjMzMCIgeT0iNjMiIGZvbnQtc2l6ZT0iMTQiPmFnZW50LmV4YW1wbGUuY29tPC90ZXh0PjxyZWN0IHg9IjE4MCIgeT0iMTA2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjY2IiByeD0iOSIgZmlsbD0iI2VlZjZmMSIgc3Ryb2tlPSIjODlhYzliIi8+PHRleHQgeD0iMzMwIiB5PSIxMzQiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIj7lhaznvZHlhaXlj6M8L3RleHQ+PHRleHQgeD0iMzMwIiB5PSIxNTciIGZvbnQtc2l6ZT0iMTQiPuaMiei3r+W+hOWIhuWPkTwvdGV4dD48cmVjdCB4PSIxMiIgeT0iMjIwIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjY2IiByeD0iOSIgZmlsbD0iI2VlZjZmMSIgc3Ryb2tlPSIjODlhYzliIi8+PHRleHQgeD0iMTQ3IiB5PSIyNDgiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIj7lhbHkuqsgS2FkeSBXZWIgQXBwPC90ZXh0Pjx0ZXh0IHg9IjE0NyIgeT0iMjcxIiBmb250LXNpemU9IjE0Ij7njrDmnIkgd2ViLyDCtyBOZXh0LmpzPC90ZXh0PjxyZWN0IHg9IjM2OCIgeT0iMjIwIiB3aWR0aD0iMjgwIiBoZWlnaHQ9IjY2IiByeD0iOSIgZmlsbD0iI2VlZjZmMSIgc3Ryb2tlPSIjODlhYzliIi8+PHRleHQgeD0iNTA4IiB5PSIyNDgiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIj7ni6znq4sgQWdlbnQgR2F0ZXdheTwvdGV4dD48dGV4dCB4PSI1MDgiIHk9IjI3MSIgZm9udC1zaXplPSIxNCI+6aqM6K+B55m75b2VIMK3IOafpeivouW9kuWxnjwvdGV4dD48cmVjdCB4PSIxMiIgeT0iMzQ0IiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjY2IiByeD0iOSIgZmlsbD0iI2VlZjZmMSIgc3Ryb2tlPSIjODlhYzliIi8+PHRleHQgeD0iMTQ3IiB5PSIzNzIiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIj7kvIHkuJogSWRQIC8gUG9zdGdyZVNRTDwvdGV4dD48dGV4dCB4PSIxNDciIHk9IjM5NSIgZm9udC1zaXplPSIxNCI+55m75b2V5o6I5p2DIC8g5Lya6K+d5LiO5a6e5L6L5pig5bCEPC90ZXh0PjxyZWN0IHg9IjM2OCIgeT0iMzQ0IiB3aWR0aD0iMjgwIiBoZWlnaHQ9IjY2IiByeD0iOSIgZmlsbD0iI2VlZjZmMSIgc3Ryb2tlPSIjODlhYzliIi8+PHRleHQgeD0iNTA4IiB5PSIzNzIiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSJib2xkIj7nlKjmiLcgQSDnmoTnp4HmnIkgU2VydmljZTwvdGV4dD48dGV4dCB4PSI1MDgiIHk9IjM5NSIgZm9udC1zaXplPSIxNCI+6L2s5Y+R57uZIEEg55qEIEFnZW50IFNlcnZlcjwvdGV4dD48cmVjdCB4PSIzNjgiIHk9IjQ0NiIgd2lkdGg9IjI4MCIgaGVpZ2h0PSI2NiIgcng9IjkiIGZpbGw9IiNlZWY2ZjEiIHN0cm9rZT0iIzg5YWM5YiIvPjx0ZXh0IHg9IjUwOCIgeT0iNDc0IiBmb250LXNpemU9IjE4IiBmb250LXdlaWdodD0iYm9sZCI+55So5oi3IEEg55qEIEFnZW50IFNlcnZlcjwvdGV4dD48dGV4dCB4PSI1MDgiIHk9IjQ5NyIgZm9udC1zaXplPSIxNCI+5omn6KGMIFJ1biDCtyDorr/pl67nlKjmiLcgQSDnmoQgUFZDPC90ZXh0Pjx0ZXh0IHg9IjgzIiB5PSIyMTAiIGZvbnQtc2l6ZT0iMTQiPuKRoCDpobXpnaLkuI7pnZnmgIHotYTmupA8L3RleHQ+PHRleHQgeD0iNDE2IiB5PSIyMTAiIGZvbnQtc2l6ZT0iMTQiPuKRoSAvYXBpL2thZHkvKjwvdGV4dD48L2c+PC9zdmc+"></p>
+<p>① 打开页面时，入口从共享 Web App 取得界面。② 点击发送后，浏览器发起另一条请求，由入口送到 Gateway，再转给当前用户的 Agent。回答以 SSE 沿第二条路径返回浏览器。图中以用户 A 为例，其他用户各有自己的 Service、Agent Server 和存储。登录回调也由入口转给 Gateway。</p>
+<p><strong>现有 Web App 与 Next.js 的关系。</strong> 仓库里的 <code>web/</code> 就是用户操作 Kady 的 Web App，Next.js 是构建和运行这个界面的框架。“共享部署”指把现有界面部署一套供所有用户访问。每个用户单独运行的是 <code>server/</code> 后端。第 5 节所说的“应用访问”指用户让 Agent 生成的交互式网页，例如科研报告，属于项目产物。</p>
+<p>“同源”指浏览器访问网页和 API 时使用相同的协议、主机名和端口。用户打开 <code>https://agent.example.com/chat</code> 后，页面调用 <code>fetch(&quot;/api/kady/projects&quot;)</code>，浏览器访问的就是同一域名下的 API。公网入口按路径直接转发给相应服务，API 请求无需经过 Next.js。</p>
+<p>托管版前端构建时将 <code>NEXT_PUBLIC_ADK_API_URL</code> 设为 <code>/api/kady</code>。例如，登录用户提交 <code>POST /api/kady/sessions/:id/run</code> 后，Gateway 验证会话和授权，按用户归属选定 Agent，去掉公网前缀，再向该 Agent 转发 <code>POST /sessions/:id/run</code>。当前单端口部署在 <a href="../web/server.mjs">web/server.mjs</a> 中使用同一前缀代理到固定后端；托管版由入口和 Gateway 接管这条路径。</p>
+<h2 id="s2">2. 组件与状态归属</h2>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>组件</th>
+<th>负责什么</th>
+<th>保存什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Next.js</td>
+<td>提供聊天、文件和设置界面，调用同源 API</td>
+<td>前端构建产物</td>
+</tr>
+<tr>
+<td>Agent Gateway</td>
+<td>OIDC 登录、注销、会话校验、授权、实例查询、HTTP/SSE 代理</td>
+<td>通过中心库保存身份、登录会话和实例映射</td>
+</tr>
+<tr>
+<td>Agent Provider</td>
+<td>解析私有端点，后续支持创建、升级、启停</td>
+<td>Provider 专属的部署引用和运行状态</td>
+</tr>
+<tr>
+<td>Agent Server</td>
+<td>管理项目和对话，执行工具与 Run，提供流式输出和恢复接口</td>
+<td>用户的科研数据、对话、执行记录、模型凭证和个人配置</td>
+</tr>
+</tbody></table></div>
+<p><strong>登录 Session</strong> 由 Gateway 创建和撤销。<strong>对话 Session</strong> 由 Agent 创建和恢复，可以跨多次登录持续存在。退出登录会撤销浏览器的访问权；已经开始的 Run 有独立的取消操作。浏览器提交的项目标识和对话 ID 仅在选定的 Agent 内生效。</p>
+<h2 id="s3">3. 身份、实例注册与授权</h2>
+<ol>
+<li>Gateway 对接企业 OIDC，使用验证过的 <code>(issuer, subject)</code> 映射内部用户 ID。浏览器持有仅限主站的 Secure、HttpOnly 会话 Cookie。对写操作实施 CSRF 防护。首期可用 PostgreSQL 同时保存会话与注册表。</li>
+<li>注册表分别记录用户归属（用户 ID、Agent ID）和部署信息（Agent ID、Provider、部署引用）。首期对用户和 Agent 的归属分别设置唯一约束。Kubernetes 引用包含集群、命名空间、Service 名和端口，使用稳定的 Service DNS。实例未登记或尚未就绪时，返回相应错误。</li>
+<li>Gateway 仅从受控注册表选择端点，剥离外部身份头和网关登录凭证，通过 TLS 向选定实例发送短期签名令牌。Agent 验证签发者、签名、有效期，并将令牌的 <code>aud</code>、<code>sub</code> 分别与部署时配置的自身 Agent ID、所属用户 ID 比对。即使路由记录误指向其他用户，接收方也能拒绝请求。签名私钥仅由 Gateway 持有。</li>
+<li>Agent 使用私有 Service。集群采用默认拒绝的网络策略，显式开放网关入站和 DNS、模型服务等所需出站，并核实网络插件执行策略。Agent 只挂载本用户存储，配置 CPU、内存限制，关闭不需要的 Kubernetes 服务账号令牌挂载。未来负责部署的 worker 单独获得所需集群写权限。</li>
+</ol>
+<h2 id="s4">4. 持久化与断线恢复</h2>
+<p>Pod 重建后的成功标准是用户能打开旧对话，并继续用已配置的模型发送消息。只恢复聊天文件无法满足第二项。</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>数据</th>
+<th>当前存放位置</th>
+<th>托管部署要求</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>项目、对话、产物、成本账本、任务记录</td>
+<td><code>projects/</code> 及各项目 sandbox</td>
+<td>每用户持久化 <code>KADY_PROJECTS_ROOT</code>，升级时保证单一 Agent 进程写入</td>
+</tr>
+<tr>
+<td>Pi OAuth 凭证、个人默认设置、全局技能</td>
+<td>默认 <code>~/.kady/pi-agent/</code></td>
+<td>将有效 Pi 用户目录指向该用户的持久化空间，限制凭证文件权限</td>
+</tr>
+<tr>
+<td>Settings 保存的模型密钥与服务配置</td>
+<td>当前凭证接口默认写仓库根目录 <code>.env</code></td>
+<td>为每用户提供可写且持久的配置位置；若调整路径，同时适配启动加载与 Settings 的写入、更新和清除</td>
+</tr>
+</tbody></table></div>
+<p><strong>说明：Pi 用户目录为什么要持久化？</strong> Pi 是 Kady 后端用来运行 Agent 和调用模型的 SDK。默认目录 <code>~/.kady/pi-agent/</code> 保存以下三类内容，供同一用户的多个项目复用。</p>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>内容</th>
+<th>用途</th>
+<th>Pod 重建时丢失的影响</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>供应商 OAuth 凭证（<code>auth.json</code>）</td>
+<td>用户在 Settings → Providers 登录模型供应商后，Pi 使用保存的凭证调用该供应商的模型。</td>
+<td>企业 SSO 仍可用于登录 Kady，但用户可能要重新连接模型供应商才能继续对话。</td>
+</tr>
+<tr>
+<td>个人默认设置（<code>kady-settings.json</code>）</td>
+<td>保存 Settings → Defaults 中的默认模型、思考级别等偏好。</td>
+<td>新项目的第一个聊天标签页可能回到系统默认值。已保存在项目中的对话记录仍可恢复。</td>
+</tr>
+<tr>
+<td>全局技能（<code>skills/</code>）</td>
+<td>让同一用户的多个项目复用操作说明和配套文件，例如自定义的数据分析流程。同名时优先使用项目技能。</td>
+<td>新会话无法加载丢失的用户级技能。保存在项目持久卷中的技能仍可使用。</td>
+</tr>
+</tbody></table></div>
+<p>这里的“全局”仅指当前用户的 Agent 环境。每位用户应有自己的 Pi 用户目录，避免共享模型凭证或个人配置。</p>
+<p>这些目录可以共用一个用户专属 PVC 的不同子目录。若凭证改存专用密钥服务，必须接通 Settings 的读写与撤销流程。Pi 的供应商授权与 Gateway 的企业登录分别管理。</p>
+<p>Gateway 流式转发 SSE 和文件上传下载。公网入口和 Gateway 均需配置流式响应、合适的空闲超时及上传大小限制。浏览器断线后按现有协议查询 <code>/sessions/:id/run/state</code> 并接回原 Run；Gateway 禁止自动重发启动 Run 的 POST。网络断线恢复与 Pod 故障恢复分别验收：持久卷可恢复已落盘的数据，进程内执行中的 Run 仍可能中断。网关日志仅记录诊断所需的请求标识、结果和耗时，避免记录正文、Cookie 和模型凭证。</p>
+<h2 id="s5">5. 分阶段实施</h2>
+<div class="scroll"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>交付范围</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1 · 基础 Gateway</td>
+<td>用 Fastify + TypeScript 独立部署 Gateway，接入企业 OIDC、PostgreSQL、私有 Service 和 HTTP/SSE 代理。手工部署并登记常驻 Agent。</td>
+</tr>
+<tr>
+<td>2 · 自动部署</td>
+<td>独立 worker 通过 Kubernetes Provider 管理工作负载、Service 和 PVC，以期望状态驱动重试和恢复。区分停机、删除计算实例和清除用户数据。</td>
+</tr>
+<tr>
+<td>3 · 应用访问</td>
+<td>为 Agent 生成的交互式网页提供隔离来源、应用授权，以及需要的 WebSocket 转发。主站 Cookie 仅限主站。</td>
+</tr>
+<tr>
+<td>4 · Control Plane</td>
+<td>加入按需唤醒、配额、计量、多集群与其他 Provider。在线状态只作为调度参考。</td>
+</tr>
+</tbody></table></div>
+<p><strong>网页隔离从支持可执行内容时生效。</strong> 首期允许生成的 HTML 下载、查看源码或在禁用脚本的沙箱中预览。若首期就要执行用户生成的脚本，应同步提供隔离来源，防止脚本借用主站会话访问科研数据。</p>
+<p><strong>缩容需要排空协议。</strong> 停机前先阻止新的 Run 和后台任务进入，再检查活跃执行、持久任务回收和定时唤醒责任。只有任务已完成或可恢复、需要的唤醒已交给外部调度器时，才将副本数降到零。升级同样应避免新旧进程同时写入用户状态。</p>
+<h2 id="s6">6. 首期验收</h2>
+<ul>
+<li>两个用户从同一域名登录，使用相同项目名时仍只看到各自的数据。故意把 A 的路由指向 B，B 拒绝请求。</li>
+<li>通过真实公网入口上传文件、启动 Run、逐步收到 SSE、下载结果。断线重连后接回同一个 Run，只产生一次执行。</li>
+<li>替换用户 Pod 后，旧对话、文件、技能和模型配置可用。更新或清除凭证后再次重建，验证新值生效、旧值不会恢复。</li>
+<li>注销后旧登录会话无法发起新请求。重新登录后可以查看原对话及后台任务状态。</li>
+<li>验证用户 Pod 之间的网络访问和卷挂载符合隔离策略。生成的网页无法借主站登录会话调用科研 API。</li>
+</ul>
+</main></body></html>
