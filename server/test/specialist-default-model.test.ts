@@ -9,6 +9,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { PROJECTS_ROOT } from "../src/config.ts";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { setSubagentDefaultModel, settingsPinnedModels } from "../src/agent/agent-files.ts";
+import { RESEARCH_NOTE_CURATOR } from "../src/agent/subagents.ts";
 import { piSettingsPath, readPiSettings, writePiSettings } from "../src/agent/capability-state.ts";
 import { buildApp } from "../src/index.ts";
 
@@ -86,11 +87,17 @@ describe("GET/PUT /agents/defaults", () => {
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toEqual({ defaultModel: "openrouter/anthropic/claude-sonnet-5" });
     expect((await get()).json()).toEqual({ defaultModel: "openrouter/anthropic/claude-sonnet-5" });
+    const roster = () => app.inject({ url: "/agents", headers });
+    expect((await roster()).json().agents).toContainEqual(expect.objectContaining({
+      name: RESEARCH_NOTE_CURATOR, noteDraftModel: "openrouter/anthropic/claude-sonnet-5",
+    }));
 
     const cleared = await put({ defaultModel: null });
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json()).toEqual({ defaultModel: null });
     expect(settingsPinnedModels(paths()).defaultModel).toBeUndefined();
+    expect((await roster()).json().agents.find((agent: { name: string }) => agent.name === RESEARCH_NOTE_CURATOR))
+      .not.toHaveProperty("noteDraftModel");
   });
 
   it("is project-scoped", async () => {
@@ -137,7 +144,7 @@ describe("GET/PUT /agents/defaults", () => {
 });
 
 it("keeps the default note expert project-scoped and accepts only eligible experts", async () => {
-  const expert = "scientific-result-reviewer";
+  const expert = RESEARCH_NOTE_CURATOR;
   const otherId = createProject({ name: "Other note project" }).id;
   const roster = (projectId = PROJECT) => app.inject({ url: "/agents", headers: { "x-project-id": projectId } });
   const set = (name: string | null) => app.inject({ method: "PUT", url: "/agents/note-default", headers, payload: { expert: name } });

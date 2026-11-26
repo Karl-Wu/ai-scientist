@@ -36,13 +36,14 @@ function recordText(text: string, max = MAX_TEXT, alreadyTruncated = false): Rec
 
 // Traverse only a bounded part of the JSON tree; keep unstructured strings
 // bounded as well. No arbitrary tool details or attachment bytes are copied.
-export function recordArgs(args: unknown, sandbox: string): RecordedContent {
+export function recordArgs(args: unknown, sandbox: string, complete = false): RecordedContent {
   if (args === undefined) return { kind: "omitted", reason: "unavailable" };
-  let remaining = MAX_TEXT;
+  let remaining = complete ? Infinity : MAX_TEXT;
+  const itemLimit = complete ? Infinity : MAX_JSON_ITEMS;
   let redacted = false;
   let truncated = false;
   const visit = (value: unknown, depth: number): unknown => {
-    if (depth > MAX_JSON_DEPTH || remaining <= 0) {
+    if ((!complete && depth > MAX_JSON_DEPTH) || remaining <= 0) {
       truncated = true;
       return null;
     }
@@ -56,19 +57,20 @@ export function recordArgs(args: unknown, sandbox: string): RecordedContent {
       return relativizeSandboxPaths(clean, sandbox);
     }
     if (Array.isArray(value)) {
-      truncated ||= value.length > MAX_JSON_ITEMS;
-      return value.slice(0, MAX_JSON_ITEMS).map((item) => visit(item, depth + 1));
+      truncated ||= value.length > itemLimit;
+      return value.slice(0, itemLimit).map((item) => visit(item, depth + 1));
     }
     if (value && typeof value === "object") {
       const entries: [string, unknown][] = [];
       for (const key of Object.keys(value)) {
-        if (entries.length >= MAX_JSON_ITEMS || remaining <= 0) {
+        if (entries.length >= itemLimit || remaining <= 0) {
           truncated = true;
           break;
         }
-        const safeKey = key.slice(0, 160);
+        const safeKey = complete ? redactText(key) : key.slice(0, 160);
         remaining -= safeKey.length + 8;
-        truncated ||= key.length > safeKey.length;
+        if (complete) redacted ||= key !== safeKey;
+        else truncated ||= key.length > safeKey.length;
         if (SENSITIVE_KEY.test(key.replace(/[^a-z0-9]/gi, ""))) {
           entries.push([safeKey, HIDDEN]);
           redacted = true;

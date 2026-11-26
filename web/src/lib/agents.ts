@@ -24,6 +24,8 @@ export interface AgentFile {
   inheritSkills?: boolean;
   /** Provided by the roster for specialists that can run in the note editor. */
   canDraftNotes?: boolean;
+  /** Configured model for note drafting, absent when the expert inherits the task model. */
+  noteDraftModel?: string;
   /** pi-subagents per-agent persistent memory (`MEMORY.md` injected each run). */
   memory?: AgentMemory;
   /** Frontmatter keys the UI doesn't model; preserved on save. */
@@ -40,7 +42,7 @@ export interface AgentMemory {
   path: string;
 }
 
-export type AgentPatch = Omit<AgentFile, "name" | "source" | "canDraftNotes">;
+export type AgentPatch = Omit<AgentFile, "name" | "source" | "canDraftNotes" | "noteDraftModel">;
 
 export interface AgentMemoryFile {
   memory: AgentMemory;

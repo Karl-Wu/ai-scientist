@@ -8,7 +8,7 @@ import { makeNoteReadTool } from "../src/notes/read-tool.ts";
 import { replacePdfAnnotations } from "../src/pdf-annotations-store.ts";
 import { deleteProject, ensureProjectExists } from "../src/projects.ts";
 import { withActiveProject } from "../src/scope.ts";
-import type { NotePage } from "../../web/src/lib/note-pages.ts";
+import type { NoteDraftEvent, NotePage } from "../../web/src/lib/note-pages.ts";
 
 const project = ensureProjectExists("default");
 const task = "notes-source";
@@ -33,6 +33,32 @@ async function notesApp(projectId = "default") {
 }
 
 describe("project note pages", () => {
+  it("streams preparation and a terminal result or error for draft requests that ask for progress", async () => {
+    const app = await notesApp();
+    try {
+      fs.mkdirSync(project.sessionsDir, { recursive: true });
+      fs.writeFileSync(path.join(project.sessionsDir, "empty-draft-source.jsonl"), '{"type":"session"}\n');
+      const draft = (taskId: string, headers?: Record<string, string>) => app.inject({ method: "POST", url: "/notes/draft", headers,
+        payload: { format: "candidates", expert: "research-note-curator", taskId } });
+      const events = (body: string) => body.split("\n").filter((line) => line.startsWith("data: "))
+        .map((line) => JSON.parse(line.slice(6)) as NoteDraftEvent);
+      const accept = { accept: "text/event-stream" };
+      const success = await draft("empty-draft-source", accept);
+      expect(success.headers["content-type"]).toMatch(/^text\/event-stream/);
+      expect(events(success.body)).toMatchObject([
+        { type: "progress", progress: { step: "preparing" } },
+        { type: "progress", progress: { step: "preparing", records: { read: 0, total: 0 } } },
+        { type: "result", batch: { candidates: [] } },
+      ]);
+      expect(events((await draft("missing-draft-source", accept)).body).at(-1)).toMatchObject({ type: "error", status: 404 });
+      const json = await draft("missing-draft-source");
+      expect(json.statusCode).toBe(404);
+      expect(json.json()).toHaveProperty("detail");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("hides deleted pages while retaining historical revisions, and restores without changing a revision", async () => {
     const app = await notesApp();
     try {

@@ -58,6 +58,7 @@ export interface MessageRow {
     details?: unknown;
     isError?: boolean;
     stopReason?: string;
+    errorMessage?: string;
     timestamp?: number;
   };
 }
@@ -118,7 +119,7 @@ export type SessionEntryRow = (MessageRow | CustomMessageRow | CompactionRow) & 
  * the custom messages and compactions that `readRows` (used by the sh/md
  * exports) deliberately skips.
  */
-export function readEntries(file: string, onMalformed?: () => void): SessionEntryRow[] {
+export function readEntries(file: string, onMalformed?: () => void, onMetadata?: (entry: Record<string, unknown>) => void): SessionEntryRow[] {
   const rows: SessionEntryRow[] = [];
   for (const line of fs.readFileSync(file, "utf-8").split("\n")) {
     const trimmed = line.trim();
@@ -130,7 +131,7 @@ export function readEntries(file: string, onMalformed?: () => void): SessionEntr
         rows.push(obj as CustomMessageRow);
       } else if (obj.type === "compaction" && typeof obj.summary === "string") {
         rows.push(obj as CompactionRow);
-      }
+      } else if (onMetadata && obj && typeof obj === "object") onMetadata(obj);
     } catch {
       onMalformed?.();
     }

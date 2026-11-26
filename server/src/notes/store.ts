@@ -280,6 +280,17 @@ export function getNotePage(projectId: string, id: string): NotePage {
   return readPage(notesDir(projectId), id);
 }
 
+export function savedCandidatePages(projectId: string, candidates: readonly { requestId: string }[]): NotePage[] {
+  const dir = notesDir(projectId);
+  return candidates.flatMap(({ requestId }) => {
+    try { return [readPage(dir, requestPageId(requestId))]; }
+    catch (error) {
+      if (error instanceof SandboxError && [404, 422].includes(error.statusCode)) return [];
+      throw error;
+    }
+  });
+}
+
 export function readNoteRevision(projectId: string, id: string, version: number) {
   const page = readPage(notesDir(projectId), id);
   const revision = page.revisions.find((candidate) => candidate.version === version);

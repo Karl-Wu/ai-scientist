@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRightIcon, ChevronDownIcon } from "lucide-react";
 import { useT } from "@/components/i18n-provider";
+import { NoteDraftProcess } from "@/components/note-draft-process";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { notifyNotePagesChanged } from "@/lib/note-events";
 import {
-  NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_TYPES, type NoteAnchor, type NoteBatchResult, type NoteCandidate, type NoteCandidateBatch,
-  type NotePage, type NoteSourceLink, type NoteTaskReference,
+  MAX_NOTE_CANDIDATES, NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_TYPES, type NoteAnchor, type NoteBatchResult, type NoteCandidate, type NoteCandidateBatch,
+  type NoteDraftProgress, type NotePage, type NoteSourceLink, type NoteTaskReference,
 } from "@/lib/note-pages";
 import { apiFetch } from "@/lib/projects";
 import { cn } from "@/lib/utils";
@@ -23,21 +24,29 @@ interface ReviewRow {
   uncertain?: boolean;
 }
 
-export function NoteCandidateReview({ batch, projectId, task, source, sourceLabel, onOpenSource, onBack, onDone, onSavingChange }: {
+export function NoteCandidateReview({ batch, progress, projectId, task, source, sourceLabel, savedPages, onOpenSource, onBack, onDone, onSavingChange }: {
   batch: NoteCandidateBatch;
+  progress: NoteDraftProgress[];
   projectId: string;
   task?: NoteTaskReference;
   source?: NoteAnchor;
   sourceLabel?: string;
+  savedPages?: NotePage[];
   onOpenSource?: (source: NoteSourceLink) => void;
   onBack: () => void;
   onDone: (pages: NotePage[]) => void;
   onSavingChange: (pending: boolean) => void;
 }) {
   const t = useT();
-  const [rows, setRows] = useState<ReviewRow[]>(() => batch.candidates.map((candidate) => ({
-    candidate, checked: batch.candidates.length === 1, expanded: batch.candidates.length === 1,
-  })));
+  const [rows, setRows] = useState<ReviewRow[]>(() => {
+    const byRequest = new Map(savedPages?.map((page) => [page.id.replaceAll("-", ""), page]));
+    return batch.candidates.map((candidate) => {
+      const saved = byRequest.get(candidate.requestId);
+      const content = saved?.revisions.at(-1);
+      return { candidate: content ? { ...candidate, title: content.title, summary: content.summary, fields: content.fields } : candidate,
+        saved, checked: !saved && batch.candidates.length === 1, expanded: batch.candidates.length === 1 };
+    });
+  });
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
@@ -66,29 +75,32 @@ export function NoteCandidateReview({ batch, projectId, task, source, sourceLabe
     const savedNow: NotePage[] = [];
     const updates = new Map<string, Partial<ReviewRow>>();
     try {
-      const response = await apiFetch("/notes/batch", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pages: confirmed.map((row) => row.candidate), task, source, draftCredit: batch.draftCredit }),
-      }, projectId);
-      if (!response.ok) throw new Error("Could not confirm the note saves");
-      const { results } = await response.json() as { results: NoteBatchResult[] };
-      const byId = new Map(results.map((result) => [result.requestId, result]));
-      for (const row of confirmed) {
-        const { requestId } = row.candidate;
-        const result = byId.get(requestId);
-        if (result?.status === "saved" && result.page?.id) {
-          updates.set(requestId, { saved: result.page, failure: undefined, uncertain: false, checked: false });
-          savedNow.push(result.page);
-        } else if (result?.status === "failed" && result.code < 500) {
-          updates.set(requestId, { failure: result.code === 404 || result.code === 403
-            ? "The selected note source is unavailable." : "Could not save this candidate." });
-        } else {
-          updates.set(requestId, { failure: "Could not confirm the save. Retry this page.", uncertain: true });
+      for (let offset = 0; offset < confirmed.length; offset += MAX_NOTE_CANDIDATES) {
+        const chunk = confirmed.slice(offset, offset + MAX_NOTE_CANDIDATES);
+        let results: NoteBatchResult[] = [];
+        try {
+          const response = await apiFetch("/notes/batch", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pages: chunk.map((row) => row.candidate), task, source, draftCredit: batch.draftCredit }),
+          }, projectId);
+          if (response.ok) {
+            const body = await response.json() as { results?: NoteBatchResult[] };
+            if (Array.isArray(body.results)) results = body.results;
+          }
+        } catch { /* Mark this request uncertain so its original IDs can be retried. */ }
+        const byId = new Map(results.map((result) => [result.requestId, result]));
+        for (const { candidate: { requestId } } of chunk) {
+          const result = byId.get(requestId);
+          if (result?.status === "saved" && result.page?.id) {
+            updates.set(requestId, { saved: result.page, failure: undefined, uncertain: false, checked: false });
+            savedNow.push(result.page);
+          } else if (result?.status === "failed" && result.code < 500) {
+            updates.set(requestId, { failure: result.code === 404 || result.code === 403
+              ? "The selected note source is unavailable." : "Could not save this candidate." });
+          } else {
+            updates.set(requestId, { failure: "Could not confirm the save. Retry this page.", uncertain: true });
+          }
         }
-      }
-    } catch {
-      for (const { candidate } of confirmed) {
-        updates.set(candidate.requestId, { failure: "Could not confirm the save. Retry this page.", uncertain: true });
       }
     } finally {
       setRows((current) => current.map((row) => ({ ...row, ...updates.get(row.candidate.requestId) })));
@@ -114,6 +126,7 @@ export function NoteCandidateReview({ batch, projectId, task, source, sourceLabe
             {t("Select all candidates")}
           </label>}
         </div>
+        <NoteDraftProcess steps={progress} />
         {batch.taskExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the task.")}</p>}
         {batch.sourceExcerptShortened && <p className="text-xs text-muted-foreground">{t("The draft uses an excerpt of the selected source.")}</p>}
         {batch.taskRecords && <>

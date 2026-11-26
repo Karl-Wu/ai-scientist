@@ -1,14 +1,15 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { Toaster } from "sonner";
 import { SentContextChips } from "./context-chips";
-import { NotePagesView } from "./note-pages-view";
+import { NotePageCreate, NotePagesView } from "./note-pages-view";
 import { ResearchPickerBody } from "./research-picker";
 import { TooltipProvider } from "./ui/tooltip";
 import { apiFetch } from "@/lib/projects";
 import { EMPTY_DELEGATION } from "@/lib/composer-context";
-import type { NotePage, NoteSummary } from "@/lib/note-pages";
+import { onOpenSettings } from "@/lib/settings-nav";
+import type { NoteCurationStatus, NoteDraftEvent, NotePage, NoteSummary } from "@/lib/note-pages";
 
 vi.mock("@/lib/projects", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/projects")>(), apiFetch: vi.fn(),
@@ -160,9 +161,9 @@ it("shows card metadata and source actions while keeping note filters and revisi
   expect(screen.queryByRole("button", { name: "Edit note page" })).toBeNull();
 });
 
-it("shows the list's type filter with the only available note type", async () => {
+it.each([["note", "General note"], ["method", "Method"]] as const)("shows the type filter when %s is the only available type", async (type, label) => {
   vi.mocked(apiFetch).mockResolvedValue(Response.json({ pages: [{
-    id: "first", type: "note", version: 1, organizer: "Created manually", title: "Project note", savedAt: 1,
+    id: "first", type, version: 1, organizer: "Created manually", title: "Project note", savedAt: 1,
     status: "saved", tasks: [], excerpt: "", sourceCount: 0,
   } satisfies NoteSummary] }));
   render(<NotePagesView projectId="default" onOpenSource={vi.fn()} />);
@@ -170,7 +171,8 @@ it("shows the list's type filter with the only available note type", async () =>
   expect(screen.getByRole("button", { name: "Current task" })).toBeDisabled();
   const typeFilters = within(screen.getByRole("group", { name: "Note type" }));
   expect(typeFilters.getAllByRole("button")).toHaveLength(1);
-  const filter = typeFilters.getByRole("button", { name: "General note 1" });
+  expect(within(screen.getByRole("list")).getByText(label)).toBeVisible();
+  const filter = typeFilters.getByRole("button", { name: `${label} 1` });
   await userEvent.click(filter);
   expect(filter).toHaveAttribute("aria-pressed", "true");
 });
@@ -274,9 +276,113 @@ it("creates a manual note from the empty state and keeps the draft and request i
 const reviewer = { name: "scientific-result-reviewer", description: "Review results", source: "project",
   systemPrompt: "Review", enabled: true, canDraftNotes: true };
 
+it("shows whether a note expert uses a configured model or inherits the task model", async () => {
+  const pinned = { ...reviewer, name: "pinned-reviewer", noteDraftModel: "openrouter/example/expert" };
+  vi.mocked(apiFetch).mockResolvedValue(Response.json({ agents: [reviewer, pinned], noteDefaultExpert: reviewer.name }));
+  const openSettings = vi.fn();
+  const unsubscribe = onOpenSettings(openSettings);
+  try {
+    render(<NotePageCreate projectId="default" model="openai/gpt-6-luna" onCancel={vi.fn()} onCreated={vi.fn()} />);
+    expect(await screen.findByText("Using the task model: openai/gpt-6-luna")).toBeVisible();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Note expert" }), pinned.name);
+    expect(screen.getByText("Expert model: openrouter/example/expert")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Expert model settings" }));
+    expect(openSettings).toHaveBeenCalledWith({ tab: "specialists", projectId: "default", section: "specialist-default-model" });
+  } finally {
+    unsubscribe();
+  }
+});
+
 function candidate(title: string, summary: string, requestId = "a".repeat(32)) {
-  return { type: "note", requestId, title, summary, fields: {} };
+  return { type: "note" as const, requestId, title, summary, fields: {} };
 }
+
+it("shows complete curation gaps, resumes from the editor and saves more than eight reviewed candidates", async () => {
+  const task = { id: "long-task", title: "Long study" };
+  const job: NoteCurationStatus = {
+    id: "job-1", expert: reviewer.name, state: "failed", phase: "reading", errorStatus: 409,
+    progress: { readRecords: 952, totalRecords: 1_000, readBatches: 50, totalBatches: 60 },
+    coverage: { snapshotAt: 1, events: 13392, truncated: 5, unavailable: 0, redacted: 0,
+      excludedAttachments: 0, damagedRows: 0, unsupportedEvents: 0, eventGaps: 0, incomplete: false, activeAtStart: false },
+  };
+  const candidates = Array.from({ length: 9 }, (_, index) => ({
+    ...candidate("Finding " + (index + 1), "A reviewed finding.", (index + 1).toString(16).padStart(32, "0")),
+    type: index === 0 ? "observation" : "note",
+  } as const));
+  const saved: typeof candidates[] = [];
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/agents") return Response.json({ agents: [reviewer], noteDefaultExpert: reviewer.name });
+    if (url === "/notes/curation/long-task") {
+      if (options?.method === "PATCH") {
+        expect(JSON.parse(String(options.body))).toEqual({ id: job.id, action: "resume" });
+        job.state = "completed";
+        job.progress = { readRecords: 1_000, totalRecords: 1_000, readBatches: 60, totalBatches: 60 };
+        job.batch = { candidates, taskExcerptShortened: false, draftCredit: { expert: reviewer.name } };
+      }
+      return Response.json(job);
+    }
+    if (url === "/notes/batch") {
+      const input = JSON.parse(String(options?.body));
+      expect(input.task).toEqual(task);
+      saved.push(input.pages);
+      return Response.json({ results: (input.pages as typeof candidates).map(({ requestId }) => ({
+        requestId, status: "saved", page: { id: requestId },
+      })) });
+    }
+    throw new Error("Unexpected request");
+  });
+
+  const user = userEvent.setup();
+  render(<NotePageCreate projectId="default" source={{ title: task.title, task }} onCancel={vi.fn()} onCreated={vi.fn()} />);
+  await user.click(screen.getByRole("button", { name: "Complete curation" }));
+  expect(await screen.findByText("952 of 1000 records read · 50 of 60 batches")).toBeVisible();
+  expect(screen.getByText("5 truncated · 0 unavailable · 0 redacted records")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Resume curation" }));
+  await user.click(await screen.findByRole("button", { name: "Review 9 note candidates" }));
+  await user.click(screen.getByRole("button", { name: /Finding 1$/ }));
+  const title = screen.getByRole("textbox", { name: "Note title" });
+  await user.clear(title);
+  await user.type(title, "Edited finding");
+  await user.click(screen.getByRole("checkbox", { name: "Select all candidates" }));
+  await user.click(screen.getByRole("button", { name: "Save selected notes" }));
+  expect(await screen.findByText("0 selected · 9 saved")).toBeVisible();
+  expect(saved.map((pages) => pages.length)).toEqual([8, 1]);
+  expect(saved[0][0].title).toBe("Edited finding");
+});
+
+it("shows live expert progress and keeps the process available in candidate review", async () => {
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } });
+  const emit = (event: NoteDraftEvent) => stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (url === "/agents") return Response.json({ agents: [reviewer], noteDefaultExpert: reviewer.name });
+    if (url === "/notes/draft") {
+      expect(new Headers(options?.headers).get("accept")).toBe("text/event-stream");
+      return new Response(body, { headers: { "Content-Type": "text/event-stream" } });
+    }
+    return Response.json({ pages: [] });
+  });
+  const task = { id: "task-a", title: "Research task" };
+  render(<NotePageCreate projectId="default" source={{ title: task.title, task }} onCancel={vi.fn()} onCreated={vi.fn()} />);
+  const user = userEvent.setup();
+  await screen.findByRole("option", { name: reviewer.name });
+  await user.click(screen.getByRole("button", { name: "Draft with expert" }));
+  expect(screen.getByRole("status")).toHaveTextContent("Preparing note material");
+  await act(async () => emit({ type: "progress", progress: { step: "reading", records: { read: 4, total: 12 } } }));
+  expect(screen.getByRole("status")).toHaveTextContent("Reading task records · Read 4 of 12 task records");
+  expect(screen.queryByRole("region", { name: "Review note candidates" })).toBeNull();
+
+  await act(async () => {
+    emit({ type: "progress", progress: { step: "validating", round: 3 } });
+    emit({ type: "result", batch: { candidates: [candidate("Draft title", "Draft summary")],
+      draftCredit: { expert: reviewer.name }, taskExcerptShortened: false } });
+    stream.close();
+  });
+  const review = await screen.findByRole("region", { name: "Review note candidates" });
+  await user.click(within(review).getByText("Drafting process"));
+  expect(within(review).getByText("Reading task records")).toBeVisible();
+  expect(within(review).getByText("Validating note candidates")).toBeVisible();
+});
 
 it("reviews a single candidate and restores the original inputs when going back", async () => {
   vi.mocked(apiFetch).mockClear();

@@ -12,6 +12,7 @@ import {
 
 import { createFramePublisher } from "./frame-publisher";
 import type { PromptImage } from "./image-attachments";
+import { consumeSse } from "./sse";
 
 // Keep the full tool-call trace per message: scientists rely on it to see and
 // reproduce what the agent ran, and the session export reads it too.
@@ -751,48 +752,6 @@ function waitForReconnect(signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Parse one SSE response and feed each JSON data frame to a shared consumer. */
-async function consumeSse(
-  response: Response,
-  onFrame: (frame: AgentFrame) => void,
-): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body");
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  const consumeLine = (rawLine: string) => {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (!line.startsWith("data:")) return;
-    const json = line.slice(5).trim();
-    if (!json) return;
-    let frame: AgentFrame;
-    try {
-      frame = JSON.parse(json) as AgentFrame;
-    } catch {
-      return;
-    }
-    onFrame(frame);
-    return frame.type === "done";
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (consumeLine(line)) {
-        await reader.cancel();
-        return;
-      }
-    }
-  }
-  buffer += decoder.decode();
-  if (buffer) consumeLine(buffer);
-}
-
 export function useAgent(projectId?: string) {
   const contextProjectId = useProjectScopeId();
   const scopedProjectId = projectId ?? contextProjectId;
@@ -908,8 +867,9 @@ export function useAgent(projectId?: string) {
 
   const consumeRunResponse = useCallback(
     async (response: Response, consumer: RunConsumer) => {
-      await consumeSse(response, (frame) => {
+      await consumeSse<AgentFrame>(response, (frame) => {
         if (mountedRef.current) applyRunFrame(consumer, frame);
+        return frame.type === "done";
       });
     },
     [applyRunFrame],

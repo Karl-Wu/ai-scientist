@@ -23,6 +23,7 @@ import {
   canDraftNotes,
   deleteProjectAgent,
   listAgents,
+  pinnedSpecialistModel,
   restoreDefaultAgents,
   seedAgentFiles,
   setSpecialistEnabled,
@@ -95,11 +96,13 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
     // may just have added verifiers, so bring the routing up to date first.
     applyVerifierDefault(paths, modelRefAvailable, { createSettings: true });
     const routed = routedVerifiers(paths);
+    const pinned = settingsPinnedModels(paths);
     return {
       noteDefaultExpert: getProject(paths.id)?.noteDefaultExpert ?? null,
       agents: listAgents(paths).map((agent) => ({
         ...agent,
         canDraftNotes: canDraftNotes(agent),
+        noteDraftModel: pinnedSpecialistModel(agent, pinned),
         ...(isVerifierAgent(agent.name) ? { verifier: true } : {}),
         ...(routed?.agents.includes(agent.name) ? { verifierModel: routed.model } : {}),
       })),

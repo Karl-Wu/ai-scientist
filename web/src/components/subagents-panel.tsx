@@ -323,6 +323,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
     setError(null);
     try {
       setValue((await saveSpecialistDefaultModel(next || null)) ?? "");
+      notifyCapabilitiesChanged();
     } catch (exc) {
       setValue(previous);
       setError(exc instanceof Error ? exc.message : "Save failed");
@@ -333,6 +334,7 @@ function SpecialistDefaultModelCard({ projectId }: { projectId: string }) {
 
   return (
     <SettingsCard
+      id="specialist-default-model"
       title={t("Default model for specialists")}
       description={t("Used by every specialist that does not pin its own model. Inherit keeps each specialist on the model of the task that launched it.")}
     >
@@ -568,8 +570,8 @@ export function SubagentsPanel() {
   }, [confirm, memoryOpen, t]);
 
   const visible = useMemo(
-    () => agents.filter((a) => matchesQuery(query, a.name, a.description, a.model)),
-    [agents, query],
+    () => agents.filter((a) => matchesQuery(query, a.name, t(a.name), a.description, a.model)),
+    [agents, query, t],
   );
   const noteExperts = agents.filter((agent) => agent.enabled && agent.canDraftNotes);
   const project = visible.filter((a) => a.source === "project");
@@ -773,7 +775,7 @@ export function SubagentsPanel() {
               <div key={agent.name} className="flex items-center gap-2 rounded-lg border px-3 py-2">
                 <BotIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium font-mono">{agent.name}</div>
+                  <div className="truncate text-xs font-medium font-mono" title={agent.name}>{t(agent.name)}</div>
                   <div className="truncate text-[11px] text-muted-foreground">
                     {agent.description || t("(no description)")}
                   </div>
@@ -790,14 +792,14 @@ export function SubagentsPanel() {
                     variant={memoryOpen?.name === agent.name ? "secondary" : "ghost"}
                     size="sm"
                     className="h-7 gap-1 text-[11px]"
-                    aria-label={t("Memory of {v0}", { v0: agent.name })}
+                    aria-label={t("Memory of {v0}", { v0: t(agent.name) })}
                     onClick={() => void openMemory(agent)}
                   >
                     <BrainIcon className="size-3.5" />
                     {t("Memory")}{" "}</Button>
                 )}
                 <Switch
-                  aria-label={t("Toggle {v0}", { v0: agent.name })}
+                  aria-label={t("Toggle {v0}", { v0: t(agent.name) })}
                   checked={agent.enabled !== false}
                   onCheckedChange={(v) => void toggleEnabled(agent.name, v)}
                 />
@@ -805,7 +807,7 @@ export function SubagentsPanel() {
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0"
-                  aria-label={t("Edit {v0}", { v0: agent.name })}
+                  aria-label={t("Edit {v0}", { v0: t(agent.name) })}
                   onClick={() => setForm(formFromAgent(agent, false))}
                 >
                   <PencilIcon className="size-3.5" />
@@ -814,7 +816,7 @@ export function SubagentsPanel() {
                   variant="ghost"
                   size="sm"
                   className="size-7 p-0 text-destructive hover:text-destructive"
-                  aria-label={t("Delete {v0}", { v0: agent.name })}
+                  aria-label={t("Delete {v0}", { v0: t(agent.name) })}
                   disabled={saving}
                   onClick={() => void handleDelete(agent.name)}
                 >
@@ -906,7 +908,7 @@ export function SubagentsPanel() {
                   <LockIcon className="size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-xs font-medium font-mono">
-                      {agent.name}
+                      <span className="truncate" title={agent.name}>{t(agent.name)}</span>
                       <VerifierBadge agent={agent} />
                     </div>
                     <div
@@ -924,7 +926,7 @@ export function SubagentsPanel() {
                     )}
                   </div>
                   <Switch
-                    aria-label={t("Toggle {v0}", { v0: agent.name })}
+                    aria-label={t("Toggle {v0}", { v0: t(agent.name) })}
                     checked={agent.enabled !== false}
                     onCheckedChange={(v) => void toggleEnabled(agent.name, v)}
                   />

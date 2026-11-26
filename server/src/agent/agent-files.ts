@@ -174,6 +174,10 @@ export function settingsPinnedModels(paths: ProjectPaths): {
   return { ...(fallback ? { defaultModel: fallback } : {}), byAgent };
 }
 
+export function pinnedSpecialistModel(agent: Pick<AgentFile, "name" | "model">, pins: ReturnType<typeof settingsPinnedModels>): string | undefined {
+  return pins.byAgent.get(agent.name) ?? agent.model ?? pins.defaultModel;
+}
+
 /**
  * Set or clear `subagents.defaultModel` — the model every specialist without
  * its own frontmatter or `agentOverrides` model runs on — preserving all other

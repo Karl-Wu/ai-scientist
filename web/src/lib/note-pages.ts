@@ -1,6 +1,7 @@
 export const NOTE_TYPES = {
   note: { group: null, label: "General note", fields: {} },
   hypothesis: { group: "Research", label: "Hypothesis", fields: { scope: "Scope", prediction: "Prediction" } },
+  method: { group: "Research", label: "Method", fields: { procedure: "Procedure", parameters: "Parameters", executionStatus: "Execution status" } },
   observation: { group: "Research", label: "Observation", fields: { scope: "Scope", finding: "Finding", limitations: "Limitations" } },
   decision: { group: "Research", label: "Decision", fields: { rationale: "Rationale", revisitWhen: "When to revisit" } },
   mappingRule: { group: "Data processing", label: "Mapping rule", fields: { sourceField: "Source field", targetField: "Target field", condition: "Conversion rule" } },
@@ -90,6 +91,7 @@ export interface NoteDraft extends NoteDraftDetails {
 }
 
 export const MAX_NOTE_CANDIDATES = 8;
+export const NOTE_DRAFT_STEP_LIMIT = "The expert reached the note drafting step limit. Try drafting from a single answer.";
 
 export interface NoteCandidate extends NoteContent {
   type: NoteType;
@@ -107,6 +109,50 @@ export interface NoteCandidateBatch extends NoteDraftDetails {
     read: { id: string; label: string; partial: boolean; flags: NoteRecordFlag[] }[];
   };
 }
+
+export interface NoteDraftProgress {
+  step: "preparing" | "organizing" | "searching" | "reading" | "source" | "table" | "skill" | "validating";
+  round?: number;
+  records?: { read: number; total: number };
+}
+
+export interface NoteCurationStatus {
+  id: string;
+  expert: string;
+  model?: string;
+  state: "running" | "failed" | "cancelled" | "completed";
+  phase: "indexing" | "reading" | "merging";
+  errorStatus?: number;
+  progress?: {
+    totalRecords: number;
+    readRecords: number;
+    totalBatches: number;
+    readBatches: number;
+    mergeBatches?: number;
+    mergedBatches?: number;
+  };
+  coverage?: {
+    snapshotAt: number;
+    events: number;
+    truncated: number;
+    unavailable: number;
+    unavailableReasoning?: number;
+    redacted: number;
+    excludedAttachments: number;
+    damagedRows: number;
+    unsupportedEvents: number;
+    eventGaps: number;
+    incomplete: boolean;
+    activeAtStart: boolean;
+  };
+  batch?: NoteCandidateBatch;
+  savedPages?: NotePage[];
+}
+
+export type NoteDraftEvent =
+  | { type: "progress"; progress: NoteDraftProgress }
+  | { type: "result"; batch: NoteCandidateBatch }
+  | { type: "error"; status: number; detail?: string };
 
 export type NoteBatchResult =
   | { requestId: string; status: "saved"; page: NotePage }

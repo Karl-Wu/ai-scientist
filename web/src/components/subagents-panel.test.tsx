@@ -2,7 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as agentsLib from "@/lib/agents";
+import * as uiLocale from "@/lib/ui-locale-settings";
 import * as useProjects from "@/lib/use-projects";
+import { I18nProvider } from "@/components/i18n-provider";
 import { SubagentsPanel } from "@/components/subagents-panel";
 
 beforeEach(() => {
@@ -28,6 +30,27 @@ const watchdog = (overrides: Partial<agentsLib.WatchdogSettings> = {}): agentsLi
 });
 
 describe("SubagentsPanel toggle", () => {
+  it("displays the localized expert name and searches by name or ID", async () => {
+    vi.spyOn(uiLocale, "readSavedLocale").mockResolvedValue("zh-CN");
+    vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
+    vi.spyOn(useProjects, "useProjects").mockReturnValue({ activeProjectId: "p1" } as ReturnType<typeof useProjects.useProjects>);
+    mockRoster([
+      { name: "research-note-curator", description: "Curate saved tasks", source: "project", systemPrompt: "x", enabled: true },
+      { name: "research-note-curator-demo", description: "Demo expert", source: "project", systemPrompt: "y", enabled: true },
+    ]);
+
+    render(<I18nProvider><SubagentsPanel /></I18nProvider>);
+    const search = await screen.findByRole("textbox", { name: "搜索专家" });
+    await userEvent.type(search, "科研笔记整理");
+    expect(screen.getByRole("button", { name: "编辑 科研笔记整理" })).toBeVisible();
+    expect(screen.queryByText("Demo expert")).toBeNull();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "research-note-curator");
+    expect(screen.getByRole("button", { name: "编辑 科研笔记整理" })).toBeVisible();
+    expect(screen.getByText("Demo expert")).toBeVisible();
+  });
+
   it("disables a specialist via the switch", async () => {
     vi.spyOn(agentsLib, "getWatchdogSettings").mockResolvedValue(watchdog());
     vi.spyOn(useProjects, "useProjects").mockReturnValue({

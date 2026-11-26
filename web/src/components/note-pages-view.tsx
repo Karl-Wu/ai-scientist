@@ -3,12 +3,15 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArrowLeftIcon, ArrowRightLeftIcon, ArrowUpRightIcon, BookOpenIcon, ChartNoAxesColumnIncreasingIcon, ChevronDownIcon,
-  ChevronRightIcon, ClipboardCheckIcon, FileTextIcon, GitBranchIcon, LightbulbIcon, LinkIcon, ListFilterIcon,
+  ChevronRightIcon, ClipboardCheckIcon, FileTextIcon, FlaskConicalIcon, GitBranchIcon, LightbulbIcon, LinkIcon, ListFilterIcon,
   MessageSquareIcon, PlusIcon, SearchIcon, SignpostIcon, SparklesIcon, Table2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { NoteCandidateReview } from "@/components/note-candidate-review";
+import { NoteCompleteCuration } from "@/components/note-complete-curation";
+import { NoteDraftProcess } from "@/components/note-draft-process";
+import { SettingsLink } from "@/components/settings-link";
 import { useLocale, useT } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -17,8 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
-  type NoteCandidateBatch, type NoteContent, type NoteCreationSource,
+  NOTE_DRAFT_STEP_LIMIT, NOTE_RECORD_FLAG_LABELS, NOTE_SOURCE_LABELS, NOTE_STATUS_LABELS, NOTE_TYPES, noteTypesIn,
+  type NoteCandidateBatch, type NoteContent, type NoteCreationSource, type NoteDraftEvent, type NoteDraftProgress,
   type NoteListResult, type NotePage, type NoteRevision, type NoteSourceLink, type NoteSummary, type NoteTaskReference, type NoteType,
 } from "@/lib/note-pages";
 import { notifyNotePagesChanged, useNotePagesRevision } from "@/lib/note-events";
@@ -26,6 +29,7 @@ import { getAgentRoster, type AgentFile } from "@/lib/agents";
 import { apiFetch } from "@/lib/projects";
 import { useCapabilitiesRevision } from "@/lib/capability-events";
 import { relativeTime } from "@/lib/locale-time";
+import { consumeSse } from "@/lib/sse";
 import { cn } from "@/lib/utils";
 
 const selectClass = "h-8 max-w-full rounded-md border bg-background px-2 text-xs";
@@ -47,6 +51,7 @@ const sourceIcons = { task: LinkIcon, tool: LinkIcon, message: MessageSquareIcon
 const noteTypeAppearance = {
   note: { icon: FileTextIcon, text: "text-muted-foreground", fill: "border-border bg-muted" },
   hypothesis: { icon: LightbulbIcon, text: "text-amber-800 dark:text-amber-300", fill: "border-amber-600/25 bg-amber-500/10" },
+  method: { icon: FlaskConicalIcon, text: "text-sky-800 dark:text-sky-300", fill: "border-sky-600/25 bg-sky-500/10" },
   observation: { icon: ChartNoAxesColumnIncreasingIcon, text: "text-emerald-800 dark:text-emerald-300", fill: "border-emerald-600/25 bg-emerald-500/10" },
   decision: { icon: SignpostIcon, text: "text-violet-800 dark:text-violet-300", fill: "border-violet-600/25 bg-violet-500/10" },
   mappingRule: { icon: ArrowRightLeftIcon, text: "text-blue-800 dark:text-blue-300", fill: "border-blue-600/25 bg-blue-500/10" },
@@ -350,7 +355,11 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
   const [drafting, setDrafting] = useState(false);
   const draftRequest = useRef<AbortController | null>(null);
   const [batch, setBatch] = useState<NoteCandidateBatch>();
+  const [completeMode, setCompleteMode] = useState(false);
+  const [batchTask, setBatchTask] = useState<NoteTaskReference>();
+  const [curationSavedPages, setCurationSavedPages] = useState<NotePage[]>();
   const [draftError, setDraftError] = useState<string>();
+  const [draftProgress, setDraftProgress] = useState<NoteDraftProgress[]>([]);
   const [expertChoice, setExpertChoice] = useState<string>();
   const [defaultExpert, setDefaultExpert] = useState<string | null>(null);
   const [experts, setExperts] = useState<AgentFile[]>([]);
@@ -359,8 +368,10 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
   const capabilitiesRevision = useCapabilitiesRevision();
   const anchor = source?.anchor;
   const task = source?.task ?? (!anchor && includeTask ? sourceTask : undefined);
+  const completeTask = task ?? (anchor?.kind === "message" && sourceTask?.id === anchor.sessionId ? sourceTask : undefined);
   const sourceLabel = anchor?.kind === "file" ? anchor.path : source?.title ?? task?.title;
   const selectedExpert = experts.find((option) => option.name === (expertChoice ?? defaultExpert));
+  const configuredModel = selectedExpert?.noteDraftModel ?? selectedExpert?.model;
   const canDraft = !expertsLoading && selectedExpert && Boolean(summary.trim() || task || source);
   const busy = pending || drafting;
 
@@ -390,21 +401,8 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
     draftRequest.current = controller;
     setDrafting(true);
     setDraftError(undefined);
-    try {
-      const response = await apiFetch("/notes/draft", {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "candidates", title, summary, expert: selectedExpert.name,
-          taskId: task?.id, source: anchor, model, locale }),
-      }, projectId);
-      if (controller.signal.aborted) return;
-      if (response.ok) {
-        const next = await response.json() as NoteCandidateBatch;
-        if (!Array.isArray(next?.candidates) || !next.draftCredit?.expert) throw new Error("Invalid note candidates");
-        if (!controller.signal.aborted) setBatch(next);
-        return;
-      }
+    setDraftProgress([{ step: "preparing" }]);
+    function fail(status: number, detail?: unknown) {
       const messages: Record<number, string> = {
         400: "Write note text or select a source with saved content.",
         401: "Connect a model provider to draft a note.",
@@ -417,7 +415,46 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
         503: "The model provider could not process this draft.",
         504: "Note drafting timed out.",
       };
-      setDraftError(messages[response.status] ?? "Could not generate a note draft.");
+      if (!controller.signal.aborted) setDraftError(status === 502 && detail === NOTE_DRAFT_STEP_LIMIT
+        ? NOTE_DRAFT_STEP_LIMIT : messages[status] ?? "Could not generate a note draft.");
+    }
+    function review(next: NoteCandidateBatch) {
+      if (!Array.isArray(next?.candidates) || !next.draftCredit?.expert) throw new Error("Invalid note candidates");
+      if (!controller.signal.aborted) setBatch(next);
+    }
+    try {
+      const response = await apiFetch("/notes/draft", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ format: "candidates", title, summary, expert: selectedExpert.name,
+          taskId: task?.id, source: anchor, model, locale }),
+      }, projectId, "stream");
+      if (controller.signal.aborted) return;
+      if (!response.ok) {
+        fail(response.status, response.status === 502 ? (await response.json().catch(() => null))?.detail : undefined);
+      } else if (response.headers.get("Content-Type")?.includes("text/event-stream")) {
+        let receivedTerminal = false;
+        await consumeSse<NoteDraftEvent>(response, (event) => {
+          if (controller.signal.aborted) return true;
+          if (event?.type === "progress") {
+            setDraftProgress((steps) => {
+              const last = steps.at(-1);
+              const next = event.progress;
+              return last?.step === next.step && last.round === next.round
+                ? [...steps.slice(0, -1), next] : [...steps, next];
+            });
+          } else if (event?.type === "result" || event?.type === "error") {
+            receivedTerminal = true;
+            if (event.type === "result") review(event.batch);
+            else fail(event.status, event.detail);
+            return true;
+          }
+        });
+        if (!receivedTerminal) fail(500);
+      } else {
+        review(await response.json() as NoteCandidateBatch);
+      }
     } catch {
       if (!controller.signal.aborted) setDraftError("Could not generate a note draft.");
     } finally {
@@ -461,8 +498,10 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
         {dialog ? <DialogTitle className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</DialogTitle>
           : <h2 className={cn(noteReadingWidth, "flex h-8 items-center text-sm font-semibold")}>{t("New note page")}</h2>}
       </header>
-      {batch ? <NoteCandidateReview batch={batch} projectId={projectId} task={task} source={anchor} sourceLabel={sourceLabel}
-        onOpenSource={onOpenSource} onBack={() => setBatch(undefined)} onSavingChange={setPending} onDone={(pages) => {
+      {batch ? <NoteCandidateReview batch={batch} progress={batchTask ? [] : draftProgress} projectId={projectId}
+        task={batchTask ?? task} source={batchTask ? undefined : anchor} sourceLabel={batchTask?.title ?? sourceLabel}
+        savedPages={batchTask ? curationSavedPages : undefined}
+        onOpenSource={onOpenSource} onBack={() => { setBatch(undefined); setBatchTask(undefined); setCurationSavedPages(undefined); }} onSavingChange={setPending} onDone={(pages) => {
           if (pages.length === 1) onCreated(pages[0]);
           else onCancel();
         }} /> : <form className="flex min-h-0 min-w-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); void save(); }}>
@@ -484,6 +523,7 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
                     disabled={busy || expertsLoading} value={selectedExpert?.name ?? ""} onChange={(event) => {
                       setExpertChoice(event.target.value);
                       setDraftError(undefined);
+                      setDraftProgress([]);
                     }}>
                     <option value="">{t(expertsLoading ? "Loading…" : "Select an expert")}</option>
                     {experts.map((expert) => <option key={expert.name} value={expert.name}>{t(expert.name)}</option>)}
@@ -492,7 +532,25 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
                 </span>
               </label>
               {expertListError && <p role="alert" className="text-xs text-muted-foreground">{t("Could not load experts.")}</p>}
-              <div className="flex flex-wrap items-center gap-2">
+              {selectedExpert && <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span className="min-w-0 break-words">{configuredModel
+                  ? t("Expert model: {model}", { model: configuredModel })
+                  : model ? t("Using the task model: {model}", { model }) : t("Using the app default model")}</span>
+                <SettingsLink tab="specialists" projectId={projectId} section="specialist-default-model">{t("Expert model settings")}</SettingsLink>
+              </div>}
+              {completeTask && <div className="flex flex-wrap gap-1" role="group" aria-label={t("Note drafting mode")}>
+                <Button type="button" size="sm" variant={completeMode ? "ghost" : "secondary"} disabled={busy} aria-pressed={!completeMode}
+                  onClick={() => setCompleteMode(false)}>{t("Quick draft")}</Button>
+                <Button type="button" size="sm" variant={completeMode ? "secondary" : "ghost"} disabled={busy} aria-pressed={completeMode}
+                  onClick={() => setCompleteMode(true)}>{t("Complete curation")}</Button>
+              </div>}
+              {completeMode && completeTask ? <NoteCompleteCuration key={projectId + "/" + completeTask.id} projectId={projectId} taskId={completeTask.id}
+                expert={selectedExpert?.name} model={model} disabled={busy} onReview={(result, savedPages) => {
+                  setBatchTask(completeTask);
+                  setCurationSavedPages(savedPages);
+                  setBatch(result);
+                }} />
+                : <><div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" variant="outline" disabled={busy || !canDraft} onClick={() => void draftWithExpert()}>
                   <SparklesIcon aria-hidden="true" />{t(drafting ? "Drafting note…" : "Draft with expert")}
                 </Button>
@@ -500,7 +558,9 @@ export function NotePageCreate({ projectId, currentTask, model, source, onOpenSo
                   {t("Cancel drafting")}
                 </Button>}
               </div>
+              <NoteDraftProcess steps={draftProgress} running={drafting} />
               {draftError && <p role="alert" className="text-sm text-destructive">{t(draftError)}</p>}
+              </>}
             </section>
             <fieldset className="min-w-0 space-y-2 border-t pt-3" disabled={busy} aria-label={t("Sources")}>
               <h3 className="text-sm font-medium">{t("Sources")}</h3>

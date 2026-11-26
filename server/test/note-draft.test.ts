@@ -1,16 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createAssistantMessageEventStream, type AssistantMessage, type ToolCall } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, getCurrentTools, type AssistantMessage, type ToolCall } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { expect, it, vi } from "vitest";
 import { createProject, resolvePaths } from "../src/projects.ts";
 import { setSpecialistEnabled, writeProjectAgent } from "../src/agent/agent-files.ts";
+import { RESEARCH_NOTE_CURATOR } from "../src/agent/subagents.ts";
 import { generateNoteCandidates, generateNoteDraft, NOTE_DRAFT_SESSION_ID } from "../src/notes/draft.ts";
 import { createManualNotePage, getNotePage, listNotePages, saveNoteBatch } from "../src/notes/store.ts";
 import { appendTaskEvents } from "../src/agent/task-event-log.ts";
 import type { TaskEventDraft } from "../src/agent/task-events.ts";
 import { taskRecordTools } from "../src/notes/task-records.ts";
 import { sessionCostSummary } from "../src/cost/ledger.ts";
+import type { NoteDraftProgress } from "../../web/src/lib/note-pages.ts";
 
 const expert = "scientific-result-reviewer";
 
@@ -165,6 +167,16 @@ it("returns a mixed set of editable candidates with stable request IDs and leave
   })).resolves.toMatchObject({ candidates: [] });
 });
 
+it("rejects a note type outside the Live Notebook roster for the research curator", async () => {
+  const project = createProject({ name: "Research curator types" });
+  const stream: StreamFn = () => reply([{ type: "text", text: JSON.stringify({ candidates: [
+    { type: "qualityCheck", title: "Unexpected type", summary: "A check was reported.", fields: {} },
+  ] }) }]);
+  await expect(generateNoteCandidates(project.id, {
+    expert: RESEARCH_NOTE_CURATOR, summary: "A check was reported.",
+  }, { stream })).rejects.toMatchObject({ statusCode: 502 });
+});
+
 function recordsFixture() {
   const project = createProject({ name: "Early checks and later rounds" });
   const paths = resolvePaths(project.id);
@@ -200,20 +212,56 @@ function recordsFixture() {
   return { project, paths, file, sessionId };
 }
 
-it("finds an early paged output, attaches different verified sources, and saves only the confirmed candidate", async () => {
+it("reserves two requests for submission after the expert spends six requests listing task records", async () => {
+  const { project, sessionId } = recordsFixture();
+  let calls = 0;
+  const stream: StreamFn = (_model, context) => {
+    if (++calls <= 6) return reply([tool("list_task_records", { cursor: (calls - 1) * 20 })], "toolUse");
+    expect(getCurrentTools(context.messages).map(({ name }) => name)).toEqual(["submit_note_candidates"]);
+    const fallback = context.messages.filter((message) => message.role === "user").at(-1);
+    const { fallbackTaskRecords } = JSON.parse(fallback?.content as string);
+    const evidence = fallbackTaskRecords.find(({ kind }: { kind: string }) => kind === "answer");
+    expect(evidence.text).toBe("Later status 33");
+    return reply([tool("submit_note_candidates", { candidates: [{
+      type: "observation", title: "Later status", summary: "The saved answer reported status 33.", fields: {},
+      recordIds: [calls === 7 ? "unread-record" : evidence.id],
+    }] })], "toolUse");
+  };
+  const batch = await generateNoteCandidates(project.id, { expert, taskId: sessionId }, { stream });
+  expect(calls).toBe(8);
+  expect(batch.candidates).toMatchObject([{
+    title: "Later status", sources: [{ kind: "message", entryId: "later-a33", excerpt: "Later status 33" }],
+  }]);
+  expect(batch.taskRecords?.read.some(({ label }) => label === "Later status 33")).toBe(true);
+  expect(sessionCostSummary(NOTE_DRAFT_SESSION_ID, project.id).entries).toHaveLength(8);
+});
+
+it("lets the research curator find early task evidence and save only the confirmed method candidate", async () => {
   const { project, sessionId, file } = recordsFixture();
   let calls = 0;
   let outputId: string;
   let answerId: string;
+  let overview: unknown;
+  const progress: NoteDraftProgress[] = [];
   const stream: StreamFn = (_model, context) => {
     const output = (name: string) => JSON.parse((context.messages.filter((message) =>
       message.role === "toolResult" && message.toolName === name).at(-1)?.content[0] as { text: string }).text);
     switch (++calls) {
-      case 1:
+      case 1: {
+        const initial = context.messages.find((message) => message.role === "user");
+        const content = initial?.content;
+        const text = typeof content === "string" ? content : content?.find((part) => part.type === "text")?.text;
+        overview = JSON.parse(text ?? "{}").overviewTaskRecords;
+        expect(getCurrentTools(context.messages).find((item) => item.name === "submit_note_candidates")?.parameters).toMatchObject({
+          properties: { candidates: { items: { properties: { type: { anyOf: [
+            { const: "hypothesis" }, { const: "method" }, { const: "observation" }, { const: "decision" }, { const: "note" },
+          ] } } } } },
+        });
         // This entry is appended after the draft's source snapshot has been acquired.
         fs.appendFileSync(file, JSON.stringify({ type: "message", id: "post-start", message: { role: "user", timestamp: 100,
           content: [{ type: "text", text: "new after snapshot Z9" }] } }) + "\n");
         return reply([tool("list_task_records", { query: "Z9" })], "toolUse");
+      }
       case 2: {
         const index = output("list_task_records");
         expect(index.total).toBe(1);
@@ -238,28 +286,48 @@ it("finds an early paged output, attaches different verified sources, and saves 
         return reply([tool("read_task_record", { records: [{ id: answerId }] })], "toolUse");
       default:
         return reply([tool("submit_note_candidates", { candidates: [
-          { type: "observation", title: "Early checksum", summary: "The tool recorded Z9.", fields: {}, recordIds: [outputId] },
+          { type: "method", title: "Early checksum", summary: "The tool confirmed checksum Z9.",
+            fields: { procedure: "Check the checksum", executionStatus: "Completed" }, recordIds: [outputId] },
           { type: "decision", title: "First decision", summary: "The first answer recorded a decision.", fields: {}, recordIds: [answerId] },
         ] })], "toolUse");
     }
   };
-  const batch = await generateNoteCandidates(project.id, { expert, taskId: sessionId }, { stream });
-  expect(batch.taskRecords).toMatchObject({ coverage: "legacy", read: [{ id: outputId!, partial: true }, { id: answerId!, partial: false }] });
+  const batch = await generateNoteCandidates(project.id, { expert: RESEARCH_NOTE_CURATOR, taskId: sessionId }, {
+    stream, onProgress: (step) => progress.push(step),
+  });
+  expect(progress[0]).toEqual({ step: "preparing" });
+  expect(progress).toEqual(expect.arrayContaining([
+    expect.objectContaining({ step: "organizing", round: 1 }),
+    expect.objectContaining({ step: "searching" }),
+    expect.objectContaining({ step: "reading", records: { read: 4, total: batch.taskRecords?.total } }),
+    expect.objectContaining({ step: "validating" }),
+  ]));
+  expect(overview).toMatchObject([
+    { kind: "answer", text: "A first decision was recorded." },
+    { kind: "answer", text: "Later status 16" },
+    { kind: "answer", text: "Later status 33" },
+  ]);
+  expect(batch.taskRecords).toMatchObject({ coverage: "legacy", read: expect.arrayContaining([
+    expect.objectContaining({ id: outputId!, partial: true }), expect.objectContaining({ id: answerId!, partial: false }),
+  ]) });
   expect(batch.taskRecords!.total).toBeGreaterThan(32);
-  const [observation, decision] = batch.candidates;
-  expect(observation.sources).toMatchObject([{ kind: "tool", toolCallId: "early-tool", recordFlags: ["redacted"],
+  const [method, decision] = batch.candidates;
+  expect(method.sources).toMatchObject([{ kind: "tool", toolCallId: "early-tool", recordFlags: ["redacted"],
     excerpt: expect.stringContaining("Confirmed early checksum Z9") }]);
   expect(decision.sources).toMatchObject([{ kind: "message", entryId: "first-answer" }]);
   expect(listNotePages(project.id).pages).toEqual([]);
 
   const input = { task: { id: sessionId, title: "Main task" }, draftCredit: batch.draftCredit };
-  const tampered = { ...observation, sources: [{ ...observation.sources![0], toolCallId: "later-tool" }] };
+  const tampered = { ...method, sources: [{ ...method.sources![0], toolCallId: "later-tool" }] };
   expect(saveNoteBatch(project.id, { ...input, pages: [tampered] }).results[0]).toMatchObject({ status: "failed", code: 409 });
   expect(saveNoteBatch(project.id, { ...input, task: undefined, source: { kind: "message", sessionId, entryId: "second-answer" },
-    pages: [observation] }).results[0]).toMatchObject({ status: "failed", code: 409 });
-  const edited = { ...observation, title: "Reviewed early checksum" };
+    pages: [method] }).results[0]).toMatchObject({ status: "failed", code: 409 });
+  const edited = { ...method, title: "Reviewed early checksum" };
   const saved = saveNoteBatch(project.id, { ...input, pages: [edited] });
-  expect(saved.results[0]).toMatchObject({ status: "saved", page: { sources: [{ kind: "task" }, { kind: "tool", toolCallId: "early-tool" }] } });
+  expect(saved.results[0]).toMatchObject({ status: "saved", page: {
+    type: "method", sources: [{ kind: "task" }, { kind: "tool", toolCallId: "early-tool" }],
+    revisions: [{ fields: { procedure: "Check the checksum", executionStatus: "Completed" } }],
+  } });
   fs.unlinkSync(file); // A lost response can still be confirmed after the original task is gone.
   expect(saveNoteBatch(project.id, { ...input, pages: [edited] })).toEqual(saved);
   expect(listNotePages(project.id).pages).toMatchObject([{ title: edited.title }]);
